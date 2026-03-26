@@ -33,9 +33,19 @@ log() {
 }
 
 # ==================== 前置检查 ====================
-if [ ! -f "${CONFIG_FILE}" ]; then
+if [ ! -e "${CONFIG_FILE}" ]; then
     log "❌ 错误：配置文件不存在：${CONFIG_FILE}"
     log "请先创建配置文件（参考 config.example.py）"
+    exit 1
+fi
+
+# 检查 config.py 是文件而不是目录（Docker volume 挂载文件时的常见坑）
+if [ -d "${CONFIG_FILE}" ]; then
+    log "❌ 错误：${CONFIG_FILE} 是一个目录，不是文件！"
+    log "请删除该目录并创建正确的 config.py 文件："
+    log "  rm -rf ${CONFIG_FILE}"
+    log "  cp config.example.py ${CONFIG_FILE}"
+    log "  然后编辑 ${CONFIG_FILE} 填入配置"
     exit 1
 fi
 
