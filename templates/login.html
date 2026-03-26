@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 — TikTok 直播监测系统</title>
+<style>
+  :root {
+    --primary: #fe2c55; --primary-bg: #fff0f3;
+    --bg: #f5f6fa; --surface: #ffffff;
+    --border: #e8eaef; --text: #1a1d2e; --text2: #6b7280; --text3: #9ca3af;
+    --shadow: 0 4px 24px rgba(0,0,0,.08);
+    --radius: 14px; --font: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font); background: var(--bg); color: var(--text);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .login-wrap {
+    width: 100%; max-width: 400px; padding: 16px;
+  }
+  .login-card {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 40px 36px;
+  }
+  .logo-area {
+    display: flex; flex-direction: column; align-items: center; margin-bottom: 32px;
+  }
+  .logo-icon {
+    width: 56px; height: 56px; border-radius: 14px;
+    background: linear-gradient(135deg, #fe2c55 0%, #25f4ee 100%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(254,44,85,.3); margin-bottom: 14px;
+  }
+  .logo-icon svg { width: 28px; height: 28px; }
+  .logo-title { font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: -.3px; }
+  .logo-title span { color: var(--primary); }
+  .logo-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+  .form-input {
+    width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+    border-radius: 8px; font-size: 15px; font-family: var(--font);
+    color: var(--text); background: var(--bg); transition: border-color .15s;
+    outline: none;
+  }
+  .form-input:focus { border-color: var(--primary); background: #fff; }
+  .btn-login {
+    width: 100%; padding: 12px; background: var(--primary); color: #fff;
+    border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: opacity .15s; margin-top: 8px;
+  }
+  .btn-login:hover { opacity: .88; }
+  .btn-login:disabled { opacity: .5; cursor: not-allowed; }
+  .msg {
+    margin-top: 14px; padding: 10px 14px; border-radius: 8px;
+    font-size: 13px; text-align: center; display: none;
+  }
+  .msg.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+  .msg.success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .footer-tip { text-align: center; font-size: 12px; color: var(--text3); margin-top: 24px; }
+  /* Tab 切换 */
+  .tab-bar { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+  .tab-btn {
+    flex: 1; padding: 10px; font-size: 14px; font-weight: 600;
+    background: none; border: none; cursor: pointer; color: var(--text3);
+    border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s;
+  }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  .form-hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="logo-area">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.79a4.85 4.85 0 01-1.01-.1z" fill="white"/>
+        </svg>
+      </div>
+      <div class="logo-title">Tik<span>Tok</span> 监测系统</div>
+      <div class="logo-sub">直播数据实时看板</div>
+    </div>
+
+    <!-- Tab 切换 -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tabLoginBtn" onclick="switchTab('login')">登 录</button>
+      <button class="tab-btn" id="tabRegBtn" onclick="switchTab('register')">注 册</button>
+    </div>
+
+    <!-- 登录表单 -->
+    <div class="tab-pane active" id="paneLogin">
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="form-label">用户名</label>
+          <input class="form-input" type="text" id="loginUsername" placeholder="请输入用户名" autocomplete="username" autofocus>
+        </div>
+        <div class="form-group">
+          <label class="form-label">密码</label>
+          <input class="form-input" type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
+        </div>
+        <button class="btn-login" type="submit" id="btnLogin">登 录</button>
+      </form>
+      <div class="msg" id="loginMsg"></div>
+    </div>
+
+    <!-- 注册表单 -->
+    <div class="tab-pane" id="paneRegister">
+      <form id="registerForm">
+        <div class="form-group">
+          <label class="form-label">用户名</label>
+          <input class="form-input" type="text" id="regUsername" placeholder="4-20位字母/数字/下划线" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">真实姓名 <span style="color:#fe2c55;">*</span></label>
+          <input class="form-input" type="text" id="regRealName" placeholder="请填写真实姓名，用于管理员审核" autocomplete="off">
+          <div class="form-hint">注册申请需管理员审核通过后才能登录</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">密码</label>
+          <input class="form-input" type="password" id="regPassword" placeholder="至少 6 位" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">确认密码</label>
+          <input class="form-input" type="password" id="regConfirm" placeholder="再次输入密码" autocomplete="new-password">
+        </div>
+        <button class="btn-login" type="submit" id="btnRegister">提交申请</button>
+      </form>
+      <div class="msg" id="regMsg"></div>
+    </div>
+  </div>
+  <div class="footer-tip">TikTok Live Monitor · 内部使用系统</div>
+</div>
+
+<script>
+// ── Tab 切换 ──
+function switchTab(tab) {
+  document.getElementById('paneLogin').classList.toggle('active', tab==='login');
+  document.getElementById('paneRegister').classList.toggle('active', tab==='register');
+  document.getElementById('tabLoginBtn').classList.toggle('active', tab==='login');
+  document.getElementById('tabRegBtn').classList.toggle('active', tab==='register');
+}
+
+// ── 登录 ──
+function showMsg(elId, text, type) {
+  const el = document.getElementById(elId);
+  el.textContent = text;
+  el.className = 'msg ' + type;
+  el.style.display = 'block';
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
+  if (!username || !password) { showMsg('loginMsg','请填写用户名和密码','error'); return; }
+  const btn = document.getElementById('btnLogin');
+  btn.disabled = true; btn.textContent = '登录中…';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (data.success) {
+      showMsg('loginMsg','登录成功，跳转中…','success');
+      setTimeout(() => { window.location.href = '/'; }, 600);
+    } else {
+      showMsg('loginMsg', data.msg || '登录失败', 'error');
+      btn.disabled = false; btn.textContent = '登 录';
+    }
+  } catch (err) {
+    showMsg('loginMsg','网络错误，请稍后重试','error');
+    btn.disabled = false; btn.textContent = '登 录';
+  }
+});
+document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+});
+
+// ── 注册 ──
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('regUsername').value.trim();
+  const real_name = document.getElementById('regRealName').value.trim();
+  const password = document.getElementById('regPassword').value.trim();
+  const confirm  = document.getElementById('regConfirm').value.trim();
+  if (!username || !real_name || !password || !confirm) { showMsg('regMsg','请填写所有字段','error'); return; }
+  if (!/^[\w]{4,20}$/.test(username)) { showMsg('regMsg','用户名需4-20位字母/数字/下划线','error'); return; }
+  if (!real_name || real_name.length < 2) { showMsg('regMsg','请填写真实姓名（至少2个字）','error'); return; }
+  if (password.length < 6) { showMsg('regMsg','密码至少6位','error'); return; }
+  if (password !== confirm) { showMsg('regMsg','两次密码不一致','error'); return; }
+  const btn = document.getElementById('btnRegister');
+  btn.disabled = true; btn.textContent = '提交中…';
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, real_name, password})
+    });
+    const data = await res.json();
+    if (data.success) {
+      showMsg('regMsg','✅ 注册申请已提交！请等待管理员审核，审核通过后即可登录。','success');
+      btn.textContent = '申请已提交';
+      // 禁用表单，防止重复提交
+      document.getElementById('registerForm').querySelectorAll('input').forEach(i => i.disabled = true);
+    } else {
+      showMsg('regMsg', data.msg || '注册失败', 'error');
+      btn.disabled = false; btn.textContent = '提交申请';
+    }
+  } catch (err) {
+    showMsg('regMsg','网络错误，请稍后重试','error');
+    btn.disabled = false; btn.textContent = '提交申请';
+  }
+});
+</script>
+</body>
+</html>

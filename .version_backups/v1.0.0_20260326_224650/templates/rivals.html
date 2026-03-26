@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>竞品分析 — TikTok 直播监测</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary:#fe2c55; --primary-bg:#fff0f3;
+    --bg:#f5f6fa; --surface:#ffffff;
+    --border:#e8eaef; --border2:#f0f1f5;
+    --text:#1a1d2e; --text2:#6b7280; --text3:#9ca3af;
+    --success:#10b981; --warning:#f59e0b; --info:#3b82f6;
+    --rival:#7c3aed; --rival-bg:#f5f3ff;
+    --own:#0284c7; --own-bg:#f0f9ff;
+    --shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+    --radius:12px; --radius-sm:8px;
+    --font:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; }
+
+  /* ── Navbar ── */
+  .navbar { background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 3px rgba(0,0,0,.06); position:sticky; top:0; z-index:100; }
+  .navbar-brand { text-decoration:none; display:flex; align-items:center; gap:10px; }
+  .navbar-logo { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,#fe2c55 0%,#25f4ee 100%); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(254,44,85,.3); }
+  .navbar-logo svg { width:18px; height:18px; }
+  .navbar-wordmark { display:flex; flex-direction:column; line-height:1; }
+  .navbar-name { font-size:15px; font-weight:800; color:var(--text); letter-spacing:-.3px; }
+  .navbar-name span { color:var(--primary); }
+  .navbar-sub { font-size:10px; color:var(--text3); font-weight:500; margin-top:1px; }
+  .navbar-nav { display:flex; gap:4px; align-items:center; }
+  .nav-link { color:var(--text2); text-decoration:none; font-size:14px; padding:6px 12px; border-radius:6px; transition:all .15s; }
+  .nav-link:hover { color:var(--text); background:var(--bg); }
+  .nav-link.active { color:var(--primary); background:var(--primary-bg); font-weight:600; }
+
+  /* ── Layout ── */
+  .main { padding:24px; max-width:1300px; margin:0 auto; }
+  .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; gap:12px; flex-wrap:wrap; }
+  .page-title { font-size:20px; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .page-desc { font-size:13px; color:var(--text2); margin-top:4px; line-height:1.5; }
+
+  /* ── Section ── */
+  .section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; box-shadow:var(--shadow); }
+  .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .section-title { font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .section-sub { font-size:12px; color:var(--text3); margin-top:2px; }
+
+  /* ── Add rivals ── */
+  .add-rival-form { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .rival-input { flex:1; min-width:180px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 12px; font-size:13px; color:var(--text); outline:none; transition:border .15s; }
+  .rival-input:focus { border-color:var(--rival); background:#fff; }
+  .btn { padding:8px 16px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-size:13px; font-weight:600; transition:all .15s; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }
+  .btn-rival { background:var(--rival); color:#fff; }
+  .btn-rival:hover { background:#6d28d9; }
+  .btn-sm { padding:4px 10px; font-size:12px; border-radius:5px; }
+  .btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border); }
+  .btn-ghost:hover { color:var(--rival); border-color:var(--rival); background:var(--rival-bg); }
+  .btn-danger-sm { background:transparent; color:#dc2626; border:1px solid #fca5a5; font-size:11px; padding:3px 8px; border-radius:4px; cursor:pointer; transition:all .15s; }
+  .btn-danger-sm:hover { background:#fee2e2; }
+  .btn-monitor { background:#f0fdf4; color:#16a34a; border:1px solid #86efac; font-size:11px; padding:3px 9px; border-radius:4px; cursor:pointer; transition:all .15s; }
+  .btn-monitor:hover { background:#dcfce7; }
+  .btn-monitor.monitoring { background:#fee2e2; color:#dc2626; border-color:#fca5a5; }
+
+  /* ── Rival list ── */
+  .rival-list { display:flex; flex-direction:column; gap:8px; }
+  .rival-item {
+    display:flex; align-items:center; gap:12px; padding:12px 14px;
+    background:var(--rival-bg); border:1px solid #ddd6fe; border-radius:var(--radius-sm);
+    transition:box-shadow .2s;
+  }
+  .rival-item:hover { box-shadow:0 2px 10px rgba(124,58,237,.08); }
+  .rival-avatar { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--rival),#a855f7); display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; font-weight:700; flex-shrink:0; }
+  .rival-info { flex:1; }
+  .rival-name { font-size:14px; font-weight:700; color:var(--rival); }
+  .rival-stats { font-size:11px; color:var(--text2); margin-top:2px; }
+  .rival-live-dot { width:7px; height:7px; border-radius:50%; background:var(--primary); margin-right:3px; display:inline-block; animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+  .rival-actions { display:flex; gap:5px; align-items:center; flex-shrink:0; }
+  .rival-empty { text-align:center; padding:30px; color:var(--text3); font-size:13px; }
+
+  /* ── Compare grid ── */
+  .compare-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+  .compare-card {
+    border-radius:var(--radius-sm); padding:16px; border:2px solid transparent; transition:all .2s;
+  }
+  .compare-card.own { background:var(--own-bg); border-color:#bae6fd; }
+  .compare-card.rival { background:var(--rival-bg); border-color:#ddd6fe; }
+  .compare-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .compare-card-name { font-size:14px; font-weight:700; }
+  .compare-card-name.own { color:var(--own); }
+  .compare-card-name.rival { color:var(--rival); }
+  .compare-type-tag { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
+  .tag-own-c { background:#bae6fd; color:#0369a1; }
+  .tag-rival-c { background:#ddd6fe; color:#5b21b6; }
+  .compare-metrics { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .cm { text-align:center; background:rgba(255,255,255,.7); border-radius:6px; padding:8px 6px; }
+  .cm-val { font-size:16px; font-weight:800; line-height:1; }
+  .cm-val.own { color:var(--own); }
+  .cm-val.rival { color:var(--rival); }
+  .cm-label { font-size:10px; color:var(--text2); margin-top:3px; }
+  .cm-sub { font-size:10px; color:var(--text3); margin-top:1px; }
+
+  /* ── Leaderboard ── */
+  .leaderboard { display:flex; flex-direction:column; gap:6px; }
+  .lb-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--radius-sm); background:var(--bg); border:1px solid var(--border2); }
+  .lb-rank { font-size:14px; font-weight:800; width:20px; text-align:center; flex-shrink:0; }
+  .lb-rank.r1 { color:#ef4444; } .lb-rank.r2 { color:#f97316; } .lb-rank.r3 { color:#eab308; }
+  .lb-name { flex:1; font-size:13px; font-weight:600; }
+  .lb-type { font-size:10px; padding:1px 6px; border-radius:10px; }
+  .lb-val { font-size:14px; font-weight:700; }
+  .lb-bar-wrap { width:100px; }
+  .lb-bar-bg { height:5px; background:#e5e7eb; border-radius:3px; overflow:hidden; }
+  .lb-bar-fill { height:100%; border-radius:3px; }
+  .lb-bar-fill.own { background:linear-gradient(90deg,var(--own),#38bdf8); }
+  .lb-bar-fill.rival { background:linear-gradient(90deg,var(--rival),#a855f7); }
+
+  /* ── Tabs ── */
+  .tab-bar { display:flex; gap:4px; background:var(--bg); border-radius:8px; padding:3px; margin-bottom:16px; width:fit-content; }
+  .tab-btn { padding:6px 14px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-weight:600; color:var(--text2); background:transparent; transition:all .15s; }
+  .tab-btn.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.08); }
+
+  /* ── No data ── */
+  .no-data { text-align:center; padding:40px 20px; color:var(--text3); }
+  .no-data-icon { font-size:36px; margin-bottom:10px; }
+  .no-data-title { font-size:14px; font-weight:600; color:var(--text2); margin-bottom:6px; }
+  .no-data-desc { font-size:12px; line-height:1.6; }
+
+  /* ── Toast ── */
+  .toast { position:fixed; top:20px; right:20px; background:var(--text); color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; z-index:9999; animation:fadeIn .2s; box-shadow:0 4px 20px rgba(0,0,0,.2); }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)} }
+
+  ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  /* ── 版本徽章 ── */
+  .version-badge { font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;padding:2px 7px;cursor:pointer;transition:all .15s;user-select:none;letter-spacing:.3px;white-space:nowrap; }
+  .version-badge:hover { background:#e5e7eb;color:#374151; }
+  .changelog-modal { display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center; }
+  .changelog-modal.open { display:flex; }
+  .changelog-box { background:#fff;border-radius:16px;width:560px;max-width:92vw;max-height:75vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2); }
+  .changelog-header { padding:18px 22px 14px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center; }
+  .changelog-header h3 { font-size:15px;font-weight:700;color:#1a1d2e; }
+  .changelog-header button { background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1; }
+  .changelog-content { padding:16px 22px;overflow-y:auto;flex:1;font-size:13px;line-height:1.7;color:#374151; }
+  .changelog-content h2 { font-size:14px;font-weight:700;color:#fe2c55;margin:12px 0 4px; }
+  .changelog-content h3 { font-size:13px;font-weight:600;color:#1a1d2e;margin:8px 0 4px; }
+  .changelog-content li { margin-left:16px; }
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar-brand" href="/">
+    <div class="navbar-logo">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.51a8.16 8.16 0 004.77 1.52V7.58a4.85 4.85 0 01-1-.89z"/></svg>
+    </div>
+    <div class="navbar-wordmark">
+      <div class="navbar-name">Tuke<span>carco</span></div>
+      <div class="navbar-sub">TikTok 直播监测系统</div>
+    </div>
+  </a>
+  <span class="version-badge" onclick="openChangelog()" title="点击查看版本日志">v{{ app_version }}</span>
+  <nav class="navbar-nav">
+    <a href="/" class="nav-link">实时看板</a>
+    <a href="/history" class="nav-link">历史记录</a>
+    <a href="/rivals" class="nav-link active">⚔️ 竞品分析</a>
+    <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
+    <button onclick="authLogout()" style="font-size:13px;background:#f5f6fa;border:1px solid #e8eaef;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:2px">退出</button>
+  </nav>
+</nav>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">⚔️ 竞品分析</div>
+      <div class="page-desc">管理竞品账号，对标自营数据，找差距、找机会</div>
+    </div>
+    <button class="btn btn-rival" onclick="refreshAll()">🔄 刷新数据</button>
+  </div>
+
+  <!-- 竞品智能推荐 -->
+  <div class="section" id="recommendSection" style="display:none;">
+    <div class="section-header">
+      <div>
+        <div class="section-title">🤖 智能竞品推荐</div>
+        <div class="section-sub">基于你的自营账号话术特征，自动发现相似竞品候选</div>
+      </div>
+      <button class="btn btn-rival btn-sm" onclick="loadRecommend()" id="btnRecommend">🔍 分析推荐</button>
+    </div>
+    <div id="recommendProfile" style="display:none;margin-bottom:12px;padding:10px 14px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#065f46;"></div>
+    <div id="recommendList"></div>
+  </div>
+
+  <!-- 竞品账号管理 -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-title">⚔️ 竞品账号管理</div>
+        <div class="section-sub">添加后系统会持续监测，有直播时自动采集数据</div>
+      </div>
+    </div>
+    <div class="add-rival-form" style="margin-bottom:16px;">
+      <input type="text" class="rival-input" id="rivalInput" placeholder="输入 TikTok 用户名（不含@）" onkeydown="if(event.key==='Enter')addRival()">
+      <input type="text" class="rival-input" id="rivalDisplayName" placeholder="备注名（可选，如：强竞品A）" style="max-width:200px;">
+      <button class="btn btn-rival" onclick="addRival()">+ 添加竞品</button>
+    </div>
+    <div class="rival-list" id="rivalList">
+      <div class="rival-empty" id="rivalEmpty" style="display:none;">暂无竞品账号，添加后开始对标分析</div>
+    </div>
+  </div>
+
+  <!-- 对比分析 -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-title">📊 对标分析</div>
+        <div class="section-sub">自营账号 vs 竞品，近10场历史均值横向对比</div>
+      </div>
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('leaderboard', this)">排行榜</button>
+        <button class="tab-btn" onclick="switchTab('cards', this)">详细指标</button>
+      </div>
+    </div>
+
+    <!-- 排行榜视图 -->
+    <div id="tabLeaderboard">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;" id="lbGrid">
+        <!-- JS 渲染 -->
+      </div>
+    </div>
+
+    <!-- 详细指标卡片视图 -->
+    <div id="tabCards" style="display:none;">
+      <div class="compare-grid" id="compareGrid">
+        <!-- JS 渲染 -->
+      </div>
+    </div>
+
+    <div class="no-data" id="compareNoData" style="display:none;">
+      <div class="no-data-icon">📭</div>
+      <div class="no-data-title">暂无可对比数据</div>
+      <div class="no-data-desc">需要先添加竞品账号，并且双方都有直播历史记录，才能进行对比分析<br>自营账号请在主看板中添加并监控</div>
+    </div>
+  </div>
+
+  <!-- 实时对比（当前正在直播的） -->
+  <div class="section" id="liveSection" style="display:none;">
+    <div class="section-header">
+      <div>
+        <div class="section-title">🔴 实时对比 <span style="font-size:11px;color:var(--primary);animation:pulse 1.5s infinite;display:inline-block;">● 直播中</span></div>
+        <div class="section-sub">当前有账号正在直播，实时数据对比</div>
+      </div>
+    </div>
+    <div class="compare-grid" id="liveGrid"></div>
+  </div>
+</div>
+
+<script>
+let allRivals = [];
+let compareData = { own: [], rivals: [] };
+
+function showToast(msg, type='info') {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.background = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#374151';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+function formatNum(n) {
+  n = n || 0;
+  if (n >= 10000) return (n/10000).toFixed(1)+'w';
+  if (n >= 1000) return (n/1000).toFixed(1)+'k';
+  return Math.round(n).toString();
+}
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tabLeaderboard').style.display = tab === 'leaderboard' ? 'block' : 'none';
+  document.getElementById('tabCards').style.display = tab === 'cards' ? 'block' : 'none';
+}
+
+// ── 竞品列表 ──
+function renderRivals(rivals) {
+  const list = document.getElementById('rivalList');
+  const empty = document.getElementById('rivalEmpty');
+  if (!rivals.length) {
+    empty.style.display = 'block';
+    list.innerHTML = '';
+    list.appendChild(empty);
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = rivals.map(r => {
+    const initial = r.username.charAt(0).toUpperCase();
+    const liveDot = r.is_live ? `<span class="rival-live-dot"></span>直播中` : '';
+    const statsText = r.session_count > 0
+      ? `${r.session_count}场记录 · 场均在线 ${formatNum(r.avg_peak_viewers)} · 场均礼物 $${(r.avg_gift_value||0).toFixed(1)}`
+      : '暂无历史记录，监控后自动采集';
+    const monBtnClass = r.is_live ? 'btn-monitor monitoring' : 'btn-monitor';
+    const monBtnText = r.is_live ? '⏹ 停止监控' : '▶ 开始监控';
+    return `<div class="rival-item" id="rival-${r.username}">
+      <div class="rival-avatar">${initial}</div>
+      <div class="rival-info">
+        <div class="rival-name">${liveDot ? `<span class="rival-live-dot"></span>` : ''}@${r.username}${r.display_name !== r.username ? ` <span style="font-size:11px;color:var(--text3);font-weight:400;">(${r.display_name})</span>` : ''}</div>
+        <div class="rival-stats">${liveDot}${statsText}</div>
+      </div>
+      <div class="rival-actions">
+        <button class="${monBtnClass}" onclick="toggleMonitor('${r.username}', ${r.is_live})">${monBtnText}</button>
+        <a href="/history" style="text-decoration:none;"><button class="btn btn-ghost btn-sm">历史</button></a>
+        <button class="btn-danger-sm" onclick="removeRival('${r.username}')">移除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── 添加竞品 ──
+async function addRival() {
+  const input = document.getElementById('rivalInput');
+  const displayInput = document.getElementById('rivalDisplayName');
+  const username = input.value.trim().replace('@', '');
+  const displayName = displayInput.value.trim() || username;
+  if (!username) { showToast('请输入用户名', 'error'); return; }
+  if (allRivals.find(r => r.username === username)) { showToast('已在竞品列表中', 'info'); return; }
+
+  try {
+    const res = await fetch('/api/account/group', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username, group: 'rival', display_name: displayName })
+    });
+    const data = await res.json();
+    if (data.success) {
+      input.value = ''; displayInput.value = '';
+      showToast(`✅ @${username} 已添加为竞品`, 'success');
+      await loadRivals();
+      await loadCompare();
+    } else { showToast('添加失败', 'error'); }
+  } catch(e) { showToast('网络错误', 'error'); }
+}
+
+// ── 移除竞品 ──
+async function removeRival(username) {
+  if (!confirm(`确定将 @${username} 从竞品列表移除吗？（历史数据保留，只是取消竞品标记）`)) return;
+  try {
+    const res = await fetch('/api/account/group', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username, group: 'own' })  // 改回 own 或 watch
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`@${username} 已从竞品列表移除`, 'info');
+      await loadRivals();
+      await loadCompare();
+    }
+  } catch(e) { showToast('操作失败', 'error'); }
+}
+
+// ── 监控切换 ──
+async function toggleMonitor(username, isLive) {
+  const endpoint = isLive ? '/api/monitor/stop' : '/api/monitor/start';
+  try {
+    const res = await fetch(endpoint, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username})
+    });
+    const data = await res.json();
+    showToast(data.msg || (isLive ? '已停止监控' : '监控已启动'), isLive ? 'info' : 'success');
+    setTimeout(loadRivals, 1500);
+  } catch(e) { showToast('操作失败', 'error'); }
+}
+
+// ── 加载竞品列表 ──
+async function loadRivals() {
+  try {
+    const res = await fetch('/api/rivals');
+    const data = await res.json();
+    allRivals = data.rivals || [];
+    renderRivals(allRivals);
+    // 实时对比：有正在直播的账号
+    const liveRivals = allRivals.filter(r => r.is_live);
+    renderLiveSection(liveRivals);
+  } catch(e) {}
+}
+
+// ── 加载对比数据 ──
+async function loadCompare() {
+  try {
+    const res = await fetch('/api/compare');
+    const data = await res.json();
+    compareData = data;
+    renderLeaderboard(data);
+    renderCompareCards(data);
+  } catch(e) {}
+}
+
+// ── 排行榜渲染 ──
+function renderLeaderboard(data) {
+  const grid = document.getElementById('lbGrid');
+  const noData = document.getElementById('compareNoData');
+  const allAccounts = [
+    ...data.own.map(a => ({...a, _type:'own'})),
+    ...data.rivals.map(a => ({...a, _type:'rival'}))
+  ];
+  if (!allAccounts.length) {
+    grid.innerHTML = ''; noData.style.display = 'block'; return;
+  }
+  noData.style.display = 'none';
+
+  const metrics = [
+    { key:'avg_peak', label:'峰值在线', unit:'' },
+    { key:'avg_gift', label:'礼物收入', unit:'$' },
+    { key:'avg_comments', label:'评论数', unit:'' },
+    { key:'avg_followers', label:'新增关注', unit:'' },
+  ];
+
+  grid.innerHTML = metrics.map(m => {
+    const sorted = [...allAccounts].sort((a,b) => (b[m.key]||0)-(a[m.key]||0));
+    const max = sorted[0]?.[m.key] || 1;
+    const rows = sorted.map((a, i) => {
+      const rankClass = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : '';
+      const typeTag = a._type === 'own'
+        ? `<span class="lb-type tag-own-c">自营</span>`
+        : `<span class="lb-type tag-rival-c">竞品</span>`;
+      const val = m.unit === '$' ? `$${(a[m.key]||0).toFixed(1)}` : formatNum(a[m.key]);
+      const barW = Math.round((a[m.key]||0)/max*100);
+      return `<div class="lb-row">
+        <div class="lb-rank ${rankClass}">${i+1}</div>
+        <div class="lb-name">@${a.username} ${typeTag}</div>
+        <div class="lb-bar-wrap"><div class="lb-bar-bg"><div class="lb-bar-fill ${a._type}" style="width:${barW}%"></div></div></div>
+        <div class="lb-val" style="color:${a._type==='own'?'var(--own)':'var(--rival)'}">${val}</div>
+      </div>`;
+    }).join('');
+    return `<div>
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+        <span>${m.label}</span><span style="font-size:11px;color:var(--text3)">（场均，近10场）</span>
+      </div>
+      <div class="leaderboard">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── 详细卡片渲染 ──
+function renderCompareCards(data) {
+  const grid = document.getElementById('compareGrid');
+  const allAccounts = [
+    ...data.own.map(a => ({...a, _type:'own'})),
+    ...data.rivals.map(a => ({...a, _type:'rival'}))
+  ];
+  if (!allAccounts.length) { grid.innerHTML = ''; return; }
+
+  grid.innerHTML = allAccounts.map(a => {
+    const typeLabel = a._type === 'own' ? '自营' : '竞品';
+    const typeTagCls = a._type === 'own' ? 'tag-own-c' : 'tag-rival-c';
+    const valCls = a._type;
+    const durStr = a.avg_duration >= 60
+      ? `${Math.floor(a.avg_duration/60)}h${a.avg_duration%60}m`
+      : `${a.avg_duration||0}m`;
+    return `<div class="compare-card ${a._type}">
+      <div class="compare-card-header">
+        <div class="compare-card-name ${a._type}">@${a.username}</div>
+        <span class="compare-type-tag ${typeTagCls}">${typeLabel} · ${a.session_count}场</span>
+      </div>
+      <div class="compare-metrics">
+        <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_peak)}</div><div class="cm-label">峰值在线</div></div>
+        <div class="cm"><div class="cm-val ${valCls}">$${(a.avg_gift||0).toFixed(1)}</div><div class="cm-label">礼物收入</div></div>
+        <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_comments)}</div><div class="cm-label">评论数</div></div>
+        <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_followers)}</div><div class="cm-label">新增关注</div></div>
+        <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_total)}</div><div class="cm-label">累计观看</div></div>
+        <div class="cm"><div class="cm-val ${valCls}">${durStr}</div><div class="cm-label">场均时长</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── 实时对比（直播中的） ──
+function renderLiveSection(liveRivals) {
+  const section = document.getElementById('liveSection');
+  // 同时从主看板 API 获取当前直播状态
+  fetch('/api/status').then(r=>r.json()).then(data => {
+    const activeUsers = data.active_accounts || [];
+    const liveSessions = (data.active_sessions || []);
+
+    const allLive = [
+      ...liveSessions.filter(s => activeUsers.includes(s.username)).map(s => ({...s, _type: 'own'})),
+      ...liveRivals.map(r => ({username: r.username, _type: 'rival',
+        peak_viewers: r.avg_peak_viewers, total_gift_value: r.avg_gift_value,
+        total_comments: r.avg_comments, _isAvg: true}))
+    ];
+
+    if (!allLive.length) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+
+    const grid = document.getElementById('liveGrid');
+    grid.innerHTML = allLive.map(s => {
+      const typeLabel = s._type === 'own' ? '自营' : '竞品';
+      const typeTagCls = s._type === 'own' ? 'tag-own-c' : 'tag-rival-c';
+      const note = s._isAvg ? '<div style="font-size:10px;color:var(--text3);margin-top:6px;">* 竞品未被监控，显示历史场均</div>' : '';
+      return `<div class="compare-card ${s._type}">
+        <div class="compare-card-header">
+          <div class="compare-card-name ${s._type}">@${s.username} ${s._type==='own'?'🔴':''}</div>
+          <span class="compare-type-tag ${typeTagCls}">${typeLabel}</span>
+        </div>
+        <div class="compare-metrics">
+          <div class="cm"><div class="cm-val ${s._type}">${formatNum(s.peak_viewers)}</div><div class="cm-label">在线人数</div></div>
+          <div class="cm"><div class="cm-val ${s._type}">$${(s.total_gift_value||0).toFixed(1)}</div><div class="cm-label">礼物收入</div></div>
+          <div class="cm"><div class="cm-val ${s._type}">${formatNum(s.total_comments)}</div><div class="cm-label">评论数</div></div>
+        </div>
+        ${note}
+      </div>`;
+    }).join('');
+  }).catch(() => { section.style.display = 'none'; });
+}
+
+async function refreshAll() {
+  showToast('刷新中...', 'info');
+  await loadRivals();
+  await loadCompare();
+  showToast('数据已更新', 'success');
+}
+
+// ── 竞品智能推荐 ──
+async function loadRecommend() {
+  const section = document.getElementById('recommendSection');
+  const listEl = document.getElementById('recommendList');
+  const profileEl = document.getElementById('recommendProfile');
+  const btn = document.getElementById('btnRecommend');
+  btn.disabled = true; btn.textContent = '分析中…';
+  listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);">正在分析自营账号特征...</div>';
+  try {
+    const res = await fetch('/api/rivals/recommend');
+    const data = await res.json();
+    btn.disabled = false; btn.textContent = '🔍 重新分析';
+    const p = data.profile || {};
+    if (p.own_accounts && p.own_accounts.length) {
+      profileEl.style.display = '';
+      profileEl.innerHTML = `
+        📋 分析了 <b>${p.own_accounts.length}</b> 个自营账号 &nbsp;|&nbsp;
+        🔑 核心关键词：<b>${(p.top_keywords||[]).slice(0,6).join('、') || '暂无数据'}</b> &nbsp;|&nbsp;
+        🌐 主要语言：<b>${(p.top_langs||[]).join('、') || '-'}</b>
+      `;
+    }
+    const recs = data.recommendations || [];
+    if (!recs.length) {
+      listEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px;">${data.msg || '暂未找到推荐竞品。建议先积累更多话术数据，或手动添加竞品账号。'}</div>`;
+      return;
+    }
+    listEl.innerHTML = recs.map(r => `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:8px;border:1px solid var(--border2);margin-bottom:8px;">
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;">@${r.username}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${r.reason}</div>
+        </div>
+        <button class="btn btn-sm" style="background:var(--rival-bg,#fff0f0);color:var(--rival,#dc2626);border:1px solid #fecaca;"
+          onclick="confirmAddRival('${r.username}', this)">+ 加为竞品</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🔍 分析推荐';
+    listEl.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:10px;">分析失败，请稍后重试</div>';
+  }
+}
+
+async function confirmAddRival(username, btn) {
+  if (!confirm(`确认将 @${username} 加入竞品列表并开始监控？`)) return;
+  btn.disabled = true; btn.textContent = '添加中…';
+  await fetch('/api/rivals/save', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ usernames: [username] })
+  });
+  showToast(`✅ @${username} 已加入竞品列表`, 'success');
+  loadRivals();
+  loadCompare();
+}
+
+// 初始加载时展示推荐入口
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('recommendSection').style.display = '';
+});
+
+// ── 初始化 ──
+loadRivals();
+loadCompare();
+document.getElementById('recommendSection').style.display = '';
+
+// 每 30 秒自动刷新实时对比
+setInterval(() => {
+  const liveRivals = allRivals.filter(r => r.is_live);
+  renderLiveSection(liveRivals);
+}, 30000);
+
+// ── 用户信息 & 退出 ──
+(async () => {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.status === 401) { location.href = '/login'; return; }
+    const me = await res.json();
+    if (me.logged_in) {
+      const badge = document.getElementById('navUserBadge');
+      if (badge) badge.textContent = me.username;
+      const adminLink = document.getElementById('adminNavLink');
+      if (adminLink && me.is_admin) adminLink.style.display = '';
+    }
+  } catch(e) {}
+})();
+async function authLogout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.href = '/login';
+}
+</script>
+
+<!-- ── 版本日志弹窗 ── -->
+<div class="changelog-modal" id="changelogModal" onclick="if(event.target===this)closeChangelog()">
+  <div class="changelog-box">
+    <div class="changelog-header">
+      <h3>📋 版本日志</h3>
+      <button onclick="closeChangelog()">✕</button>
+    </div>
+    <div class="changelog-content" id="changelogContent">加载中...</div>
+  </div>
+</div>
+<script>
+function openChangelog() {
+  document.getElementById('changelogModal').classList.add('open');
+  fetch('/api/version').then(r=>r.json()).then(d=>{
+    let html = (d.changelog||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    html = html.replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^- (.+)$/gm,'<li>$1</li>');
+    document.getElementById('changelogContent').innerHTML = html;
+  }).catch(()=>{ document.getElementById('changelogContent').textContent='加载失败'; });
+}
+function closeChangelog() { document.getElementById('changelogModal').classList.remove('open'); }
+</script>
+</body>
+</html>

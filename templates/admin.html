@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用户管理 — TikTok 监测系统</title>
+<style>
+  :root {
+    --primary: #fe2c55; --primary-bg: #fff0f3;
+    --bg: #f5f6fa; --surface: #ffffff; --surface2: #f9fafb;
+    --border: #e8eaef; --text: #1a1d2e; --text2: #6b7280; --text3: #9ca3af;
+    --success: #10b981; --danger: #ef4444; --warning: #f59e0b;
+    --shadow: 0 1px 4px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+    --radius: 12px; --font: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+  .navbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 24px; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .navbar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .navbar-logo { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #fe2c55 0%, #25f4ee 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(254,44,85,.3); }
+  .navbar-logo svg { width: 18px; height: 18px; }
+  .navbar-name { font-size: 15px; font-weight: 800; color: var(--text); }
+  .navbar-name span { color: var(--primary); }
+  .navbar-nav { display: flex; gap: 4px; align-items: center; }
+  .nav-link { color: var(--text2); text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; transition: all .15s; }
+  .nav-link:hover { color: var(--text); background: var(--bg); }
+  .nav-link.active { color: var(--primary); background: var(--primary-bg); font-weight: 600; }
+  .nav-btn { color: var(--text2); background: var(--bg); border: 1px solid var(--border); font-size: 13px; padding: 5px 10px; border-radius: 6px; cursor: pointer; transition: all .15s; }
+  .nav-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .user-badge { font-size: 12px; background: var(--primary-bg); color: var(--primary); border-radius: 20px; padding: 3px 10px; font-weight: 600; margin-right: 6px; }
+  .admin-badge { font-size: 11px; background: #fef3c7; color: #92400e; border-radius: 20px; padding: 2px 8px; font-weight: 600; }
+
+  .main { padding: 24px; max-width: 900px; margin: 0 auto; }
+  .page-title { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+  .page-sub { font-size: 13px; color: var(--text2); margin-bottom: 24px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 15px; font-weight: 700; }
+  .card-body { padding: 20px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .15s; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { opacity: .88; }
+  .btn-danger { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  /* 用户列表 */
+  .user-table { width: 100%; border-collapse: collapse; }
+  .user-table th { font-size: 12px; color: var(--text2); padding: 8px 12px; text-align: left; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  .user-table td { padding: 12px 12px; border-bottom: 1px solid var(--border2, #f0f1f5); font-size: 14px; vertical-align: middle; }
+  .user-table tr:last-child td { border-bottom: none; }
+  .user-table tr:hover td { background: var(--surface2); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-pending { background: #fef3c7; color: #b45309; }
+  .badge-disabled { background: #fee2e2; color: #dc2626; }
+  .badge-active { background: #d1fae5; color: #065f46; }
+  /* 待审核高亮行 */
+  .user-table tr.pending-row td { background: #fffbeb; }
+
+  /* 新增用户表单 */
+  .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .form-group { flex: 1; min-width: 140px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; }
+  .form-input {
+    width: 100%; padding: 9px 12px; border: 1.5px solid var(--border);
+    border-radius: 7px; font-size: 14px; font-family: var(--font); color: var(--text);
+    background: #fff; transition: border-color .15s; outline: none;
+  }
+  .form-input:focus { border-color: var(--primary); }
+
+  /* 改密码 */
+  .pw-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .pw-form .form-group { flex: 1; min-width: 140px; }
+
+  .msg-bar { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 14px; display: none; }
+  .msg-bar.error { background: #fef2f2; color: #dc2626; }
+  .msg-bar.success { background: #f0fdf4; color: #16a34a; }
+
+  /* 重置密码模态 */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; align-items: center; justify-content: center; }
+  .overlay.show { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius); padding: 28px; width: 360px; box-shadow: 0 8px 40px rgba(0,0,0,.15); }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="navbar-brand">
+    <div class="navbar-logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.79a4.85 4.85 0 01-1.01-.1z" fill="white"/></svg>
+    </div>
+    <span class="navbar-name">Tik<span>Tok</span> 监测</span>
+  </a>
+  <div class="navbar-nav">
+    <a href="/" class="nav-link">📊 看板</a>
+    <a href="/history" class="nav-link">📋 历史</a>
+    <a href="/rivals" class="nav-link">⚔️ 竞品</a>
+    <a href="/admin" class="nav-link active">👑 用户管理</a>
+    <span class="user-badge" id="navUsername">加载中</span>
+    <span class="admin-badge">管理员</span>
+    <button class="nav-btn" onclick="logout()">退出</button>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="page-title">👑 用户管理</div>
+  <div class="page-sub">管理系统用户，添加/删除账号，重置密码</div>
+
+  <!-- 待审核申请 -->
+  <div class="card" id="pendingCard" style="display:none;">
+    <div class="card-header">
+      <div class="card-title">⏳ 待审核注册申请 <span id="pendingCount" style="font-size:12px;background:#fef3c7;color:#b45309;border-radius:10px;padding:2px 8px;margin-left:6px;"></span></div>
+      <button class="btn btn-primary btn-sm" onclick="loadUsers()">刷新</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <table class="user-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>用户名</th><th>真实姓名</th><th>注册时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="pendingList">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 用户列表 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">所有用户</div>
+      <button class="btn btn-primary btn-sm" onclick="loadUsers()">刷新</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <table class="user-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>用户名</th><th>真实姓名</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="userList">
+          <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 新增用户 -->
+  <div class="card">
+    <div class="card-header"><div class="card-title">新增用户</div></div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>用户名</label>
+          <input class="form-input" id="newUsername" placeholder="英文/数字，3-20位">
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <input class="form-input" type="password" id="newPassword" placeholder="至少6位">
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="createUser()">创建用户</button>
+        </div>
+      </div>
+      <div class="msg-bar" id="createMsg"></div>
+    </div>
+  </div>
+
+  <!-- 修改自己密码 -->
+  <div class="card">
+    <div class="card-header"><div class="card-title">修改我的密码</div></div>
+    <div class="card-body">
+      <div class="pw-form">
+        <div class="form-group">
+          <label>旧密码</label>
+          <input class="form-input" type="password" id="oldPw" placeholder="当前密码">
+        </div>
+        <div class="form-group">
+          <label>新密码</label>
+          <input class="form-input" type="password" id="newPw" placeholder="至少6位">
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="changePw()">保存新密码</button>
+        </div>
+      </div>
+      <div class="msg-bar" id="pwMsg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 重置密码模态 -->
+<div class="overlay" id="resetOverlay">
+  <div class="modal">
+    <div class="modal-title">重置用户密码</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px">为 <strong id="resetUsername"></strong> 设置新密码</p>
+    <div class="form-group">
+      <label>新密码</label>
+      <input class="form-input" type="password" id="resetPwInput" placeholder="至少6位">
+    </div>
+    <div class="msg-bar" id="resetMsg"></div>
+    <div class="modal-footer">
+      <button class="btn" style="background:var(--bg);border:1px solid var(--border)" onclick="closeReset()">取消</button>
+      <button class="btn btn-primary" onclick="doReset()">确认重置</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _resetUserId = null;
+
+// 初始化
+(async () => {
+  const res = await fetch('/api/auth/me');
+  if (res.status === 401) { location.href = '/login'; return; }
+  const me = await res.json();
+  if (!me.is_admin) { location.href = '/'; return; }
+  document.getElementById('navUsername').textContent = me.username;
+  loadUsers();
+})();
+
+async function loadUsers() {
+  const res = await fetch('/api/admin/users');
+  const data = await res.json();
+  const tb = document.getElementById('userList');
+  const ptb = document.getElementById('pendingList');
+  const pendingCard = document.getElementById('pendingCard');
+  const pendingCountEl = document.getElementById('pendingCount');
+
+  if (!data.users || !data.users.length) {
+    tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">暂无用户</td></tr>';
+    pendingCard.style.display = 'none';
+    return;
+  }
+
+  const pendingUsers = data.users.filter(u => u.status === 'pending');
+  const activeUsers = data.users.filter(u => u.status !== 'pending');
+
+  // 渲染待审核面板
+  if (pendingUsers.length > 0) {
+    pendingCard.style.display = '';
+    pendingCountEl.textContent = `${pendingUsers.length} 条待审核`;
+    ptb.innerHTML = pendingUsers.map(u => `
+      <tr class="pending-row">
+        <td>${u.id}</td>
+        <td><strong>${u.username}</strong></td>
+        <td><span style="color:#b45309;font-weight:600;">${u.real_name || '-'}</span></td>
+        <td style="color:var(--text2);font-size:12px">${u.created_at || '-'}</td>
+        <td>
+          <button class="btn btn-sm" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;margin-right:6px" onclick="approveUser(${u.id},'${u.username}')">✅ 批准</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectUser(${u.id},'${u.username}')">❌ 拒绝</button>
+        </td>
+      </tr>
+    `).join('');
+  } else {
+    pendingCard.style.display = 'none';
+  }
+
+  // 状态徽章
+  const statusBadge = (s) => {
+    if (s === 'active') return '<span class="badge badge-active">正常</span>';
+    if (s === 'pending') return '<span class="badge badge-pending">待审核</span>';
+    if (s === 'disabled') return '<span class="badge badge-disabled">已禁用</span>';
+    return `<span class="badge">${s}</span>`;
+  };
+
+  tb.innerHTML = activeUsers.map(u => `
+    <tr>
+      <td>${u.id}</td>
+      <td><strong>${u.username}</strong></td>
+      <td style="color:var(--text2);">${u.real_name || '-'}</td>
+      <td><span class="badge ${u.is_admin ? 'badge-admin' : 'badge-user'}">${u.is_admin ? '管理员' : '普通用户'}</span></td>
+      <td>${statusBadge(u.status || 'active')}</td>
+      <td style="color:var(--text2);font-size:12px">${u.created_at || '-'}</td>
+      <td>
+        ${!u.is_admin ? `
+          <button class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;margin-right:4px" onclick="openReset(${u.id},'${u.username}')">重置密码</button>
+          ${u.status === 'disabled'
+            ? `<button class="btn btn-sm" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;margin-right:4px" onclick="enableUser(${u.id},'${u.username}')">启用</button>`
+            : `<button class="btn btn-sm" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;margin-right:4px" onclick="disableUser(${u.id},'${u.username}')">禁用</button>`
+          }
+          <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${u.username}')">删除</button>
+        ` : '<span style="color:var(--text3);font-size:12px">—</span>'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function createUser() {
+  const username = document.getElementById('newUsername').value.trim();
+  const password = document.getElementById('newPassword').value.trim();
+  const msgEl = document.getElementById('createMsg');
+  if (!username || !password) { showMsg(msgEl, '用户名和密码不能为空', 'error'); return; }
+  const res = await fetch('/api/admin/users/create', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({username, password})
+  });
+  const data = await res.json();
+  if (data.success) {
+    showMsg(msgEl, `✅ 用户 ${username} 创建成功`, 'success');
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newPassword').value = '';
+    loadUsers();
+  } else {
+    showMsg(msgEl, data.msg || '创建失败', 'error');
+  }
+}
+
+async function approveUser(uid, uname) {
+  if (!confirm(`确定批准 ${uname} 的注册申请？批准后用户可正常登录。`)) return;
+  const res = await fetch(`/api/admin/users/${uid}/approve`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) { showMsg(document.getElementById('createMsg'), `✅ 已批准 ${uname} 的申请`, 'success'); loadUsers(); }
+  else { alert(data.msg || '操作失败'); }
+}
+
+async function rejectUser(uid, uname) {
+  if (!confirm(`确定拒绝 ${uname} 的注册申请？账号将被禁用。`)) return;
+  const res = await fetch(`/api/admin/users/${uid}/reject`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) { loadUsers(); }
+  else { alert(data.msg || '操作失败'); }
+}
+
+async function disableUser(uid, uname) {
+  if (!confirm(`确定禁用用户 ${uname}？禁用后该用户无法登录。`)) return;
+  const res = await fetch(`/api/admin/users/${uid}/disable`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) { loadUsers(); }
+  else { alert(data.msg || '操作失败'); }
+}
+
+async function enableUser(uid, uname) {
+  const res = await fetch(`/api/admin/users/${uid}/approve`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) { loadUsers(); }
+  else { alert(data.msg || '操作失败'); }
+}
+
+async function deleteUser(uid, uname) {
+  if (!confirm(`确定删除用户 ${uname}？此操作不可逆。`)) return;
+  const res = await fetch(`/api/admin/users/${uid}/delete`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) { loadUsers(); }
+  else { alert(data.msg || '删除失败'); }
+}
+
+function openReset(uid, uname) {
+  _resetUserId = uid;
+  document.getElementById('resetUsername').textContent = uname;
+  document.getElementById('resetPwInput').value = '';
+  document.getElementById('resetMsg').style.display = 'none';
+  document.getElementById('resetOverlay').classList.add('show');
+}
+function closeReset() {
+  document.getElementById('resetOverlay').classList.remove('show');
+}
+async function doReset() {
+  const pw = document.getElementById('resetPwInput').value.trim();
+  const msgEl = document.getElementById('resetMsg');
+  if (!pw || pw.length < 6) { showMsg(msgEl, '密码至少6位', 'error'); return; }
+  const res = await fetch(`/api/admin/users/${_resetUserId}/reset_password`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({new_password: pw})
+  });
+  const data = await res.json();
+  if (data.success) {
+    showMsg(msgEl, '✅ 密码已重置', 'success');
+    setTimeout(closeReset, 1200);
+  } else {
+    showMsg(msgEl, data.msg || '重置失败', 'error');
+  }
+}
+
+async function changePw() {
+  const oldPw = document.getElementById('oldPw').value.trim();
+  const newPw = document.getElementById('newPw').value.trim();
+  const msgEl = document.getElementById('pwMsg');
+  if (!oldPw || !newPw) { showMsg(msgEl, '旧密码和新密码不能为空', 'error'); return; }
+  const res = await fetch('/api/auth/change_password', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({old_password: oldPw, new_password: newPw})
+  });
+  const data = await res.json();
+  if (data.success) { showMsg(msgEl, '✅ 密码修改成功', 'success'); }
+  else { showMsg(msgEl, data.msg || '修改失败', 'error'); }
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.href = '/login';
+}
+
+function showMsg(el, text, type) {
+  el.textContent = text;
+  el.className = 'msg-bar ' + type;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// 点击遮罩关闭模态
+document.getElementById('resetOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeReset();
+});
+</script>
+</body>
+</html>

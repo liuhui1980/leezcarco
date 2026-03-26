@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>历史记录 — TikTok 直播监测</title>
+<style>
+  :root {
+    --primary:#fe2c55; --primary-bg:#fff0f3;
+    --bg:#f5f6fa; --surface:#ffffff;
+    --border:#e8eaef; --border2:#f0f1f5;
+    --text:#1a1d2e; --text2:#6b7280; --text3:#9ca3af;
+    --success:#10b981; --warning:#f59e0b; --info:#3b82f6;
+    --shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+    --radius:12px; --radius-sm:8px;
+    --font:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; }
+
+  /* Navbar */
+  .navbar { background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 3px rgba(0,0,0,.06); position:sticky; top:0; z-index:100; }
+  .navbar-brand { font-size:16px; font-weight:700; color:var(--primary); text-decoration:none; display:flex; align-items:center; gap:10px; }
+  .navbar-logo { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,#fe2c55 0%,#25f4ee 100%); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(254,44,85,.3); flex-shrink:0; }
+  .navbar-logo svg { width:18px; height:18px; }
+  .navbar-wordmark { display:flex; flex-direction:column; line-height:1; }
+  .navbar-name { font-size:15px; font-weight:800; color:var(--text); letter-spacing:-.3px; }
+  .navbar-name span { color:var(--primary); }
+  .navbar-sub { font-size:10px; color:var(--text3); font-weight:500; margin-top:1px; }
+  .navbar-nav { display:flex; gap:4px; }
+  .nav-link { color:var(--text2); text-decoration:none; font-size:14px; padding:6px 12px; border-radius:6px; transition:all .15s; }
+  .nav-link:hover { color:var(--text); background:var(--bg); }
+  .nav-link.active { color:var(--primary); background:var(--primary-bg); font-weight:600; }
+
+  /* Layout */
+  .main { padding:24px; max-width:1240px; margin:0 auto; }
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:12px; }
+  .page-title { font-size:20px; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .page-subtitle { font-size:13px; color:var(--text3); margin-top:2px; }
+
+  /* Filter bar */
+  .filter-bar { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 16px; margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; box-shadow:var(--shadow); }
+  .filter-input { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:7px 11px; font-size:13px; color:var(--text); outline:none; transition:border .15s; }
+  .filter-input:focus { border-color:var(--primary); background:#fff; }
+  .btn { padding:7px 14px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-size:13px; font-weight:600; transition:all .15s; white-space:nowrap; }
+  .btn-primary { background:var(--primary); color:#fff; }
+  .btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border); }
+  .btn-ghost:hover { color:#dc2626; border-color:#fca5a5; background:#fff5f5; }
+  .filter-sep { width:1px; height:24px; background:var(--border); margin:0 4px; }
+
+  /* Stats bar */
+  .stats-bar { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .stat-pill { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:5px 14px; font-size:12px; color:var(--text2); display:flex; align-items:center; gap:5px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .stat-pill strong { color:var(--text); font-size:13px; }
+
+  /* ── 账号卡片（一级）── */
+  .account-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    margin-bottom:14px; overflow:hidden;
+    transition:box-shadow .2s, border-color .2s;
+  }
+  .account-card:hover { box-shadow:0 4px 20px rgba(0,0,0,.08); }
+
+  /* 账号卡头部（点击展开/折叠） */
+  .ac-header {
+    display:flex; align-items:center; gap:14px; padding:14px 16px;
+    cursor:pointer; user-select:none;
+  }
+  .ac-header:hover { background:#fafbfc; }
+  .ac-avatar {
+    width:40px; height:40px; border-radius:10px; flex-shrink:0;
+    background:linear-gradient(135deg,#fe2c55 0%,#ff8800 100%);
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px; font-weight:700; color:#fff;
+  }
+  .ac-info { flex:1; min-width:0; }
+  .ac-username { font-size:15px; font-weight:700; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .ac-meta { font-size:11px; color:var(--text3); margin-top:2px; }
+  .ac-stats { display:flex; gap:16px; flex-shrink:0; flex-wrap:wrap; }
+  .ac-stat { text-align:center; min-width:48px; }
+  .ac-stat-val { font-size:14px; font-weight:700; color:var(--text); }
+  .ac-stat-label { font-size:10px; color:var(--text3); margin-top:1px; }
+  .ac-chevron { font-size:14px; color:var(--text3); transition:transform .2s; flex-shrink:0; margin-left:4px; }
+  .account-card.open .ac-chevron { transform:rotate(180deg); }
+
+  /* 最近一场快览（在标题行下方，折叠时也显示） */
+  .ac-latest {
+    padding:0 16px 14px 70px;
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  .ac-latest-badge { font-size:11px; font-weight:600; }
+  .ac-latest-time { font-size:11px; color:var(--text3); }
+  .ac-latest-metrics { display:flex; gap:12px; }
+  .ac-latest-m { font-size:11px; color:var(--text2); }
+  .ac-latest-m strong { color:var(--text); }
+  .btn-review-sm { background:var(--primary-bg); color:var(--primary); border:1px solid #fecdd3; font-size:11px; padding:3px 10px; border-radius:5px; text-decoration:none; font-weight:600; white-space:nowrap; transition:all .15s; }
+  .btn-review-sm:hover { background:#fecdd3; }
+
+  /* 历史场次列表（二级，折叠态隐藏） */
+  .ac-sessions {
+    display:none; border-top:1px solid var(--border2);
+    background:#fafbfc;
+  }
+  .account-card.open .ac-sessions { display:block; }
+  .ac-sessions-header {
+    padding:10px 16px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border2);
+  }
+  .ac-sessions-title { font-size:12px; font-weight:700; color:var(--text2); }
+  .btn-clear-account { background:transparent; border:1px solid #fca5a5; color:#dc2626; font-size:11px; padding:3px 10px; border-radius:5px; cursor:pointer; opacity:0.7; transition:all .15s; }
+  .btn-clear-account:hover { opacity:1; background:#fee2e2; }
+
+  /* 单场次行 */
+  .session-row {
+    display:flex; align-items:center; gap:12px; padding:10px 16px;
+    border-bottom:1px solid var(--border2); transition:background .15s;
+    flex-wrap:wrap;
+  }
+  .session-row:last-child { border-bottom:none; }
+  .session-row:hover { background:#fff; }
+  .sr-left { flex:1; min-width:160px; }
+  .sr-time { font-size:12px; font-weight:600; color:var(--text); }
+  .sr-duration { font-size:10px; color:var(--text3); margin-top:1px; }
+  .sr-metrics { display:flex; gap:14px; flex-wrap:wrap; }
+  .sr-m { font-size:11px; color:var(--text2); text-align:center; min-width:40px; }
+  .sr-m strong { display:block; font-size:13px; color:var(--text); line-height:1; }
+  .sr-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+
+  /* Badges */
+  .badge-live { background:var(--primary); color:#fff; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+  .badge-ended { background:#f3f4f6; color:var(--text2); font-size:10px; padding:2px 7px; border-radius:10px; }
+  .group-tag { display:inline-block; font-size:10px; padding:1px 7px; border-radius:10px; font-weight:600; }
+  .tag-own { background:#dbeafe; color:#1d4ed8; }
+  .tag-rival { background:#fce7f3; color:#9d174d; }
+  .tag-watch { background:#d1fae5; color:#065f46; }
+  .speech-badge { display:inline-flex; align-items:center; gap:3px; background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; font-size:10px; padding:1px 6px; border-radius:10px; font-weight:600; }
+  .speech-badge-none { background:#f9fafb; color:var(--text3); border-color:var(--border); }
+
+  /* Mini bar */
+  .mini-bar { height:3px; background:var(--bg); border-radius:2px; overflow:hidden; margin-top:4px; width:60px; }
+  .mini-bar-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,#fe2c55,#ff8800); }
+
+  /* Del button */
+  .btn-del-sm { background:#fff; color:#9ca3af; border:1px solid var(--border); font-size:12px; padding:3px 7px; border-radius:5px; cursor:pointer; transition:all .15s; }
+  .btn-del-sm:hover { background:#fee2e2; color:#dc2626; border-color:#fca5a5; }
+
+  /* States */
+  .loading { text-align:center; padding:60px; color:var(--text3); font-size:14px; }
+  .empty { text-align:center; padding:60px; color:var(--text3); display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .empty-icon { font-size:40px; }
+
+  ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  /* ── 版本徽章 ── */
+  .version-badge { font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;padding:2px 7px;cursor:pointer;transition:all .15s;user-select:none;letter-spacing:.3px;white-space:nowrap; }
+  .version-badge:hover { background:#e5e7eb;color:#374151; }
+  .changelog-modal { display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center; }
+  .changelog-modal.open { display:flex; }
+  .changelog-box { background:#fff;border-radius:16px;width:560px;max-width:92vw;max-height:75vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2); }
+  .changelog-header { padding:18px 22px 14px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center; }
+  .changelog-header h3 { font-size:15px;font-weight:700;color:#1a1d2e; }
+  .changelog-header button { background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1; }
+  .changelog-content { padding:16px 22px;overflow-y:auto;flex:1;font-size:13px;line-height:1.7;color:#374151; }
+  .changelog-content h2 { font-size:14px;font-weight:700;color:#fe2c55;margin:12px 0 4px; }
+  .changelog-content h3 { font-size:13px;font-weight:600;color:#1a1d2e;margin:8px 0 4px; }
+  .changelog-content li { margin-left:16px; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar-brand" href="/">
+    <div class="navbar-logo">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.51a8.16 8.16 0 004.77 1.52V7.58a4.85 4.85 0 01-1-.89z"/></svg>
+    </div>
+    <div class="navbar-wordmark">
+      <div class="navbar-name">Tuke<span>carco</span></div>
+      <div class="navbar-sub">TikTok 直播监测系统</div>
+    </div>
+  </a>
+  <span class="version-badge" onclick="openChangelog()" title="点击查看版本日志">v{{ app_version }}</span>
+  <nav class="navbar-nav">
+    <a href="/" class="nav-link">实时看板</a>
+    <a href="/history" class="nav-link active">历史记录</a>
+    <a href="/automonitor" class="nav-link">📋 自动监控</a>
+    <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
+    <button onclick="authLogout()" style="font-size:13px;background:#f5f6fa;border:1px solid #e8eaef;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:2px">退出</button>
+  </nav>
+</nav>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">📋 直播历史记录</div>
+      <div class="page-subtitle" id="pageSubtitle">加载中...</div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <input type="text" class="filter-input" id="filterUser" placeholder="🔍 搜索账号..." oninput="renderAccounts()" style="width:150px;">
+    <select class="filter-input" id="filterGroup" onchange="renderAccounts()" style="width:96px;">
+      <option value="">全部分组</option>
+      <option value="own">自营</option>
+      <option value="rival">竞品</option>
+      <option value="watch">关注</option>
+    </select>
+    <div class="filter-sep"></div>
+    <button class="btn btn-ghost" onclick="deleteFilteredSessions()" title="删除当前筛选账号的所有已结束记录" style="font-size:12px;">🗑 批量删除筛选结果</button>
+  </div>
+
+  <!-- Stats pills -->
+  <div class="stats-bar" id="statsBar"></div>
+
+  <!-- Accounts list -->
+  <div id="accountsList"><div class="loading">⏳ 加载中...</div></div>
+</div>
+
+<script>
+let allSessions = [];
+const GROUP_MAP = { own:{label:'自营',cls:'tag-own'}, rival:{label:'竞品',cls:'tag-rival'}, watch:{label:'关注',cls:'tag-watch'} };
+// 记录哪些账号卡片是展开状态
+const expandedAccounts = new Set();
+
+function durationMin(s) {
+  if (!s.start_time || !s.end_time) return 0;
+  return Math.round((new Date(s.end_time) - new Date(s.start_time)) / 60000);
+}
+function durationStr(min) {
+  if (!min) return '-';
+  return min >= 60 ? `${Math.floor(min/60)}h${min%60}m` : `${min}m`;
+}
+function formatNum(n) {
+  if (n >= 10000) return (n/10000).toFixed(1) + 'w';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'k';
+  return (n || 0).toString();
+}
+function formatTime(t) {
+  if (!t) return '-';
+  try { return t.replace('T',' ').slice(0,16); } catch(e) { return t; }
+}
+function formatDate(t) {
+  if (!t) return '-';
+  try { return t.slice(0,10); } catch(e) { return t; }
+}
+
+// ── 获取过滤后账号列表 ──
+function getFilteredAccountGroups() {
+  const filterUser = document.getElementById('filterUser').value.trim().toLowerCase();
+  const filterGroup = document.getElementById('filterGroup').value;
+
+  // 按 username 分组
+  const grouped = {};
+  allSessions.forEach(s => {
+    if (filterUser && !s.username.toLowerCase().includes(filterUser)) return;
+    if (filterGroup && s._group !== filterGroup) return;
+    if (!grouped[s.username]) grouped[s.username] = [];
+    grouped[s.username].push(s);
+  });
+
+  // 每组内部按时间倒序
+  Object.values(grouped).forEach(arr => arr.sort((a,b) => new Date(b.start_time) - new Date(a.start_time)));
+
+  // 账号按最近开播时间排序
+  const entries = Object.entries(grouped);
+  entries.sort((a,b) => {
+    const ta = new Date(a[1][0]?.start_time || 0);
+    const tb = new Date(b[1][0]?.start_time || 0);
+    return tb - ta;
+  });
+  return entries;
+}
+
+// ── 切换账号卡片展开/折叠 ──
+function toggleAccount(username) {
+  const card = document.getElementById(`ac-${CSS.escape(username)}`);
+  if (!card) return;
+  const isOpen = card.classList.toggle('open');
+  if (isOpen) expandedAccounts.add(username);
+  else expandedAccounts.delete(username);
+}
+
+// ── 构建单场次行 HTML ──
+function buildSessionRow(s, maxPeak, isLatest) {
+  const dur = durationMin(s);
+  const isLive = s.status === 'live';
+  const sc = s.speech_count || 0;
+  const barPct = Math.round((s.peak_viewers||0) / maxPeak * 100);
+  const speechBadge = sc > 0
+    ? `<span class="speech-badge">🎙 ${sc}</span>`
+    : `<span class="speech-badge speech-badge-none">无话术</span>`;
+  return `<div class="session-row" id="row-${s.id}">
+    <div class="sr-left">
+      <div class="sr-time">
+        ${isLive ? '<span class="badge-live">🔴 直播中</span>' : ''}
+        ${isLatest && !isLive ? '<span style="font-size:10px;background:#eff6ff;color:#3b82f6;padding:1px 6px;border-radius:8px;font-weight:600;">最新</span>' : ''}
+        ${formatTime(s.start_time)}
+        ${!isLive ? `→ ${formatTime(s.end_time)}` : ''}
+      </div>
+      <div class="sr-duration">时长 ${durationStr(dur)} &nbsp; ${speechBadge}</div>
+      <div class="mini-bar"><div class="mini-bar-fill" style="width:${barPct}%"></div></div>
+    </div>
+    <div class="sr-metrics">
+      <div class="sr-m"><strong>${formatNum(s.peak_viewers)}</strong>峰值</div>
+      <div class="sr-m"><strong>${formatNum(s.total_viewers)}</strong>累计看</div>
+      <div class="sr-m"><strong>${formatNum(s.total_comments)}</strong>评论</div>
+      <div class="sr-m"><strong>${formatNum(s.new_followers)}</strong>新增关注</div>
+      <div class="sr-m"><strong>$${(s.total_gift_value||0).toFixed(1)}</strong>礼物</div>
+    </div>
+    <div class="sr-actions">
+      <a href="/session/${s.id}" class="btn-review-sm">复盘 →</a>
+      ${!isLive ? `<button class="btn-del-sm" onclick="deleteSession(${s.id},event)" title="删除">🗑</button>` : ''}
+    </div>
+  </div>`;
+}
+
+// ── 构建账号卡片 HTML ──
+function buildAccountCard(username, sessions) {
+  const gInfo = GROUP_MAP[sessions[0]?._group] || {label:'',cls:''};
+  const groupTag = gInfo.label ? `<span class="group-tag ${gInfo.cls}">${gInfo.label}</span>` : '';
+  const latest = sessions[0];
+  const isLive = latest?.status === 'live';
+  const totalSessions = sessions.length;
+  const totalViewers = sessions.reduce((a,s) => a + (s.total_viewers||0), 0);
+  const totalGifts = sessions.reduce((a,s) => a + (s.total_gift_value||0), 0);
+  const maxPeak = Math.max(...sessions.map(s => s.peak_viewers||0), 1);
+
+  const initials = username.slice(0,2).toUpperCase();
+  const isOpen = expandedAccounts.has(username) || isLive;
+  if (isLive) expandedAccounts.add(username);
+
+  const endedCount = sessions.filter(s => s.status !== 'live').length;
+
+  // 最新场摘要行
+  const latestLine = latest ? `
+    <div class="ac-latest">
+      <span class="${isLive?'badge-live':'badge-ended'}">${isLive?'🔴 直播中':'最近一场'}</span>
+      <span class="ac-latest-time">${formatTime(latest.start_time)}</span>
+      <div class="ac-latest-metrics">
+        <span class="ac-latest-m">峰值 <strong>${formatNum(latest.peak_viewers)}</strong></span>
+        <span class="ac-latest-m">评论 <strong>${formatNum(latest.total_comments)}</strong></span>
+        <span class="ac-latest-m">礼物 <strong>$${(latest.total_gift_value||0).toFixed(1)}</strong></span>
+      </div>
+      <a href="/session/${latest.id}" class="btn-review-sm" onclick="event.stopPropagation()">进入复盘 →</a>
+    </div>` : '';
+
+  // 历史场次列表
+  const sessionRows = sessions.map((s,i) => buildSessionRow(s, maxPeak, i===0)).join('');
+
+  return `<div class="account-card ${isOpen?'open':''}" id="ac-${username}">
+    <div class="ac-header" onclick="toggleAccount('${username}')">
+      <div class="ac-avatar">${initials}</div>
+      <div class="ac-info">
+        <div class="ac-username">
+          <a href="https://www.tiktok.com/@${username}/live" target="_blank" style="color:inherit;text-decoration:none;" onclick="event.stopPropagation()">@${username}</a>
+          ${groupTag}
+          ${isLive ? '<span class="badge-live">直播中</span>' : ''}
+        </div>
+        <div class="ac-meta">共 ${totalSessions} 场记录 · 最近开播 ${formatDate(latest?.start_time)}</div>
+      </div>
+      <div class="ac-stats">
+        <div class="ac-stat"><div class="ac-stat-val">${totalSessions}</div><div class="ac-stat-label">总场次</div></div>
+        <div class="ac-stat"><div class="ac-stat-val">${formatNum(totalViewers)}</div><div class="ac-stat-label">累计观看</div></div>
+        <div class="ac-stat"><div class="ac-stat-val">$${totalGifts.toFixed(0)}</div><div class="ac-stat-label">总礼物</div></div>
+      </div>
+      <div class="ac-chevron">▼</div>
+    </div>
+    ${latestLine}
+    <div class="ac-sessions">
+      <div class="ac-sessions-header">
+        <div class="ac-sessions-title">📅 全部场次（${totalSessions} 场）</div>
+        ${endedCount > 0 ? `<button class="btn-clear-account" onclick="deleteAccountSessions('${username}',${endedCount})">清空 ${endedCount} 条历史</button>` : ''}
+      </div>
+      ${sessionRows}
+    </div>
+  </div>`;
+}
+
+// ── 渲染账号列表 ──
+function renderAccounts() {
+  const entries = getFilteredAccountGroups();
+  const container = document.getElementById('accountsList');
+  if (!entries.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div>暂无匹配记录</div></div>';
+    updateStats([]);
+    return;
+  }
+  const allFiltered = entries.flatMap(([,s]) => s);
+  updateStats(allFiltered);
+  container.innerHTML = entries.map(([username, sessions]) => buildAccountCard(username, sessions)).join('');
+}
+
+// ── 统计摘要 ──
+function updateStats(list) {
+  const accounts = new Set(list.map(s => s.username)).size;
+  const total = list.length;
+  const live = list.filter(s => s.status === 'live').length;
+  const totalSpeech = list.reduce((a,s) => a + (s.speech_count||0), 0);
+  const bar = document.getElementById('statsBar');
+  bar.innerHTML = `
+    <div class="stat-pill">共 <strong>${accounts}</strong> 个账号</div>
+    <div class="stat-pill"><strong>${total}</strong> 场记录</div>
+    ${live ? `<div class="stat-pill" style="color:var(--primary)">🔴 当前直播中 <strong>${live}</strong> 场</div>` : ''}
+    ${totalSpeech ? `<div class="stat-pill">话术合计 <strong>${totalSpeech}</strong> 条</div>` : ''}
+  `;
+  document.getElementById('pageSubtitle').textContent = `${accounts} 个账号 · ${total} 场历史`;
+}
+
+// ── 删除单条 ──
+async function deleteSession(sessionId, e) {
+  if (e) e.stopPropagation();
+  if (!confirm('确定删除这条历史记录吗？相关评论、话术数据将一并删除，无法恢复。')) return;
+  const row = document.getElementById(`row-${sessionId}`);
+  if (row) row.style.opacity = '.4';
+  try {
+    const res = await fetch(`/api/session/${sessionId}/delete`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      allSessions = allSessions.filter(s => s.id !== sessionId);
+      renderAccounts();
+    } else {
+      if (row) row.style.opacity = '';
+      alert('删除失败，请重试');
+    }
+  } catch(e) {
+    if (row) row.style.opacity = '';
+    alert('网络错误，请重试');
+  }
+}
+
+// ── 删除某账号所有历史 ──
+async function deleteAccountSessions(username, count) {
+  if (!confirm(`确定清空 @${username} 的 ${count} 条历史记录吗？此操作无法恢复。`)) return;
+  const res = await fetch(`/api/account/${encodeURIComponent(username)}/delete`, { method: 'POST' });
+  const data = await res.json();
+  if (data.success) {
+    allSessions = allSessions.filter(s => s.username !== username || s.status === 'live');
+    renderAccounts();
+  } else {
+    alert('删除失败，请重试');
+  }
+}
+
+// ── 批量删除筛选结果 ──
+async function deleteFilteredSessions() {
+  const entries = getFilteredAccountGroups();
+  const toDelete = entries.flatMap(([,s]) => s).filter(s => s.status !== 'live');
+  if (!toDelete.length) { alert('当前筛选下没有可删除的记录'); return; }
+  if (!confirm(`确定删除当前筛选出的 ${toDelete.length} 条历史记录吗？此操作无法恢复。`)) return;
+  let deleted = 0;
+  for (const s of toDelete) {
+    const res = await fetch(`/api/session/${s.id}/delete`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) { deleted++; allSessions = allSessions.filter(x => x.id !== s.id); }
+  }
+  renderAccounts();
+  alert(`已成功删除 ${deleted} 条记录`);
+}
+
+// ── 用户信息 & 退出 ──
+(async () => {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.status === 401) { location.href = '/login'; return; }
+    const me = await res.json();
+    if (me.logged_in) {
+      const badge = document.getElementById('navUserBadge');
+      if (badge) badge.textContent = me.username;
+      const adminLink = document.getElementById('adminNavLink');
+      if (adminLink && me.is_admin) adminLink.style.display = '';
+    }
+  } catch(e) {}
+})();
+async function authLogout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.href = '/login';
+}
+
+// ── 初始化 ──
+fetch('/api/sessions').then(r => r.json()).then(sessions => {
+  try {
+    const groups = JSON.parse(localStorage.getItem('accountGroups') || '{}');
+    allSessions = sessions.map(s => ({ ...s, _group: groups[s.username] || 'own' }));
+  } catch(e) {
+    allSessions = sessions.map(s => ({ ...s, _group: 'own' }));
+  }
+  renderAccounts();
+}).catch(() => {
+  document.getElementById('accountsList').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div>加载失败，请刷新重试</div></div>';
+});
+</script>
+
+<!-- ── 版本日志弹窗 ── -->
+<div class="changelog-modal" id="changelogModal" onclick="if(event.target===this)closeChangelog()">
+  <div class="changelog-box">
+    <div class="changelog-header">
+      <h3>📋 版本日志</h3>
+      <button onclick="closeChangelog()">✕</button>
+    </div>
+    <div class="changelog-content" id="changelogContent">加载中...</div>
+  </div>
+</div>
+<script>
+function openChangelog() {
+  document.getElementById('changelogModal').classList.add('open');
+  fetch('/api/version').then(r=>r.json()).then(d=>{
+    let html = (d.changelog||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    html = html.replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^- (.+)$/gm,'<li>$1</li>');
+    document.getElementById('changelogContent').innerHTML = html;
+  }).catch(()=>{ document.getElementById('changelogContent').textContent='加载失败'; });
+}
+function closeChangelog() { document.getElementById('changelogModal').classList.remove('open'); }
+</script>
+</body>
+</html>

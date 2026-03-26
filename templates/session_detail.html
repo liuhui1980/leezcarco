@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>直播复盘 — TikTok 直播监测</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary:#fe2c55; --primary-bg:#fff0f3;
+    --bg:#f5f6fa; --surface:#ffffff;
+    --border:#e8eaef; --border2:#f0f1f5;
+    --text:#1a1d2e; --text2:#6b7280; --text3:#9ca3af;
+    --success:#10b981; --success-bg:#d1fae5;
+    --danger:#ef4444; --danger-bg:#fee2e2;
+    --warning:#f59e0b; --info:#3b82f6; --info-bg:#dbeafe;
+    --shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+    --radius:12px; --radius-sm:8px;
+    --font:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); }
+  .navbar { background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 3px rgba(0,0,0,.06); position:sticky; top:0; z-index:100; }
+  .navbar-brand { text-decoration:none; display:flex; align-items:center; gap:10px; }
+  .navbar-logo { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,#fe2c55 0%,#25f4ee 100%); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(254,44,85,.3); flex-shrink:0; }
+  .navbar-logo svg { width:18px; height:18px; }
+  .navbar-wordmark { display:flex; flex-direction:column; line-height:1; }
+  .navbar-name { font-size:15px; font-weight:800; color:var(--text); letter-spacing:-.3px; }
+  .navbar-name span { color:var(--primary); }
+  .navbar-sub { font-size:10px; color:var(--text3); font-weight:500; margin-top:1px; letter-spacing:.2px; }
+  .nav-link { color:var(--text2); text-decoration:none; font-size:14px; padding:6px 12px; border-radius:6px; }
+  .nav-link:hover { color:var(--text); background:var(--bg); }
+  .main { padding:24px; max-width:1100px; margin:0 auto; }
+
+  /* 页面标题 */
+  .page-title { font-size:20px; font-weight:700; margin-bottom:20px; display:flex; align-items:center; gap:10px; }
+  .page-title a { color:var(--text2); font-size:14px; font-weight:400; text-decoration:none; }
+  .page-title a:hover { color:var(--primary); }
+
+  /* 指标卡片行 */
+  .metrics-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:20px; }
+  .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center; box-shadow:var(--shadow); }
+  .metric-val { font-size:24px; font-weight:700; color:var(--text); }
+  .metric-label { font-size:12px; color:var(--text2); margin-top:4px; }
+
+  /* Panel */
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; box-shadow:var(--shadow); }
+  .panel-title { font-size:15px; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+  .panel-title .badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+  .badge-new { background:var(--primary-bg); color:var(--primary); }
+
+  /* 趋势图 */
+  .chart-wrap { height:260px; }
+
+  /* 话术时间轴（紧贴趋势图下方） */
+  .speech-timeline { margin-top:14px; border-top:1px solid var(--border2); padding-top:12px; }
+  .stl-title { font-size:12px; font-weight:600; color:var(--text2); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+  .stl-scroll { overflow-x:auto; padding-bottom:4px; }
+  .stl-track { display:flex; gap:6px; min-width:max-content; flex-wrap:nowrap; align-items:flex-start; padding:4px 0; }
+  .stl-item {
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    cursor:pointer; position:relative;
+  }
+  .stl-dot { width:8px; height:8px; border-radius:50%; background:var(--primary); flex-shrink:0; }
+  .stl-chip {
+    background:var(--bg); border:1px solid var(--border); border-radius:12px;
+    padding:2px 8px; font-size:11px; color:var(--text); white-space:nowrap;
+    max-width:140px; overflow:hidden; text-overflow:ellipsis;
+    transition:all .15s;
+  }
+  .stl-chip.ar { background:#fef3c7; border-color:#fde68a; color:#92400e; }
+  .stl-chip.en { background:#dbeafe; border-color:#bfdbfe; color:#1e40af; }
+  .stl-chip:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .stl-time { font-size:9px; color:var(--text3); }
+  .stl-empty { font-size:12px; color:var(--text3); padding:8px 0; }
+
+  /* 复盘对比表 */
+  .review-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .review-table th { background:var(--bg); padding:10px 14px; text-align:left; font-size:12px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:.04em; border-bottom:2px solid var(--border); }
+  .review-table th.current-col { color:var(--primary); background:var(--primary-bg); }
+  .review-table td { padding:10px 14px; border-bottom:1px solid var(--border2); vertical-align:middle; }
+  .review-table tr:last-child td { border-bottom:none; }
+  .review-table tr:hover td { background:var(--bg); }
+  .review-table .metric-name { font-weight:600; color:var(--text); }
+  .review-table .current-val { font-weight:700; color:var(--text); font-size:14px; }
+  .change-up { color:var(--success); font-size:12px; font-weight:600; }
+  .change-down { color:var(--danger); font-size:12px; font-weight:600; }
+  .change-flat { color:var(--text3); font-size:12px; }
+  .best-mark { display:inline-block; background:#fef3c7; color:#b45309; font-size:10px; padding:1px 5px; border-radius:4px; margin-left:4px; font-weight:600; }
+
+  /* 话术区域 */
+  .speech-section { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:768px) { .speech-section { grid-template-columns:1fr; } }
+
+  .summary-list { list-style:none; }
+  .summary-item { padding:10px 0; border-bottom:1px solid var(--border2); font-size:13px; color:var(--text); line-height:1.6; display:flex; align-items:flex-start; gap:8px; }
+  .summary-item:last-child { border-bottom:none; }
+  .summary-num { width:20px; height:20px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+
+  .keywords-wrap { display:flex; flex-wrap:wrap; gap:6px; }
+  .keyword-chip { background:var(--bg); border:1px solid var(--border); border-radius:16px; padding:4px 10px; font-size:12px; color:var(--text); }
+
+  /* 话术列表 */
+  .speech-list { max-height:400px; overflow-y:auto; }
+  .speech-item { padding:10px 0; border-bottom:1px solid var(--border2); }
+  .speech-item:last-child { border-bottom:none; }
+  .speech-meta { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .speech-time { font-size:11px; color:var(--text3); }
+  .lang-badge { font-size:10px; padding:1px 6px; border-radius:3px; font-weight:600; }
+  .lang-zh { background:#d1fae5; color:#065f46; }
+  .lang-en { background:#dbeafe; color:#1d4ed8; }
+  .lang-ar { background:#fef3c7; color:#92400e; }
+  .lang-ar-gulf    { background:#fef3c7; color:#b45309; border:1px solid #fde68a; }
+  .lang-ar-egypt   { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+  .lang-ar-levant  { background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; }
+  .lang-ar-maghreb { background:#f3e8ff; color:#6b21a8; border:1px solid #e9d5ff; }
+  .lang-other { background:#f5f3ff; color:#5b21b6; }
+  .speech-orig { font-size:13px; color:var(--text); line-height:1.5; }
+  .speech-zh { font-size:12px; color:var(--text2); margin-top:3px; line-height:1.5; padding:4px 8px; background:#f9fafb; border-radius:4px; border-left:2px solid var(--border); }
+  .speech-zh::before { content:'中文: '; font-weight:600; color:var(--text3); }
+
+  /* 两列布局 */
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:768px) { .two-col { grid-template-columns:1fr; } }
+
+  /* 评论方言分析 */
+  .dialect-analysis { background:linear-gradient(135deg,#fffbeb,#fef9e7); border:2px solid #fde68a; border-radius:var(--radius); padding:20px; margin-bottom:20px; box-shadow:var(--shadow); }
+  .dialect-analysis .panel-title { color:#92400e; }
+  .dialect-summary { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-bottom:16px; }
+  .dialect-summary-card { background:#fff; border:1px solid #fde68a; border-radius:10px; padding:12px 14px; text-align:center; }
+  .dialect-summary-card .flag { font-size:24px; margin-bottom:4px; }
+  .dialect-summary-card .name { font-size:12px; font-weight:700; color:#92400e; }
+  .dialect-summary-card .count { font-size:20px; font-weight:700; color:#b45309; margin:4px 0; }
+  .dialect-summary-card .pct { font-size:12px; color:var(--text2); }
+  .dialect-summary-card.dominant { background:linear-gradient(135deg,#fef3c7,#fde68a); border-color:#f59e0b; box-shadow:0 2px 8px rgba(245,158,11,.2); }
+  .dialect-bar-list { display:flex; flex-direction:column; gap:8px; }
+  .dialect-bar-item { display:flex; align-items:center; gap:10px; }
+  .dialect-bar-label { width:90px; font-size:12px; color:var(--text); flex-shrink:0; display:flex; align-items:center; gap:5px; }
+  .dialect-bar-track { flex:1; height:8px; background:var(--bg); border-radius:4px; overflow:hidden; }
+  .dialect-bar-fill { height:100%; border-radius:4px; background:linear-gradient(90deg,#f59e0b,#d97706); }
+  .dialect-bar-num { width:60px; text-align:right; font-size:12px; font-weight:600; color:#b45309; flex-shrink:0; }
+  .no-arabic { text-align:center; padding:20px; color:var(--text3); font-size:13px; }
+
+  /* 需求洞察 */
+  .insight-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; margin-bottom:16px; }
+  .insight-card { background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px 14px; }
+  .insight-card .ic-title { font-size:12px; font-weight:700; color:#92400e; margin-bottom:6px; }
+  .insight-card .ic-count { font-size:22px; font-weight:800; color:#b45309; }
+  .insight-card .ic-sub { font-size:11px; color:var(--text3); margin-top:2px; }
+  .insight-comments { margin-top:12px; }
+  .insight-comment-row { display:flex; align-items:flex-start; gap:8px; padding:8px 0; border-bottom:1px solid var(--border2); font-size:12px; }
+  .insight-comment-row:last-child { border-bottom:none; }
+  .insight-user { font-weight:600; color:var(--primary); min-width:80px; flex-shrink:0; }
+  .insight-text { flex:1; color:var(--text); }
+  .insight-tag { font-size:10px; background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:8px; flex-shrink:0; }
+
+  /* 调优建议 */
+  .optim-list { display:flex; flex-direction:column; gap:10px; }
+  .optim-item { display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#f8f4ff; border:1px solid #e9d5ff; border-radius:10px; }
+  .optim-icon { font-size:20px; flex-shrink:0; line-height:1.2; }
+  .optim-body { flex:1; }
+  .optim-title { font-size:13px; font-weight:700; color:#6d28d9; margin-bottom:3px; }
+  .optim-desc { font-size:12px; color:var(--text2); line-height:1.5; }
+  .optim-tag { font-size:10px; background:#ede9fe; color:#7c3aed; padding:1px 7px; border-radius:8px; margin-left:6px; font-weight:600; }
+
+  table.data-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .data-table th { background:var(--bg); padding:9px 12px; text-align:left; font-size:12px; font-weight:600; color:var(--text2); border-bottom:1px solid var(--border); }
+  .data-table td { padding:9px 12px; border-bottom:1px solid var(--border2); color:var(--text); }
+  .data-table tr:last-child td { border-bottom:none; }
+  .loading { text-align:center; padding:40px; color:var(--text3); }
+
+  ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  /* ── 版本徽章 ── */
+  .version-badge { font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;padding:2px 7px;cursor:pointer;transition:all .15s;user-select:none;letter-spacing:.3px;white-space:nowrap; }
+  .version-badge:hover { background:#e5e7eb;color:#374151; }
+  .changelog-modal { display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center; }
+  .changelog-modal.open { display:flex; }
+  .changelog-box { background:#fff;border-radius:16px;width:560px;max-width:92vw;max-height:75vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2); }
+  .changelog-header { padding:18px 22px 14px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center; }
+  .changelog-header h3 { font-size:15px;font-weight:700;color:#1a1d2e; }
+  .changelog-header button { background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1; }
+  .changelog-content { padding:16px 22px;overflow-y:auto;flex:1;font-size:13px;line-height:1.7;color:#374151; }
+  .changelog-content h2 { font-size:14px;font-weight:700;color:#fe2c55;margin:12px 0 4px; }
+  .changelog-content h3 { font-size:13px;font-weight:600;color:#1a1d2e;margin:8px 0 4px; }
+  .changelog-content li { margin-left:16px; }
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar-brand" href="/">
+    <div class="navbar-logo">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.51a8.16 8.16 0 004.77 1.52V7.58a4.85 4.85 0 01-1-.89z"/></svg>
+    </div>
+    <div class="navbar-wordmark">
+      <div class="navbar-name">Tuke<span>carco</span></div>
+      <div class="navbar-sub">TikTok 直播监测系统</div>
+    </div>
+  </a>
+  <span class="version-badge" onclick="openChangelog()" title="点击查看版本日志">v{{ app_version }}</span>
+  <nav style="display:flex;gap:4px;align-items:center;">
+    <a href="/" class="nav-link">实时看板</a>
+    <a href="/history" class="nav-link">历史记录</a>
+    <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
+    <button onclick="authLogout()" style="font-size:13px;background:#f5f6fa;border:1px solid #e8eaef;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:2px">退出</button>
+  </nav>
+</nav>
+<div class="main">
+  <div class="page-title">
+    <span id="pageTitle">直播复盘</span>
+    <a href="/history">← 返回列表</a>
+    <button onclick="deleteThisSession()" style="margin-left:auto;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;">🗑 删除本场记录</button>
+  </div>
+
+  <!-- 指标卡片 -->
+  <div class="metrics-row" id="metricsRow"><div class="loading">加载中...</div></div>
+
+  <!-- 在线人数趋势图 -->
+  <div class="panel">
+    <div class="panel-title">📈 在线人数趋势</div>
+    <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+    <!-- 话术关键词时间轴 -->
+    <div class="speech-timeline" id="speechTimeline" style="display:none;">
+      <div class="stl-title">🎤 主播话术时间轴（点击查看中文翻译）</div>
+      <div class="stl-scroll"><div class="stl-track" id="stlTrack"></div></div>
+    </div>
+  </div>
+
+  <!-- ★ 核心：复盘对比 -->
+  <div class="panel" id="reviewPanel" style="display:none;">
+    <div class="panel-title">
+      📊 主播复盘对比
+      <span class="badge badge-new" id="reviewSessionCount"></span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="review-table" id="reviewTable">
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th class="current-col">本场</th>
+            <th>上一场</th>
+            <th>近7场均值</th>
+            <th>历史最佳</th>
+          </tr>
+        </thead>
+        <tbody id="reviewTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 话术分析 -->
+  <div class="panel" id="speechPanel" style="display:none;">
+    <div class="panel-title">🎤 话术分析 <span class="badge badge-new" id="speechCount"></span></div>
+    <div class="speech-section">
+      <!-- 内容总结 + 热词 -->
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;">关键句摘要</div>
+        <ul class="summary-list" id="summaryList"></ul>
+        <div style="font-size:13px;font-weight:600;color:var(--text2);margin:16px 0 10px;">高频词</div>
+        <div class="keywords-wrap" id="keywordsWrap"></div>
+      </div>
+      <!-- 话术全文（可滚动） -->
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;">全量话术（含中文翻译）</div>
+        <div class="speech-list" id="speechList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ 话术方言分析（整场主播说话的语言/方言分布） -->
+  <div class="dialect-analysis" id="speechDialectPanel" style="display:none;">
+    <div class="panel-title">🎙️ 主播话术方言分析 <span class="badge badge-new" id="speechDialectBadge"></span></div>
+    <div id="speechDialectSummary" class="dialect-summary"></div>
+    <div id="speechDialectBarList" class="dialect-bar-list"></div>
+  </div>
+
+  <!-- ★ 评论方言分析（核心重点区域） -->
+  <div class="dialect-analysis" id="dialectPanel">
+    <div class="panel-title">🗣️ 评论方言分析 <span class="badge badge-new" id="dialectBadge"></span></div>
+    <div id="dialectSummary" class="dialect-summary"></div>
+    <div id="dialectBarList" class="dialect-bar-list"></div>
+  </div>
+
+  <!-- ★ 需求洞察 -->
+  <div class="panel" id="insightPanel" style="display:none;">
+    <div class="panel-title">🔍 需求洞察 <span class="badge" style="background:#fef3c7;color:#b45309;" id="insightBadge"></span></div>
+    <div id="insightContent"></div>
+  </div>
+
+  <!-- ★ 调优建议 -->
+  <div class="panel" id="optimPanel" style="display:none;">
+    <div class="panel-title">💡 本场调优建议 <span class="badge" style="background:#ede9fe;color:#7c3aed;">下一场参考</span></div>
+    <div id="optimContent"></div>
+  </div>
+
+  <!-- 礼物 + 评论 -->
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-title">🎁 礼物打赏排行</div>
+      <table class="data-table" id="giftTable">
+        <thead><tr><th>排名</th><th>用户</th><th>总价值</th><th>次数</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">💬 评论记录（最新 100 条）</div>
+      <div style="max-height:400px;overflow-y:auto;">
+        <table class="data-table" id="commentTable">
+          <thead><tr><th>时间</th><th>用户</th><th>内容</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const sessionId = {{ session_id }};
+
+// ── 用户信息 & 退出 ──
+(async () => {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.status === 401) { location.href = '/login'; return; }
+    const me = await res.json();
+    if (me.logged_in) {
+      const badge = document.getElementById('navUserBadge');
+      if (badge) badge.textContent = me.username;
+      const adminLink = document.getElementById('adminNavLink');
+      if (adminLink && me.is_admin) adminLink.style.display = '';
+    }
+  } catch(e) {}
+})();
+async function authLogout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.href = '/login';
+}
+
+function fmt(n) { if(n>=10000) return (n/10000).toFixed(1)+'w'; if(n>=1000) return (n/1000).toFixed(1)+'k'; return (n||0).toLocaleString(); }
+function fmtMin(m) { if(!m) return '-'; m=Math.round(m); return m>=60?`${Math.floor(m/60)}h${m%60}m`:`${m}m`; }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function changeBadge(cur, ref, higherIsBetter=true) {
+  if (ref === undefined || ref === null || ref === 0) return '';
+  const pct = Math.round((cur - ref) / ref * 100);
+  if (Math.abs(pct) < 1) return `<span class="change-flat">≈ 持平</span>`;
+  const up = higherIsBetter ? pct > 0 : pct < 0;
+  const cls = up ? 'change-up' : 'change-down';
+  const arrow = pct > 0 ? '▲' : '▼';
+  return `<span class="${cls}">${arrow}${Math.abs(pct)}%</span>`;
+}
+
+// 复盘指标配置
+const REVIEW_METRICS = [
+  { key:'peak_viewers',    label:'峰值在线',   fmt: v=>fmt(v),           higherBetter:true  },
+  { key:'total_viewers',   label:'累计观看',   fmt: v=>fmt(v),           higherBetter:true  },
+  { key:'total_comments',  label:'总评论数',   fmt: v=>fmt(v),           higherBetter:true  },
+  { key:'new_followers',   label:'新增关注',   fmt: v=>fmt(v),           higherBetter:true  },
+  { key:'total_gift_value',label:'礼物收入',   fmt: v=>'$'+v.toFixed(2), higherBetter:true  },
+  { key:'total_gifts',     label:'礼物数量',   fmt: v=>v.toString(),     higherBetter:true  },
+  { key:'duration_min',    label:'直播时长',   fmt: v=>fmtMin(v),        higherBetter:true  },
+];
+
+// ── 加载基础场次数据 ──
+fetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
+  const s = data.session || {};
+  document.getElementById('pageTitle').textContent = `直播复盘 — @${s.username}`;
+
+  // 时长
+  let dur = '-';
+  if (s.start_time && s.end_time) {
+    const m = Math.round((new Date(s.end_time)-new Date(s.start_time))/60000);
+    dur = m>=60 ? `${Math.floor(m/60)}h${m%60}m` : `${m}m`;
+  }
+
+  // 时间格式化（只显示时分秒）
+  function fmtDateTime(t) {
+    if (!t) return '-';
+    // 格式：YYYY-MM-DD HH:MM:SS → 显示 MM-DD HH:MM
+    try {
+      return t.slice(5,16); // 截取 MM-DD HH:MM
+    } catch(e) { return t; }
+  }
+
+  // 指标卡片
+  const metrics = [
+    {val: fmtDateTime(s.start_time), label:'开播时间'},
+    {val: s.status === 'live' ? '🔴 直播中' : fmtDateTime(s.end_time), label:'结束时间'},
+    {val:dur, label:'直播时长'},
+    {val:fmt(s.peak_viewers), label:'峰值在线'},
+    {val:fmt(s.total_viewers), label:'累计观看'},
+    {val:fmt(s.total_comments), label:'总评论数'},
+    {val:fmt(s.total_likes), label:'总点赞数'},
+    {val:fmt(s.new_followers), label:'新增关注'},
+    {val:'$'+(s.total_gift_value||0).toFixed(2), label:'礼物收入'},
+  ];
+  document.getElementById('metricsRow').innerHTML = metrics.map(m =>
+    `<div class="metric-card"><div class="metric-val">${m.val}</div><div class="metric-label">${m.label}</div></div>`
+  ).join('');
+
+  // 趋势图
+  const snaps = data.snapshots || [];
+  if (snaps.length > 1) {
+    new Chart(document.getElementById('trendChart'), {
+      type:'line',
+      data:{
+        labels: snaps.map(s=>s.timestamp.slice(-8)),
+        datasets:[
+          {label:'在线人数',data:snaps.map(s=>s.viewer_count),borderColor:'#fe2c55',backgroundColor:'rgba(254,44,85,.08)',tension:.3,fill:true,pointRadius:2},
+          {label:'评论数',data:snaps.map(s=>s.comment_count),borderColor:'#3b82f6',tension:.3,fill:false,pointRadius:0,yAxisID:'y2'},
+        ]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:'#6b7280',font:{size:12}}}},
+        scales:{
+          x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'#f0f1f5'}},
+          y:{ticks:{color:'#9ca3af'},grid:{color:'#f0f1f5'}},
+          y2:{position:'right',ticks:{color:'#9ca3af'},grid:{display:false}},
+        }
+      }
+    });
+  }
+
+  // ★ 调优建议
+  renderOptimPanel(s, data);
+
+  // 礼物排行
+  const gifts = data.gift_rank || [];
+  document.querySelector('#giftTable tbody').innerHTML = gifts.length
+    ? gifts.map((g,i) => `<tr><td>${i+1}</td><td>${escHtml(g.username)}</td><td>$${(g.total_value||0).toFixed(2)}</td><td>${g.cnt}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="loading">暂无礼物数据</td></tr>';
+
+  // 评论记录（含方言显示+翻译）
+  const comments = data.comments || [];
+  document.querySelector('#commentTable tbody').innerHTML = comments.length
+    ? comments.map(c => {
+        const langBadge = c.lang ? `<span class="lang-badge lang-${c.lang.replace('_','-')}" style="font-size:10px;padding:1px 5px;border-radius:3px;margin-left:4px;">${c.lang_short||c.lang}</span>` : '';
+        const zhLine = (c.text_zh && c.text_zh !== c.content)
+          ? `<div style="font-size:11px;color:var(--text2);margin-top:2px;padding:2px 6px;background:#f9fafb;border-radius:3px;border-left:2px solid var(--border);">中：${escHtml(c.text_zh)}</div>`
+          : '';
+        return `<tr><td>${(c.timestamp||'').slice(-8)}</td><td>${escHtml(c.username)}</td><td>${escHtml(c.content)}${langBadge}${zhLine}</td></tr>`;
+      }).join('')
+    : '<tr><td colspan="3" class="loading">暂无评论数据</td></tr>';
+
+  // ★ 评论方言分析（从评论记录统计）
+  renderDialectAnalysis(comments);
+  // ★ 需求洞察（从评论中识别购车/租车/咨询意向）
+  renderInsightPanel(comments);
+});
+
+// ── 删除本场记录 ──
+async function deleteThisSession() {
+  if (!confirm('确定删除本场直播记录？相关评论、礼物、话术数据将一并删除，无法恢复。')) return;
+  const res = await fetch(`/api/session/${sessionId}/delete`, { method: 'POST' });
+  const data = await res.json();
+  if (data.success) {
+    alert('已删除，即将返回历史列表');
+    location.href = '/history';
+  } else {
+    alert('删除失败，请重试');
+  }
+}
+
+// ── 评论方言分析渲染 ──
+const DIALECT_INFO = {
+  'ar-gulf':    { name:'海湾阿拉伯语',    flag:'🇸🇦', desc:'沙特/阿联酋/卡塔尔' },
+  'ar-egypt':   { name:'埃及阿拉伯语',    flag:'🇪🇬', desc:'埃及' },
+  'ar-levant':  { name:'黎凡特阿拉伯语',  flag:'🇱🇧', desc:'黎巴嫩/叙利亚/约旦' },
+  'ar-maghreb': { name:'北非阿拉伯语',    flag:'🇲🇦', desc:'摩洛哥/阿尔及利亚' },
+  'ar':         { name:'标准阿拉伯语',    flag:'🌍', desc:'现代标准阿语(MSA)' },
+};
+const LANG_INFO = {
+  'zh': { name:'中文', flag:'🇨🇳' },
+  'en': { name:'英语', flag:'🇺🇸' },
+  'ar': { name:'阿拉伯语', flag:'🌍' },
+  'other': { name:'其他', flag:'🌐' },
+};
+
+function renderDialectAnalysis(comments) {
+  const panel = document.getElementById('dialectPanel');
+  const summaryEl = document.getElementById('dialectSummary');
+  const barEl = document.getElementById('dialectBarList');
+  const badgeEl = document.getElementById('dialectBadge');
+  if (!panel || !summaryEl) return;
+
+  // 统计语言分布（排除主播评论）
+  const langCounts = {};
+  const dialectCounts = {};
+  let total = 0;
+  comments.filter(c => !c.is_anchor && c.lang).forEach(c => {
+    const lang = c.lang;
+    // 顶层语言（ar系都归 ar）
+    const topLang = lang.startsWith('ar') ? 'ar' : lang;
+    langCounts[topLang] = (langCounts[topLang] || 0) + 1;
+    // 方言细分
+    if (lang.startsWith('ar')) {
+      dialectCounts[lang] = (dialectCounts[lang] || 0) + 1;
+    }
+    total++;
+  });
+
+  if (total === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+  badgeEl.textContent = `共 ${total} 条评论`;
+
+  const arTotal = langCounts['ar'] || 0;
+
+  // 顶部摘要卡片：各语言占比
+  const topLangs = Object.entries(langCounts).sort((a,b)=>b[1]-a[1]);
+  summaryEl.innerHTML = topLangs.map(([lang, cnt], idx) => {
+    const info = LANG_INFO[lang] || { name:lang, flag:'🌐' };
+    const pct = Math.round(cnt/total*100);
+    const isDominant = idx === 0;
+    return `<div class="dialect-summary-card${isDominant?' dominant':''}">
+      <div class="flag">${info.flag}</div>
+      <div class="name">${info.name}</div>
+      <div class="count">${cnt}</div>
+      <div class="pct">${pct}%</div>
+    </div>`;
+  }).join('');
+
+  // 如果有阿拉伯语，展示方言进度条
+  if (arTotal > 0) {
+    const dialectEntries = Object.entries(dialectCounts).sort((a,b)=>b[1]-a[1]);
+    const maxCnt = dialectEntries[0]?.[1] || 1;
+    barEl.innerHTML = `<div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px;">🗣️ 阿拉伯语方言细分（共 ${arTotal} 条）</div>` +
+      dialectEntries.map(([dialect, cnt]) => {
+        const info = DIALECT_INFO[dialect] || { name:dialect, flag:'🌍', desc:'' };
+        const pct = Math.round(cnt/arTotal*100);
+        const barPct = Math.round(cnt/maxCnt*100);
+        return `<div class="dialect-bar-item">
+          <div class="dialect-bar-label">${info.flag} ${info.name}</div>
+          <div class="dialect-bar-track"><div class="dialect-bar-fill" style="width:${barPct}%"></div></div>
+          <div class="dialect-bar-num">${cnt}条 · ${pct}%</div>
+        </div>`;
+      }).join('');
+  } else {
+    barEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0;">暂无阿拉伯语方言数据</div>';
+  }
+}
+
+// ── 加载复盘对比数据 ──
+fetch(`/api/session/${sessionId}/review`).then(r=>r.json()).then(rv => {
+  if (!rv || !rv.current) return;
+  const panel = document.getElementById('reviewPanel');
+  panel.style.display = '';
+
+  const cnt = rv.session_count || 0;
+  document.getElementById('reviewSessionCount').textContent = `共 ${cnt} 场历史数据`;
+
+  const tbody = document.getElementById('reviewTableBody');
+  const cur = rv.current, prev = rv.prev, avg7 = rv.avg7, best = rv.best;
+
+  tbody.innerHTML = REVIEW_METRICS.map(m => {
+    const cv = cur[m.key];
+    const pv = prev ? prev[m.key] : null;
+    const av = avg7 ? avg7[m.key] : null;
+    const bv = best ? best[m.key] : null;
+    const isBest = bv !== null && cv >= bv && cv > 0;
+    return `<tr>
+      <td class="metric-name">${m.label}</td>
+      <td class="current-val">${m.fmt(cv)}${isBest ? '<span class="best-mark">历史最佳</span>' : ''}</td>
+      <td>${pv!==null ? m.fmt(pv)+'&nbsp;'+changeBadge(cv,pv,m.higherBetter) : '<span style="color:var(--text3)">-</span>'}</td>
+      <td>${av!==null ? m.fmt(av)+'&nbsp;'+changeBadge(cv,av,m.higherBetter) : '<span style="color:var(--text3)">-</span>'}</td>
+      <td>${bv!==null ? m.fmt(bv) : '<span style="color:var(--text3)">-</span>'}</td>
+    </tr>`;
+  }).join('');
+});
+
+// ── 加载话术分析 ──
+fetch(`/api/session/${sessionId}/speech`).then(r=>r.json()).then(sp => {
+  if (!sp || !sp.records || !sp.records.length) return;
+  document.getElementById('speechPanel').style.display = '';
+  document.getElementById('speechCount').textContent = `${sp.records.length} 条话术`;
+
+  // 关键句摘要
+  const summary = sp.summary || [];
+  document.getElementById('summaryList').innerHTML = summary.length
+    ? summary.map((s,i) => `<li class="summary-item"><span class="summary-num">${i+1}</span><span>${escHtml(s)}</span></li>`).join('')
+    : '<li class="summary-item" style="color:var(--text3);">暂无摘要</li>';
+
+  // 关键词
+  const kws = sp.keywords || [];
+  document.getElementById('keywordsWrap').innerHTML = kws.map(k =>
+    `<span class="keyword-chip">${escHtml(k)}</span>`).join('');
+
+  // 全量话术
+  document.getElementById('speechList').innerHTML = sp.records.map(r => {
+    const cssClass = r.lang ? `lang-${r.lang.replace('_','-')}` : 'lang-other';
+    const hasTranslation = r.text_zh && r.text_zh.trim() && r.text_zh !== r.text;
+    return `<div class="speech-item">
+      <div class="speech-meta">
+        <span class="speech-time">${(r.timestamp||'').slice(-8)}</span>
+        <span class="lang-badge ${cssClass}">${r.lang_short || '?'}</span>
+        ${r.dialect ? `<span style="font-size:10px;color:var(--text3);">${escHtml(r.dialect)}</span>` : ''}
+      </div>
+      <div class="speech-orig">${escHtml(r.text)}</div>
+      ${hasTranslation ? `<div class="speech-zh">${escHtml(r.text_zh)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // ── 渲染趋势图下方话术时间轴 ──
+  renderSpeechTimeline(sp.records);
+
+  // ── 渲染话术方言分析面板 ──
+  renderSpeechDialectAnalysis(sp.records);
+});
+
+function renderSpeechTimeline(records) {
+  const tl = document.getElementById('speechTimeline');
+  const track = document.getElementById('stlTrack');
+  if (!tl || !track || !records.length) return;
+  tl.style.display = '';
+
+  track.innerHTML = records.map(r => {
+    const time = (r.timestamp||'').slice(-8).slice(0,5); // HH:MM
+    // 截取前20字符作为标签
+    const label = (r.text||'').slice(0,22) + (r.text && r.text.length>22 ? '…' : '');
+    const langCls = r.lang && r.lang.startsWith('ar') ? 'ar' : (r.lang==='en' ? 'en' : '');
+    const tooltip = r.text_zh && r.text_zh !== r.text
+      ? `📌 ${time}\n原文：${r.text}\n中文：${r.text_zh}`
+      : `📌 ${time}\n${r.text}`;
+    return `<div class="stl-item" title="${escHtml(tooltip)}" onclick="this.querySelector('.stl-chip').style.background=''">
+      <div class="stl-dot"></div>
+      <div class="stl-chip ${langCls}">${escHtml(label)}</div>
+      <div class="stl-time">${time}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSpeechDialectAnalysis(records) {
+  const panel = document.getElementById('speechDialectPanel');
+  const summaryEl = document.getElementById('speechDialectSummary');
+  const barEl = document.getElementById('speechDialectBarList');
+  const badgeEl = document.getElementById('speechDialectBadge');
+  if (!panel || !records || !records.length) return;
+
+  // 统计话术语言/方言分布
+  const langCounts = {};
+  const dialectCounts = {};
+  let total = 0;
+  records.forEach(r => {
+    if (!r.lang) return;
+    const lang = r.lang;
+    const topLang = lang.startsWith('ar') ? 'ar' : lang;
+    langCounts[topLang] = (langCounts[topLang] || 0) + 1;
+    if (lang.startsWith('ar')) dialectCounts[lang] = (dialectCounts[lang] || 0) + 1;
+    total++;
+  });
+
+  if (total === 0) return;
+  panel.style.display = '';
+  badgeEl.textContent = `共 ${total} 条话术`;
+
+  const arTotal = langCounts['ar'] || 0;
+
+  // 顶部语言摘要卡片
+  const topLangs = Object.entries(langCounts).sort((a,b)=>b[1]-a[1]);
+  summaryEl.innerHTML = topLangs.map(([lang, cnt], idx) => {
+    const info = LANG_INFO[lang] || { name:lang, flag:'🌐' };
+    const pct = Math.round(cnt/total*100);
+    return `<div class="dialect-summary-card${idx===0?' dominant':''}">
+      <div class="flag">${info.flag}</div>
+      <div class="name">${info.name}</div>
+      <div class="count">${cnt}</div>
+      <div class="pct">${pct}%</div>
+    </div>`;
+  }).join('');
+
+  // 阿拉伯语方言进度条
+  if (arTotal > 0) {
+    const dialectEntries = Object.entries(dialectCounts).sort((a,b)=>b[1]-a[1]);
+    barEl.innerHTML = `<div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px;">🎙️ 主播阿拉伯语方言分布（共 ${arTotal} 条）</div>` +
+      dialectEntries.map(([dialect, cnt]) => {
+        const info = DIALECT_INFO[dialect] || { name:dialect, flag:'🌍', desc:'' };
+        const pct = Math.round(cnt/arTotal*100);
+        const barPct = Math.round(cnt/dialectEntries[0][1]*100);
+        return `<div class="dialect-bar-item">
+          <div class="dialect-bar-label">${info.flag} ${info.name}</div>
+          <div class="dialect-bar-track"><div class="dialect-bar-fill" style="width:${barPct}%;background:linear-gradient(90deg,#8b5cf6,#7c3aed)"></div></div>
+          <div class="dialect-bar-num">${cnt}条 · ${pct}%</div>
+        </div>`;
+      }).join('');
+  }
+}
+
+// ── 需求洞察 ──
+function renderInsightPanel(comments) {
+  if (!comments || !comments.length) return;
+  const panel = document.getElementById('insightPanel');
+  const badge = document.getElementById('insightBadge');
+  const content = document.getElementById('insightContent');
+
+  // 需求关键词匹配（买车/租车/询价/咨询）
+  const BUY_KW  = ['buy','purchase','price','how much','شراء','سعر','كم','أشتري','بكم','اشتري','want to buy','interested','buying'];
+  const RENT_KW = ['rent','lease','rental','تأجير','استئجار','ايجار','أجار','للايجار','rent a car','lease'];
+  const INFO_KW = ['info','contact','whatsapp','واتساب','تواصل','phone','رقم','رقم الجوال','number','how to'];
+
+  const buyList = [], rentList = [], infoList = [], otherList = [];
+
+  comments.forEach(c => {
+    const text = (c.content || '').toLowerCase();
+    const isBuy  = BUY_KW.some(k => text.includes(k));
+    const isRent = RENT_KW.some(k => text.includes(k));
+    const isInfo = INFO_KW.some(k => text.includes(k));
+    if (isBuy)  buyList.push({...c, tag:'购买意向'});
+    else if (isRent) rentList.push({...c, tag:'租车需求'});
+    else if (isInfo) infoList.push({...c, tag:'咨询联系'});
+  });
+
+  const total = buyList.length + rentList.length + infoList.length;
+  if (total === 0) {
+    content.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px 0;">本场评论中未检测到明显的购买/租车需求词。</div>';
+    panel.style.display = '';
+    badge.textContent = '暂无高意向';
+    return;
+  }
+
+  panel.style.display = '';
+  badge.textContent = `${total} 条需求`;
+
+  // 统计卡
+  const statsHtml = `<div class="insight-grid">
+    <div class="insight-card"><div class="ic-title">🚗 购买意向</div><div class="ic-count">${buyList.length}</div><div class="ic-sub">条评论</div></div>
+    <div class="insight-card"><div class="ic-title">🔑 租车需求</div><div class="ic-count">${rentList.length}</div><div class="ic-sub">条评论</div></div>
+    <div class="insight-card"><div class="ic-title">📞 咨询联系</div><div class="ic-count">${infoList.length}</div><div class="ic-sub">条评论</div></div>
+  </div>`;
+
+  // 具体需求列表（合并，最多显示30条）
+  const allNeeds = [...buyList, ...rentList, ...infoList].slice(0, 30);
+  const rowsHtml = allNeeds.map(c => {
+    const zhLine = c.text_zh && c.text_zh !== c.content
+      ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">中：${escHtml(c.text_zh)}</div>` : '';
+    return `<div class="insight-comment-row">
+      <div class="insight-user">${escHtml(c.username)}</div>
+      <div class="insight-text">${escHtml(c.content)}${zhLine}</div>
+      <span class="insight-tag">${c.tag}</span>
+    </div>`;
+  }).join('');
+
+  content.innerHTML = statsHtml + `<div class="insight-comments">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">具体需求详情（含发送者，便于跟进联系）</div>
+    ${rowsHtml}
+  </div>`;
+}
+
+// ── 调优建议 ──
+function renderOptimPanel(session, summary) {
+  const panel = document.getElementById('optimPanel');
+  const content = document.getElementById('optimContent');
+  if (!panel || !session) return;
+
+  const dur = session.end_time && session.start_time
+    ? Math.round((new Date(session.end_time) - new Date(session.start_time)) / 60000) : 0;
+  const peakViewers = session.peak_viewers || 0;
+  const totalViewers = session.total_viewers || 0;
+  const totalComments = session.total_comments || 0;
+  const giftValue = session.total_gift_value || 0;
+  const speechCount = (summary && summary.speech && summary.speech.records) ? summary.speech.records.length : 0;
+
+  const tips = [];
+
+  // 规则引擎生成建议
+  if (dur < 30) tips.push({ icon:'⏱', title:'直播时长偏短', desc:'本场仅直播了 ' + (dur||'未知') + ' 分钟，建议至少坚持 60 分钟以上，TikTok 算法对长时直播有流量加权。', tag:'流量' });
+  if (peakViewers < 20 && totalViewers > 0) tips.push({ icon:'📉', title:'峰值在线较低', desc:'峰值仅 ' + peakViewers + ' 人，建议开播前提前在首页发视频预热，并在开播时发小游戏/互动话题拉人留场。', tag:'互动' });
+  if (totalComments < 10 && totalViewers > 50) tips.push({ icon:'💬', title:'评论互动偏少', desc:'观看人数 ' + totalViewers + ' 但评论仅 ' + totalComments + ' 条，说明互动引导不足。建议多提问观众、发起投票、说"扣1告诉我你来自哪"等互动话术。', tag:'互动' });
+  if (giftValue === 0 && dur > 20) tips.push({ icon:'🎁', title:'本场无礼物收入', desc:'可尝试在直播高峰段（在线人数最多时）明确引导打赏，如"送一朵玫瑰支持一下"，配合感谢动作提升打赏率。', tag:'变现' });
+  if (speechCount === 0) tips.push({ icon:'🎤', title:'未能采集到语音', desc:'本场未录入主播话术，可能是直播流权限问题。建议在 config.py 配置 TIKTOK_SESSION_ID 以解锁语音监控，获取关键词数据。', tag:'监控' });
+  if (speechCount > 0 && speechCount < 5) tips.push({ icon:'🗣', title:'话术片段较少', desc:`仅采集到 ${speechCount} 条话术，建议主播保持持续讲解，避免长时间沉默（超过30秒无声会影响算法推流）。`, tag:'话术' });
+  if (dur >= 60 && peakViewers > 10) tips.push({ icon:'✅', title:'直播时长表现良好', desc:`本场直播 ${dur} 分钟，峰值 ${peakViewers} 人，整体时长达标。建议固定开播时间形成粉丝习惯。`, tag:'稳定' });
+
+  if (tips.length === 0) tips.push({ icon:'📊', title:'数据积累中', desc:'本场数据量较少，建议多场次采集后系统会生成更精准的优化建议。', tag:'提示' });
+
+  panel.style.display = '';
+  content.innerHTML = `<div class="optim-list">${tips.map(t =>
+    `<div class="optim-item">
+      <div class="optim-icon">${t.icon}</div>
+      <div class="optim-body">
+        <div class="optim-title">${t.title}<span class="optim-tag">${t.tag}</span></div>
+        <div class="optim-desc">${t.desc}</div>
+      </div>
+    </div>`
+  ).join('')}</div>`;
+}
+</script>
+
+<!-- ── 版本日志弹窗 ── -->
+<div class="changelog-modal" id="changelogModal" onclick="if(event.target===this)closeChangelog()">
+  <div class="changelog-box">
+    <div class="changelog-header">
+      <h3>📋 版本日志</h3>
+      <button onclick="closeChangelog()">✕</button>
+    </div>
+    <div class="changelog-content" id="changelogContent">加载中...</div>
+  </div>
+</div>
+<script>
+function openChangelog() {
+  document.getElementById('changelogModal').classList.add('open');
+  fetch('/api/version').then(r=>r.json()).then(d=>{
+    let html = (d.changelog||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    html = html.replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^- (.+)$/gm,'<li>$1</li>');
+    document.getElementById('changelogContent').innerHTML = html;
+  }).catch(()=>{ document.getElementById('changelogContent').textContent='加载失败'; });
+}
+function closeChangelog() { document.getElementById('changelogModal').classList.remove('open'); }
+</script>
+</body>
+</html>

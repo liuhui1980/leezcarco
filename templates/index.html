@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TikTok 直播监测系统</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary: #fe2c55; --primary-bg: #fff0f3;
+    --bg: #f5f6fa; --surface: #ffffff; --surface2: #f9fafb;
+    --border: #e8eaef; --border2: #f0f1f5;
+    --text: #1a1d2e; --text2: #6b7280; --text3: #9ca3af;
+    --success: #10b981; --warning: #f59e0b; --info: #3b82f6;
+    --shadow: 0 1px 4px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+    --radius: 12px; --radius-sm: 8px;
+    --font: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── 版本徽章 ── */
+  .version-badge {
+    font-size: 10px; font-weight: 700; color: #6b7280;
+    background: #f3f4f6; border: 1px solid #e5e7eb;
+    border-radius: 10px; padding: 2px 7px; cursor: pointer;
+    transition: all .15s; user-select: none; letter-spacing: .3px;
+    white-space: nowrap;
+  }
+  .version-badge:hover { background: #e5e7eb; color: #374151; }
+  /* 版本弹窗 */
+  .changelog-modal {
+    display: none; position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.4); align-items: center; justify-content: center;
+  }
+  .changelog-modal.open { display: flex; }
+  .changelog-box {
+    background: #fff; border-radius: 16px; width: 560px; max-width: 92vw;
+    max-height: 75vh; overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  }
+  .changelog-header {
+    padding: 18px 22px 14px; border-bottom: 1px solid #e5e7eb;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .changelog-header h3 { font-size: 15px; font-weight: 700; color: #1a1d2e; }
+  .changelog-header button {
+    background: none; border: none; cursor: pointer; font-size: 18px; color: #9ca3af; line-height: 1;
+  }
+  .changelog-content {
+    padding: 16px 22px; overflow-y: auto; flex: 1;
+    font-size: 13px; line-height: 1.7; color: #374151;
+    white-space: pre-wrap;
+  }
+  .changelog-content h2 { font-size: 14px; font-weight: 700; color: #fe2c55; margin: 12px 0 4px; }
+  .changelog-content h3 { font-size: 13px; font-weight: 600; color: #1a1d2e; margin: 8px 0 4px; }
+  .changelog-content li { margin-left: 16px; }
+
+  /* ── Navbar ── */
+  .navbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 24px; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .navbar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .navbar-logo { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #fe2c55 0%, #25f4ee 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(254,44,85,.3); flex-shrink: 0; }
+  .navbar-logo svg { width: 18px; height: 18px; }
+  .navbar-wordmark { display: flex; flex-direction: column; line-height: 1; }
+  .navbar-name { font-size: 15px; font-weight: 800; color: var(--text); letter-spacing: -.3px; }
+  .navbar-name span { color: var(--primary); }
+  .navbar-sub { font-size: 10px; color: var(--text3); font-weight: 500; margin-top: 1px; letter-spacing: .2px; }
+  .navbar-nav { display: flex; gap: 4px; align-items: center; }
+  .nav-link { color: var(--text2); text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; transition: all .15s; }
+  .nav-link:hover { color: var(--text); background: var(--bg); }
+  .nav-link.active { color: var(--primary); background: var(--primary-bg); font-weight: 600; }
+  .nav-btn { color: var(--text2); background: var(--bg); border: 1px solid var(--border); font-size: 13px; padding: 5px 10px; border-radius: 6px; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 4px; }
+  .nav-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+  /* ── Main ── */
+  .main { padding: 16px 20px; max-width: 1600px; margin: 0 auto; }
+
+  /* ── Add Section ── */
+  .add-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .add-title { font-size: 13px; color: var(--text2); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+  .add-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .add-input { flex: 1; min-width: 200px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 14px; color: var(--text); font-size: 14px; outline: none; transition: border .15s; }
+  .add-input:focus { border-color: var(--primary); background: #fff; }
+  .add-input::placeholder { color: var(--text3); }
+  .btn { padding: 9px 18px; border-radius: var(--radius-sm); border: none; cursor: pointer; font-size: 14px; font-weight: 600; transition: all .15s; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #e0264c; }
+  .btn-secondary { background: var(--bg); border: 1px solid var(--border); color: var(--text2); }
+  .btn-secondary:hover { background: var(--border2); color: var(--text); }
+  .btn-danger { background: #fee2e2; color: #dc2626; font-size: 12px; padding: 5px 10px; border: 1px solid #fecaca; }
+  .btn-danger:hover { background: #fecaca; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn-icon { padding: 7px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text2); font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all .15s; }
+  .btn-icon:hover { border-color: var(--primary); color: var(--primary); }
+
+  /* ── Smart Username Selector ── */
+  .username-selector { position: relative; flex: 1; min-width: 200px; }
+  .username-selector input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 36px 9px 14px; color: var(--text); font-size: 14px; outline: none; transition: border .15s; }
+  .username-selector input:focus { border-color: var(--primary); background: #fff; }
+  .username-selector input::placeholder { color: var(--text3); }
+  .selector-arrow { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; font-size: 12px; }
+  .username-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 4px 16px rgba(0,0,0,.1); z-index: 200; max-height: 220px; overflow-y: auto; display: none; }
+  .username-dropdown.open { display: block; }
+  .dropdown-item { padding: 8px 12px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background .1s; }
+  .dropdown-item:hover { background: var(--bg); }
+  .dropdown-item .di-name { flex: 1; font-weight: 500; color: var(--text); }
+  .dropdown-item .di-live { font-size: 11px; font-weight: 700; color: #fff; background: var(--primary); padding: 1px 6px; border-radius: 10px; animation: pulse 1.5s infinite; }
+  .dropdown-item .di-offline { font-size: 11px; color: var(--text3); }
+  .dropdown-section { padding: 4px 12px 2px; font-size: 11px; font-weight: 700; color: var(--text3); border-top: 1px solid var(--border2); }
+  .dropdown-section:first-child { border-top: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+
+  /* ── Group Filter ── */
+  .group-filter { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .group-label { font-size: 12px; color: var(--text2); font-weight: 600; }
+  .group-tab { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text2); font-size: 13px; cursor: pointer; transition: all .15s; }
+  .group-tab:hover { border-color: var(--primary); color: var(--primary); }
+  .group-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .group-tag { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px; font-weight: 600; margin-left: 6px; vertical-align: middle; }
+  .tag-own { background: #dbeafe; color: #1d4ed8; }
+  .tag-rival { background: #fce7f3; color: #9d174d; }
+  .tag-watch { background: #d1fae5; color: #065f46; }
+
+  /* ── Stats Row ── */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; text-align: center; box-shadow: var(--shadow); }
+  .stat-icon { font-size: 18px; margin-bottom: 3px; }
+  .stat-val { font-size: 20px; font-weight: 700; color: var(--text); }
+  .stat-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+  /* ── Global Dialect Panel ── */
+  .dialect-panel { background: linear-gradient(135deg, #fffbeb 0%, #fef9e7 100%); border: 2px solid #fde68a; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .dialect-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .dialect-panel-title { font-size: 14px; font-weight: 800; color: #92400e; display: flex; align-items: center; gap: 8px; }
+  .dialect-panel-title .dp-dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; animation: pulse 1.5s infinite; }
+  .dialect-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .dialect-item { background: #fff; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+  .dialect-flag { font-size: 22px; line-height: 1; flex-shrink: 0; }
+  .dialect-info { flex: 1; min-width: 0; }
+  .dialect-name { font-size: 12px; font-weight: 700; color: #92400e; }
+  .dialect-count { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .dialect-bar-wrap { margin-top: 4px; }
+  .dialect-bar { height: 4px; border-radius: 2px; background: #fde68a; overflow: hidden; }
+  .dialect-bar-fill { height: 100%; border-radius: 2px; background: #f59e0b; transition: width .5s ease; }
+  .dialect-pct-big { font-size: 18px; font-weight: 800; color: #b45309; flex-shrink: 0; }
+
+  /* ── Lang Bar ── */
+  .lang-bar-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .lang-bar-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+  .lang-bar-title { font-size: 13px; color: var(--text2); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .lang-bar-toggle { color: var(--text3); font-size: 12px; transition: transform .2s; }
+  .lang-bar-toggle.open { transform: rotate(180deg); }
+  .lang-bar-body { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  .lang-bar-row { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+  .lang-bar-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; }
+  .lang-bar-name { color: var(--text); display: flex; align-items: center; gap: 5px; font-weight: 600; }
+  .lang-bar-pct { color: var(--text2); font-size: 11px; }
+  .lang-progress { height: 5px; border-radius: 3px; background: var(--border2); overflow: hidden; }
+  .lang-progress-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+  .fill-zh { background: #10b981; } .fill-en { background: #3b82f6; }
+  .fill-ar { background: #f59e0b; } .fill-other { background: #8b5cf6; }
+  .lang-sub { margin-top: 6px; padding-left: 6px; border-left: 2px solid #fde68a; display: none; }
+  .lang-sub.open { display: block; }
+  .lang-sub-row { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; font-size: 11px; color: var(--text2); }
+  .lang-sub-bar { width: 60px; height: 3px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+  .lang-sub-fill { height: 100%; border-radius: 2px; background: #f59e0b; opacity: .7; transition: width .5s ease; }
+
+  /* ── Account Cards 4列布局 ── */
+  .accounts-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media(max-width:1400px) { .accounts-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media(max-width:1000px) { .accounts-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media(max-width:640px)  { .accounts-grid { grid-template-columns: 1fr; } }
+
+  .account-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; position: relative; transition: box-shadow .2s; box-shadow: var(--shadow); overflow: hidden; }
+  .account-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+  .account-card.live { border-color: var(--primary); }
+  .account-card.live::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #fe2c55, #ff8800); border-radius: var(--radius) var(--radius) 0 0; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .card-username { font-size: 13px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-username a:hover { text-decoration: underline !important; opacity: .85; }
+  .live-badge { background: var(--primary); color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; animation: pulse 2s infinite; flex-shrink: 0; }
+  .offline-badge { background: var(--border); color: var(--text2); font-size: 11px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+  .waiting-badge { background: #fef3c7; color: #b45309; font-size: 11px; padding: 2px 7px; border-radius: 10px; animation: pulse 2s infinite; flex-shrink: 0; }
+  .error-badge { background: #fee2e2; color: #dc2626; font-size: 11px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+
+  .metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px; }
+  .metric { background: var(--bg); border-radius: 6px; padding: 6px; text-align: center; }
+  .metric-val { font-size: 15px; font-weight: 700; color: var(--primary); }
+  .metric-label { font-size: 10px; color: var(--text2); margin-top: 1px; }
+
+  /* ── 卡片内方言雷达（核心重点） ── */
+  .dialect-radar { background: linear-gradient(135deg, #fffbeb, #fef9e7); border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .dialect-radar-title { font-size: 10px; font-weight: 700; color: #b45309; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
+  .dialect-radar-title .dr-dot { width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; animation: pulse 1.5s infinite; }
+  .dialect-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+  .dialect-pill { display: flex; align-items: center; gap: 3px; background: #fff; border: 1px solid #fde68a; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 700; color: #92400e; transition: all .2s; }
+  .dialect-pill.dominant { background: #f59e0b; border-color: #d97706; color: #fff; box-shadow: 0 1px 4px rgba(245,158,11,.4); }
+  .dialect-pill .dp-flag { font-size: 13px; }
+  .dialect-pill .dp-pct { font-size: 10px; opacity: .85; }
+  .dialect-radar-empty { font-size: 11px; color: var(--text3); text-align: center; padding: 4px 0; }
+  /* 方言雷达 Tab */
+  .dr-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+  .dr-tab { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; cursor: pointer; border: 1px solid #fde68a; background: transparent; color: #92400e; transition: all .15s; }
+  .dr-tab.active { background: #f59e0b; color: #fff; border-color: #f59e0b; }
+  .dr-tab-content { display: none; }
+  .dr-tab-content.active { display: block; }
+
+  /* ── Comment & Speech ── */
+  .comments-box { background: var(--bg); border-radius: var(--radius-sm); padding: 6px 8px; height: 110px; overflow-y: auto; border: 1px solid var(--border2); }
+  .comment-item { padding: 3px 0; border-bottom: 1px solid var(--border2); font-size: 11px; line-height: 1.5; }
+  .comment-item:last-child { border-bottom: none; }
+  .comment-user { color: var(--primary); font-weight: 600; }
+  .comment-user.anchor { color: #b45309; }
+  .comment-time { color: var(--text3); margin-left: 5px; font-size: 10px; }
+  .comment-lang { display: inline-block; font-size: 9px; padding: 0px 4px; border-radius: 3px; margin-left: 3px; vertical-align: middle; font-weight: 600; white-space: nowrap; }
+  .lang-zh { background: #d1fae5; color: #065f46; }
+  .lang-en { background: #dbeafe; color: #1d4ed8; }
+  .lang-ar { background: #fef3c7; color: #92400e; }
+  .lang-ar-gulf    { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+  .lang-ar-egypt   { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .lang-ar-levant  { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  .lang-ar-maghreb { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+  .lang-other { background: #f5f3ff; color: #5b21b6; }
+  .comment-anchor-tag { display: inline-block; font-size: 9px; padding: 0px 4px; border-radius: 3px; background: #fef3c7; color: #b45309; margin-left: 3px; }
+  .comment-content { color: var(--text); margin-top: 1px; }
+
+  .speech-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-sm); padding: 6px 8px; height: 100px; overflow-y: auto; margin-top: 6px; }
+  .speech-item { padding: 4px 0; border-bottom: 1px solid #fef3c7; font-size: 11px; line-height: 1.5; }
+  .speech-item:last-child { border-bottom: none; }
+  .speech-meta { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .speech-time { color: var(--text3); font-size: 10px; }
+  .speech-lang-tag { display: inline-block; font-size: 9px; padding: 0px 5px; border-radius: 3px; font-weight: 600; }
+  .speech-text { color: #92400e; margin-top: 2px; }
+  .speech-zh { color: var(--text2); font-size: 10px; margin-top: 2px; font-style: italic; border-left: 2px solid #fde68a; padding-left: 5px; }
+  .speech-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; margin-top: 6px; display: flex; align-items: center; gap: 5px; }
+  .speech-dot { width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; animation: pulse 2s infinite; flex-shrink: 0; }
+  .section-label { font-size: 10px; color: var(--text2); margin-bottom: 4px; font-weight: 600; }
+
+  /* ── 竞品推荐面板 ── */
+  .rival-panel { background: linear-gradient(135deg, #fdf4ff, #fce7f3); border: 1px solid #f0abfc; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .rival-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .rival-panel-title { font-size: 14px; font-weight: 800; color: #86198f; display: flex; align-items: center; gap: 8px; }
+  .rival-desc { font-size: 12px; color: #a21caf; margin-bottom: 10px; line-height: 1.6; }
+  .rival-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .rival-card { background: #fff; border: 1px solid #f0abfc; border-radius: 10px; padding: 12px 14px; }
+  .rival-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .rival-username { font-size: 13px; font-weight: 700; color: var(--text); }
+  .rival-badge { font-size: 10px; padding: 2px 7px; border-radius: 8px; font-weight: 600; }
+  .rival-badge-live { background: var(--primary); color: #fff; animation: pulse 2s infinite; }
+  .rival-badge-offline { background: var(--border); color: var(--text3); }
+  .rival-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+  .rival-metric { text-align: center; }
+  .rival-metric-val { font-size: 13px; font-weight: 700; color: #86198f; }
+  .rival-metric-label { font-size: 10px; color: var(--text3); }
+  .rival-action { display: flex; gap: 6px; }
+  .btn-rival-monitor { flex: 1; background: #f0abfc; color: #86198f; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-rival-monitor:hover { background: #d946ef; color: #fff; }
+  .rival-empty { text-align: center; padding: 20px; color: var(--text3); font-size: 13px; }
+  .rival-add-form { display: flex; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0abfc; }
+  .rival-add-input { flex: 1; background: #fff; border: 1px solid #f0abfc; border-radius: 6px; padding: 7px 12px; font-size: 13px; color: var(--text); outline: none; }
+  .rival-add-input:focus { border-color: #d946ef; }
+  .btn-rival-add { background: #9333ea; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-rival-add:hover { background: #7c3aed; }
+
+  /* ── 关注说明 ── */
+  .watch-hint { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 14px; margin-top: 10px; font-size: 12px; color: #065f46; display: flex; align-items: flex-start; gap: 8px; }
+  .watch-hint-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── 远程访问面板 ── */
+  .remote-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 500; align-items: center; justify-content: center; }
+  .remote-modal.open { display: flex; }
+  .remote-box { background: var(--surface); border-radius: 16px; padding: 28px; max-width: 460px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+  .remote-title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+  .remote-subtitle { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+  .remote-method { background: var(--bg); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .remote-method-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .remote-method-desc { font-size: 12px; color: var(--text2); line-height: 1.7; }
+  .remote-method-desc code { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; font-family: monospace; }
+  .remote-method-desc a { color: var(--primary); text-decoration: none; }
+  .remote-close { width: 100%; margin-top: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text2); transition: all .15s; }
+  .remote-close:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .local-ip-display { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; font-family: monospace; color: var(--primary); font-weight: 600; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
+  .copy-btn { font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer; color: var(--text2); transition: all .1s; }
+  .copy-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  /* ── Toast ── */
+  .toast-container { position: fixed; top: 66px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; font-size: 13px; min-width: 220px; box-shadow: 0 4px 16px rgba(0,0,0,.1); animation: slideIn .3s ease; }
+  .toast.success { border-left: 3px solid var(--success); }
+  .toast.error { border-left: 3px solid var(--primary); }
+  .toast.info { border-left: 3px solid var(--info); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  /* ── Empty ── */
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text3); grid-column: 1/-1; }
+  .empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: .25; }
+  .empty-state p { font-size: 14px; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar-brand" href="/">
+    <div class="navbar-logo">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.51a8.16 8.16 0 004.77 1.52V7.58a4.85 4.85 0 01-1-.89z"/></svg>
+    </div>
+    <div class="navbar-wordmark">
+      <div class="navbar-name">Tuke<span>carco</span></div>
+      <div class="navbar-sub">TikTok 直播监测系统</div>
+    </div>
+  </a>
+  <span class="version-badge" onclick="openChangelog()" title="点击查看版本日志">v{{ app_version }}</span>
+  <nav class="navbar-nav">
+    <a href="/" class="nav-link active">实时看板</a>
+    <a href="/history" class="nav-link">历史记录</a>
+    <a href="/automonitor" class="nav-link">📋 自动监控</a>
+    <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <button class="nav-btn" onclick="openRemoteModal()" title="如何在其他设备访问">
+      📱 远程访问
+    </button>
+    <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
+    <button class="nav-btn" onclick="authLogout()" style="margin-left:2px">退出</button>
+  </nav>
+</nav>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ── 远程访问弹窗 ── -->
+<div class="remote-modal" id="remoteModal" onclick="if(event.target===this)closeRemoteModal()">
+  <div class="remote-box">
+    <div class="remote-title">📱 远程访问</div>
+    <div class="remote-subtitle">在手机、iPad 或其他网络的电脑上访问看板</div>
+
+    <!-- Cloudflare 公网链接 -->
+    <div class="remote-method" id="cfBlock">
+      <div class="remote-method-title">
+        🌐 公网链接（任意设备、任意网络）
+        <span id="cfStatus" style="font-size:11px;margin-left:6px;"></span>
+      </div>
+      <div class="remote-method-desc">
+        <div id="cfUrlBlock" style="display:none;">
+          <div class="local-ip-display" style="background:#f0fdf4;border-color:#86efac;">
+            <span id="cfUrlText" style="color:#15803d;font-weight:700;word-break:break-all;"></span>
+            <button class="copy-btn" onclick="copyCfUrl()" style="background:#16a34a;">复制</button>
+          </div>
+          <div style="font-size:11px;color:#6b7280;margin-top:5px;">⚠️ 每次重启 Mac 后链接会更新，来这里重新复制即可</div>
+        </div>
+        <div id="cfLoadingBlock" style="color:#9ca3af;font-size:13px;padding:6px 0;">
+          ⏳ 正在建立 Cloudflare 隧道，请稍候（约 5-10 秒）...
+        </div>
+        <div id="cfErrorBlock" style="display:none;color:#dc2626;font-size:12px;padding:6px 0;">
+          ❌ cloudflared 未安装。请在终端运行：<code style="background:#fee2e2;padding:2px 6px;border-radius:4px;">brew install cloudflared</code> 然后重启系统
+        </div>
+      </div>
+    </div>
+
+    <!-- 局域网 -->
+    <div class="remote-method">
+      <div class="remote-method-title">🏠 局域网访问（同 WiFi 下最快）</div>
+      <div class="remote-method-desc">
+        手机/设备与这台电脑连<strong>同一 WiFi</strong>，扫码或输入地址：
+        <div class="local-ip-display" id="localIpDisplay">
+          <span id="localIpText">加载中...</span>
+          <button class="copy-btn" onclick="copyIp()">复制</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="remote-close" onclick="closeRemoteModal()">关闭</button>
+  </div>
+</div>
+
+<!-- ── 指标放大弹窗 ── -->
+<div id="metricsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMetricsModal()">
+  <div style="background:#fff;border-radius:16px;padding:24px;width:90%;max-width:700px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-size:16px;font-weight:700;" id="mmTitle">实时数据</div>
+      <button onclick="closeMetricsModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9ca3af;line-height:1;">✕</button>
+    </div>
+    <!-- 指标卡 -->
+    <div id="mmMetrics" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;"></div>
+    <!-- 曲线图 -->
+    <div style="position:relative;height:220px;margin-bottom:4px;">
+      <canvas id="mmChart"></canvas>
+    </div>
+    <div style="font-size:11px;color:#9ca3af;text-align:center;margin-bottom:12px;">每30秒一个数据点 · 最近 60 分钟</div>
+    <!-- 快捷入口 -->
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <a id="mmReviewLink" href="#" style="background:#fff0f3;color:#fe2c55;border:1px solid #fecdd3;padding:6px 16px;border-radius:7px;text-decoration:none;font-size:13px;font-weight:600;">进入复盘 →</a>
+      <a id="mmLiveLink" href="#" target="_blank" style="background:#f5f6fa;color:#374151;border:1px solid #e8eaef;padding:6px 16px;border-radius:7px;text-decoration:none;font-size:13px;">打开直播间 ↗</a>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <!-- 添加账号 -->
+  <div class="add-section">
+    <div class="add-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+      添加监控账号
+    </div>
+    <div class="add-form">
+      <div class="username-selector">
+        <input type="text" id="usernameInput" placeholder="输入或选择 TikTok 用户名" autocomplete="off" oninput="filterDropdown()" onfocus="openDropdown()" />
+        <span class="selector-arrow">▾</span>
+        <div class="username-dropdown" id="usernameDropdown"></div>
+      </div>
+      <select id="groupSelect" class="add-input" style="flex:0;min-width:90px;">
+        <option value="own">🏠 自营</option>
+        <option value="rival">⚔️ 竞品</option>
+        <option value="watch">👁 关注</option>
+      </select>
+      <button class="btn btn-primary" onclick="startMonitor()">开始监控</button>
+      <button class="btn btn-secondary" onclick="showBatchAdd()">批量添加</button>
+    </div>
+    <!-- 关注功能说明 -->
+    <div class="watch-hint" id="watchHint" style="display:none;">
+      <span class="watch-hint-icon">👁</span>
+      <span><strong>「关注」分组</strong>：用于监视竞品或感兴趣的账号，不记录评论数据，仅追踪直播状态。开播时系统会发出提醒，方便你手动决定是否切换到「竞品」模式开始深度采集。</span>
+    </div>
+    <div id="batchArea" style="display:none; margin-top:12px;">
+      <textarea id="batchInput" class="add-input" style="height:72px;resize:vertical;" placeholder="每行一个用户名，批量添加&#10;user1&#10;user2"></textarea>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="batchStartMonitor()">批量启动</button>
+    </div>
+  </div>
+
+  <!-- 全局统计 -->
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-icon">📺</div><div class="stat-val" id="statLive">0</div><div class="stat-label">当前直播间</div></div>
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-val" id="statViewers">0</div>
+      <div class="stat-label">实时在线（合计）</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">累计观看 <span id="statTotalUser">0</span></div>
+    </div>
+    <div class="stat-card"><div class="stat-icon">💬</div><div class="stat-val" id="statComments">0</div><div class="stat-label">今日评论总数</div></div>
+    <div class="stat-card"><div class="stat-icon">🎁</div><div class="stat-val" id="statGifts">$0</div><div class="stat-label">今日礼物收入</div></div>
+    <div class="stat-card"><div class="stat-icon">❤️</div><div class="stat-val" id="statFollowers">0</div><div class="stat-label">今日新增关注</div></div>
+  </div>
+
+  <!-- ★ 全局方言雷达（核心重点区域） ── -->
+  <div class="dialect-panel" id="dialectPanel" style="display:none;">
+    <div class="dialect-panel-header">
+      <div class="dialect-panel-title">
+        <span class="dp-dot"></span>
+        阿拉伯语方言分布 · 实时监测
+      </div>
+      <span style="font-size:12px;color:#b45309;" id="dialectTotal"></span>
+    </div>
+    <div class="dialect-grid" id="dialectGrid"></div>
+  </div>
+
+  <!-- 语言分布（折叠式，次要信息） -->
+  <div class="lang-bar-section" id="langBarSection" style="display:none;">
+    <div class="lang-bar-header" onclick="toggleLangBar()">
+      <div class="lang-bar-title"><span>🌐</span> 全部语言分布（实时）</div>
+      <span class="lang-bar-toggle" id="langBarToggle">▼</span>
+    </div>
+    <div class="lang-bar-body" id="langBarBody" style="display:none;"></div>
+  </div>
+
+  <!-- 分组过滤器 -->
+  <div class="group-filter">
+    <span class="group-label">分组筛选：</span>
+    <button class="group-tab active" onclick="filterGroup('all', this)">全部</button>
+    <button class="group-tab" onclick="filterGroup('own', this)">🏠 自营</button>
+    <button class="group-tab" onclick="filterGroup('rival', this)">⚔️ 竞品</button>
+    <button class="group-tab" onclick="filterGroup('watch', this)">👁 关注</button>
+  </div>
+
+  <!-- 账号卡片（4列） -->
+  <div id="accountsGrid" class="accounts-grid">
+    <div class="empty-state" id="emptyState">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+      <p>还没有监控中的直播间</p>
+      <p style="font-size:12px;margin-top:6px;color:#9ca3af;">在上方输入 TikTok 用户名即可开始监控，最多可同时监控 4 场</p>
+    </div>
+  </div>
+
+  <!-- 竞品对比面板 -->
+  <div class="rival-panel" id="rivalPanel">
+    <div class="rival-panel-header">
+      <div class="rival-panel-title">⚔️ 竞品账号管理</div>
+      <button class="btn-icon" onclick="refreshRivals()">🔄 刷新</button>
+    </div>
+    <div class="rival-desc">
+      竞品账号用于与自营账号进行数据对比。系统会自动统计历史上被标记为「竞品」的账号数据，帮你发现差距和机会点。<br>
+      <strong>怎么用：</strong>在上方添加账号时选择「竞品」分组，直播结束后即可在历史复盘中看到与自营的对比数据。
+    </div>
+    <div class="rival-grid" id="rivalGrid">
+      <div class="rival-empty">加载竞品账号数据中...</div>
+    </div>
+    <div class="rival-add-form">
+      <input type="text" class="rival-add-input" id="rivalAddInput" placeholder="快速添加竞品用户名（不用@）" />
+      <button class="btn-rival-add" onclick="quickAddRival()">+ 添加竞品</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 用户信息 & 退出 ──
+(async () => {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.status === 401) { location.href = '/login'; return; }
+    const me = await res.json();
+    if (me.logged_in) {
+      const badge = document.getElementById('navUserBadge');
+      if (badge) badge.textContent = me.username;
+      const adminLink = document.getElementById('adminNavLink');
+      if (adminLink && me.is_admin) adminLink.style.display = '';
+    }
+  } catch(e) {}
+})();
+async function authLogout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.href = '/login';
+}
+
+const socket = io();
+const monitors = {};          // username -> 监控状态
+const globalLangStats = {};   // 全局语言统计
+const cardDialectStats = {};  // 每个账号的方言统计
+let currentFilter = 'all';
+
+socket.on('connect', () => { socket.emit('request_status'); });
+
+// 接收 Cloudflare Tunnel URL 推送
+socket.on('tunnel_url', (data) => {
+  if (data && data.url) _updateCfUi(data.url);
+});
+
+socket.on('status_update', (data) => {
+  (data.active_accounts || []).forEach(u => { if (!monitors[u]) createAccountCard(u, 'own'); });
+  updateGlobalStats();
+});
+
+socket.on('connected', (data) => {
+  const u = data.username;
+  if (!monitors[u]) createAccountCard(u, 'own');
+  setCardLive(u, true);
+  showToast(`@${u} 直播间已连接 ✅`, 'success');
+  const statusEl = document.getElementById(`speech-status-${u}`);
+  if (statusEl) statusEl.textContent = '语音采集中...';
+  // 更新直播链接（如果后端未携带则用默认 /live 链接）
+  const liveUrl = data.live_url || `https://www.tiktok.com/@${u}/live`;
+  const nameEl = document.querySelector(`#card-${u} .card-username a`);
+  if (nameEl) { nameEl.href = liveUrl; nameEl.title = '点击打开TikTok直播间'; }
+  if (allAccounts.length) {
+    const found = allAccounts.find(a => a.username === u);
+    if (found) found.is_live = true; else allAccounts.unshift({username: u, is_live: true});
+    renderDropdown(allAccounts);
+  }
+});
+
+socket.on('speech_no_stream', (data) => {
+  const u = data.username;
+  const statusEl = document.getElementById(`speech-status-${u}`);
+  if (statusEl) { statusEl.textContent = '未录入语音（无流地址）'; statusEl.style.color = '#f59e0b'; }
+  const speechBox = document.getElementById(`speech-box-${u}`);
+  if (speechBox && speechBox.children.length <= 1)
+    speechBox.innerHTML = '<div style="color:#f59e0b;font-size:11px;text-align:center;padding:16px 8px;">⚠️ 未能获取直播流，本场关键词为空<br><span style="font-size:10px;color:#9ca3af;">可能原因：直播流需要登录权限，可在 config.py 配置 TIKTOK_SESSION_ID</span></div>';
+});
+
+socket.on('waiting_live', (data) => {
+  const u = data.username;
+  if (!monitors[u]) createAccountCard(u, 'own');
+  setBadge(u, '等待开播', 'waiting');
+  showToast(`⏳ @${u} 未开播，系统等待中...`, 'info');
+});
+socket.on('live_detected', (data) => {
+  const u = data.username;
+  setBadge(u, '连接中...', 'connecting');
+  showToast(`🔴 @${u} 开播了！正在连接...`, 'success');
+  // 记录开播信息
+  if (monitors[u]) {
+    monitors[u].startTime = data.start_time || new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
+    monitors[u].sessionId = data.session_id || null;
+    monitors[u].startTs = Date.now();
+  }
+  // 显示开播时间行
+  const row = document.getElementById(`live-time-row-${u}`);
+  const startEl = document.getElementById(`start-time-${u}`);
+  if (row) row.style.display = 'flex';
+  if (startEl) {
+    const t = data.start_time ? data.start_time.slice(11,16) : new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+    startEl.textContent = t;
+  }
+});
+socket.on('monitor_error', (data) => {
+  setBadge(data.username, '出错', 'error');
+  showToast(`❌ ${data.msg}`, 'error');
+  if (data.msg && data.msg.includes('不存在')) {
+    setTimeout(() => removeAccountCard(data.username), 3000);
+  }
+});
+
+socket.on('new_comment', (data) => {
+  const u = data.username; if (!monitors[u]) return;
+  monitors[u].comments = (monitors[u].comments || 0) + 1;
+  updateCardMetrics(u); addCommentToCard(u, data);
+});
+
+socket.on('new_gift', (data) => {
+  const u = data.username; if (!monitors[u]) return;
+  monitors[u].gifts = (monitors[u].gifts || 0) + data.gift_value;
+  updateCardMetrics(u);
+});
+
+socket.on('new_follow', (data) => {
+  const u = data.username; if (!monitors[u]) return;
+  monitors[u].followers = (monitors[u].followers || 0) + 1;
+  updateGlobalStats();
+});
+
+socket.on('viewer_update', (data) => {
+  const u = data.username; if (!monitors[u]) return;
+  monitors[u].viewers = data.viewer_count;
+  monitors[u].totalUser = data.total_user || 0;
+  monitors[u].likes = data.like_count;
+  // 记录历史快照（最多保留120个点，约1小时）
+  const now = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  monitors[u].history = monitors[u].history || [];
+  monitors[u].history.push({ t: now, v: data.viewer_count || 0, c: monitors[u].comments || 0, g: monitors[u].gifts || 0 });
+  if (monitors[u].history.length > 120) monitors[u].history.shift();
+  updateCardMetrics(u); updateGlobalStats();
+});
+
+socket.on('like_update', (data) => {
+  const u = data.username; if (!monitors[u]) return;
+  monitors[u].likes = data.like_count; updateCardMetrics(u);
+});
+
+socket.on('lang_stats_update', (data) => {
+  const u = data.username;
+  const cStats = data.comment_stats || {};
+  const sStats = data.speech_stats || {};
+
+  if (u) {
+    // 更新卡片内两个独立 Tab
+    cardDialectStats[u] = { comment: cStats, speech: sStats };
+    updateCardDialectRadar(u, 'comment', cStats);
+    updateCardDialectRadar(u, 'speech', sStats);
+  }
+
+  // 重新合并全局（评论+话术加总，供全局面板用）
+  const merged = {};
+  Object.values(cardDialectStats).forEach(s => {
+    [s.comment || {}, s.speech || {}].forEach(part => {
+      Object.entries(part).forEach(([lang, cnt]) => { merged[lang] = (merged[lang] || 0) + cnt; });
+    });
+  });
+  renderLangBar(merged);
+  renderGlobalDialectPanel(merged);
+});
+
+socket.on('new_speech', (data) => {
+  const u = data.username; if (!monitors[u]) return;
+  addSpeechToCard(u, data);
+  monitors[u].speechCount = (monitors[u].speechCount || 0) + 1;
+});
+
+socket.on('live_ended', (data) => {
+  setCardLive(data.username, false);
+  showToast(`@${data.username} 直播已结束，报告已生成`, 'info');
+  setTimeout(() => removeAccountCard(data.username), 3000);
+  loadRivals(); // 刷新竞品面板
+});
+
+// ── 卡片创建 ──
+function createAccountCard(username, group = 'own') {
+  monitors[username] = { viewers: 0, likes: 0, comments: 0, gifts: 0, followers: 0, group, startTime: null, sessionId: null, history: [] };
+  const emptyState = document.getElementById('emptyState');
+  if (emptyState) emptyState.remove();
+  const grid = document.getElementById('accountsGrid');
+  const card = document.createElement('div');
+  card.className = 'account-card';
+  card.id = `card-${username}`;
+  card.dataset.group = group;
+  const groupTagMap = { own: '<span class="group-tag tag-own">自营</span>', rival: '<span class="group-tag tag-rival">竞品</span>', watch: '<span class="group-tag tag-watch">关注</span>' };
+  const groupTag = groupTagMap[group] || '';
+  card.innerHTML = `
+    <div class="card-header">
+      <div class="card-username"><a href="https://www.tiktok.com/@${username}/live" target="_blank" style="color:inherit;text-decoration:none;" title="打开TikTok直播间">@${username}</a>${groupTag}</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="offline-badge" id="badge-${username}">连接中...</span>
+        <button class="btn btn-danger btn-sm" onclick="stopMonitor('${username}')">✕</button>
+      </div>
+    </div>
+    <div id="live-time-row-${username}" style="display:none;font-size:11px;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span>🕐 开播：<b id="start-time-${username}" style="color:var(--text);">—</b></span>
+      <span>⏱ 已播：<b id="duration-${username}" style="color:var(--primary);">0m</b></span>
+    </div>
+    <div class="metrics-row" onclick="openMetricsModal('${username}')" style="cursor:pointer;" title="点击查看实时数据曲线">
+      <div class="metric"><div class="metric-val" id="viewers-${username}">0</div><div class="metric-label">实时在线</div></div>
+      <div class="metric"><div class="metric-val" id="totaluser-${username}">0</div><div class="metric-label">累计观看</div></div>
+      <div class="metric"><div class="metric-val" id="comments-${username}">0</div><div class="metric-label">评论数</div></div>
+      <div class="metric"><div class="metric-val" id="gifts-${username}">$0</div><div class="metric-label">礼物收入</div></div>
+      <div style="font-size:10px;color:var(--text3);align-self:center;margin-left:auto;padding-right:4px;">📈 点击查看曲线</div>
+    </div>
+    <!-- ★ 方言雷达 -->
+    <div class="dialect-radar" id="dialect-radar-${username}">
+      <div class="dialect-radar-title"><span class="dr-dot"></span>方言监测</div>
+      <div class="dr-tabs">
+        <button class="dr-tab active" onclick="switchDialectTab('${username}','comment',this)">💬 评论</button>
+        <button class="dr-tab" onclick="switchDialectTab('${username}','speech',this)">🎙️ 话术</button>
+      </div>
+      <div class="dr-tab-content active" id="dialect-comment-${username}">
+        <div class="dialect-pills" id="dialect-pills-comment-${username}">
+          <div class="dialect-radar-empty">等待评论数据...</div>
+        </div>
+      </div>
+      <div class="dr-tab-content" id="dialect-speech-${username}">
+        <div class="dialect-pills" id="dialect-pills-speech-${username}">
+          <div class="dialect-radar-empty">等待话术数据...</div>
+        </div>
+      </div>
+    </div>
+    <div class="section-label">最新评论</div>
+    <div class="comments-box" id="comments-box-${username}"></div>
+    <div class="speech-label">
+      <span class="speech-dot"></span>主播话术（语音转文字）
+      <span style="font-size:10px;color:var(--text3);" id="speech-status-${username}">等待连接...</span>
+    </div>
+    <div class="speech-box" id="speech-box-${username}">
+      <div style="color:var(--text3);font-size:11px;text-align:center;padding-top:28px;">连接直播间后自动开始采集</div>
+    </div>
+  `;
+  grid.appendChild(card);
+  applyGroupFilter();
+  updateGlobalStats();
+  saveMonitorList();
+}
+
+// ── 卡片内方言雷达更新 ──
+const DIALECT_CONFIG = {
+  'ar-gulf':    { name: '海湾', flag: '🇸🇦', cls: 'lang-ar-gulf' },
+  'ar-egypt':   { name: '埃及', flag: '🇪🇬', cls: 'lang-ar-egypt' },
+  'ar-levant':  { name: '黎凡特', flag: '🇱🇧', cls: 'lang-ar-levant' },
+  'ar-maghreb': { name: '北非', flag: '🇲🇦', cls: 'lang-ar-maghreb' },
+  'ar':         { name: '标准阿语', flag: '🌍', cls: 'lang-ar' },
+};
+
+function updateCardDialectRadar(username, type, stats) {
+  const pillsEl = document.getElementById(`dialect-pills-${type}-${username}`);
+  if (!pillsEl) return;
+  // 取阿拉伯语相关数据
+  const arTotal = (stats['ar'] || 0) + (stats['ar-gulf'] || 0) + (stats['ar-egypt'] || 0) + (stats['ar-levant'] || 0) + (stats['ar-maghreb'] || 0);
+  if (arTotal === 0) {
+    const hasAny = Object.values(stats).some(v => v > 0);
+    const emptyMsg = type === 'comment' ? '暂无阿拉伯语评论' : '暂无阿拉伯语话术';
+    if (hasAny) pillsEl.innerHTML = `<div class="dialect-radar-empty" style="color:var(--text3);">${emptyMsg}</div>`;
+    return;
+  }
+  // 计算各方言占总阿语的比例
+  const dialectKeys = ['ar-gulf','ar-egypt','ar-levant','ar-maghreb','ar'];
+  const items = dialectKeys.map(k => ({ key: k, cnt: stats[k] || 0 })).filter(x => x.cnt > 0);
+  items.sort((a,b) => b.cnt - a.cnt);
+  pillsEl.innerHTML = items.map((item, idx) => {
+    const cfg = DIALECT_CONFIG[item.key] || { name: item.key, flag: '🌐', cls: 'lang-other' };
+    const pct = Math.round(item.cnt / arTotal * 100);
+    const isDominant = idx === 0 && pct >= 30;
+    return `<span class="dialect-pill${isDominant ? ' dominant' : ''}" title="${cfg.name}: ${item.cnt}条，占阿语${pct}%">
+      <span class="dp-flag">${cfg.flag}</span>
+      <span>${cfg.name}</span>
+      <span class="dp-pct">${pct}%</span>
+    </span>`;
+  }).join('');
+}
+
+// Tab 切换
+function switchDialectTab(username, type, btn) {
+  const radar = document.getElementById(`dialect-radar-${username}`);
+  if (!radar) return;
+  radar.querySelectorAll('.dr-tab').forEach(b => b.classList.remove('active'));
+  radar.querySelectorAll('.dr-tab-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  const content = document.getElementById(`dialect-${type}-${username}`);
+  if (content) content.classList.add('active');
+}
+
+// ── 全局方言面板 ──
+function renderGlobalDialectPanel(stats) {
+  const panel = document.getElementById('dialectPanel');
+  const grid = document.getElementById('dialectGrid');
+  const totalEl = document.getElementById('dialectTotal');
+  if (!panel || !grid) return;
+
+  const arTotal = (stats['ar'] || 0) + (stats['ar-gulf'] || 0) + (stats['ar-egypt'] || 0) + (stats['ar-levant'] || 0) + (stats['ar-maghreb'] || 0);
+  if (arTotal === 0) return;
+  panel.style.display = '';
+  totalEl.textContent = `共 ${arTotal} 条阿语评论`;
+
+  const DIALECTS = [
+    { key: 'ar-gulf',    name: '海湾阿拉伯语',  flag: '🇸🇦', desc: '沙特/阿联酋/卡塔尔/科威特' },
+    { key: 'ar-egypt',   name: '埃及阿拉伯语',  flag: '🇪🇬', desc: '埃及' },
+    { key: 'ar-levant',  name: '黎凡特阿拉伯语',flag: '🇱🇧', desc: '黎巴嫩/叙利亚/约旦/巴勒斯坦' },
+    { key: 'ar-maghreb', name: '北非阿拉伯语',  flag: '🇲🇦', desc: '摩洛哥/阿尔及利亚/突尼斯' },
+    { key: 'ar',         name: '标准阿拉伯语',  flag: '🌍', desc: '现代标准阿语(MSA)' },
+  ];
+
+  grid.innerHTML = DIALECTS.filter(d => (stats[d.key]||0) > 0).map(d => {
+    const cnt = stats[d.key] || 0;
+    const pct = Math.round(cnt / arTotal * 100);
+    return `<div class="dialect-item">
+      <div class="dialect-flag">${d.flag}</div>
+      <div class="dialect-info">
+        <div class="dialect-name">${d.name}</div>
+        <div class="dialect-count">${d.desc}</div>
+        <div class="dialect-bar-wrap">
+          <div class="dialect-bar"><div class="dialect-bar-fill" style="width:${pct}%"></div></div>
+        </div>
+      </div>
+      <div class="dialect-pct-big">${pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+function filterGroup(group, el) {
+  currentFilter = group;
+  document.querySelectorAll('.group-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  applyGroupFilter();
+}
+
+function applyGroupFilter() {
+  document.querySelectorAll('.account-card').forEach(card => {
+    card.style.display = (currentFilter === 'all' || card.dataset.group === currentFilter) ? '' : 'none';
+  });
+}
+
+function setCardLive(username, isLive) {
+  const card = document.getElementById(`card-${username}`);
+  const badge = document.getElementById(`badge-${username}`);
+  if (!card || !badge) return;
+  if (isLive) {
+    card.classList.add('live');
+    badge.className = 'live-badge';
+    badge.textContent = 'LIVE';
+    // 显示时间行
+    const row = document.getElementById(`live-time-row-${username}`);
+    if (row) row.style.display = 'flex';
+    // 如果还没有记录开播时间，用当前时间
+    if (monitors[username] && !monitors[username].startTime) {
+      monitors[username].startTime = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+      monitors[username].startTs = Date.now();
+      const startEl = document.getElementById(`start-time-${username}`);
+      if (startEl) startEl.textContent = monitors[username].startTime;
+    }
+  } else {
+    card.classList.remove('live');
+    badge.className = 'offline-badge';
+    badge.textContent = '已结束';
+  }
+}
+
+function setBadge(username, text, state) {
+  const card = document.getElementById(`card-${username}`);
+  const badge = document.getElementById(`badge-${username}`);
+  if (!badge) return;
+  const stateMap = { waiting: 'waiting-badge', connecting: 'offline-badge', error: 'error-badge', live: 'live-badge' };
+  badge.className = stateMap[state] || 'offline-badge';
+  badge.textContent = text;
+  if (card) { state === 'live' ? card.classList.add('live') : card.classList.remove('live'); }
+}
+
+function removeAccountCard(username) {
+  const card = document.getElementById(`card-${username}`);
+  if (card) card.remove();
+  delete monitors[username];
+  delete cardDialectStats[username];
+  saveMonitorList();
+  if (Object.keys(monitors).length === 0) {
+    document.getElementById('accountsGrid').innerHTML = `<div class="empty-state" id="emptyState"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><p>还没有监控中的直播间</p></div>`;
+  }
+  updateGlobalStats();
+}
+
+function updateCardMetrics(username) {
+  const m = monitors[username]; if (!m) return;
+  const el = id => document.getElementById(`${id}-${username}`);
+  if (el('viewers')) el('viewers').textContent = formatNum(m.viewers || 0);
+  if (el('totaluser')) el('totaluser').textContent = formatNum(m.totalUser || 0);
+  if (el('comments')) el('comments').textContent = formatNum(m.comments || 0);
+  if (el('gifts')) el('gifts').textContent = '$' + (m.gifts || 0).toFixed(2);
+  updateGlobalStats();
+}
+
+function addSpeechToCard(username, data) {
+  const box = document.getElementById(`speech-box-${username}`); if (!box) return;
+  if (box.children.length === 1 && box.firstChild.style && box.firstChild.style.textAlign === 'center') box.innerHTML = '';
+  const item = document.createElement('div');
+  item.className = 'speech-item';
+  const langDisplay = data.lang_display || '';
+  const cssClass = data.css_class || 'lang-other';
+  const lang = data.lang || 'other';
+  const isArabicDialect = data.dialect && data.dialect !== 'ar' && lang.startsWith('ar-');
+  let langTag = '';
+  if (isArabicDialect) {
+    const dialectLabel = langLabel(lang, langDisplay);
+    langTag = `<span class="comment-lang lang-ar speech-lang-tag" title="${langDisplay}">阿拉伯语 AR</span><span class="comment-lang ${cssClass} speech-lang-tag" style="margin-left:2px;" title="${langDisplay}">${dialectLabel}</span>`;
+  } else {
+    const label = langLabel(lang, langDisplay);
+    langTag = `<span class="comment-lang ${cssClass} speech-lang-tag" title="${langDisplay}">${label}</span>`;
+  }
+  const zhText = data.text_zh && data.text_zh !== data.text ? `<div class="speech-zh">${escapeHtml(data.text_zh)}</div>` : '';
+  item.innerHTML = `
+    <div class="speech-meta">
+      <span class="speech-time">${data.timestamp}</span>
+      ${langTag}
+    </div>
+    <div class="speech-text">${escapeHtml(data.text || '')}</div>
+    ${zhText}
+  `;
+  box.insertBefore(item, box.firstChild);
+  while (box.children.length > 30) box.removeChild(box.lastChild);
+}
+
+// 语言显示标签
+const LANG_LABEL_MAP = {
+  'zh':         '中文 ZH',
+  'en':         '英语 EN',
+  'ar':         '阿拉伯语 AR',
+  'ar-gulf':    '🇸🇦 海湾',
+  'ar-egypt':   '🇪🇬 埃及',
+  'ar-levant':  '🇱🇧 黎凡特',
+  'ar-maghreb': '🇲🇦 北非',
+  'ko':         '韩语 KO',
+  'ja':         '日语 JA',
+  'fr':         '法语 FR',
+  'de':         '德语 DE',
+  'es':         '西班牙语 ES',
+  'pt':         '葡萄牙语 PT',
+  'ru':         '俄语 RU',
+  'tr':         '土耳其语 TR',
+  'hi':         '印地语 HI',
+  'id':         '印尼语 ID',
+  'other':      '其他',
+};
+function langLabel(lang, lang_display) {
+  if (!lang) return lang_display || '?';
+  return LANG_LABEL_MAP[lang] || lang_display || lang.toUpperCase();
+}
+
+function detectLang(text) {
+  if (!text) return { lang: 'other', lang_short: '其他', css_class: 'lang-other', lang_display: '其他' };
+  const total = Math.max(text.replace(/\s/g,'').length, 1);
+  if ((text.match(/[\u4e00-\u9fff]/g)||[]).length / total > 0.3) return { lang:'zh', lang_short:'中文 ZH', css_class:'lang-zh', lang_display:'中文' };
+  if ((text.match(/[\u0600-\u06ff]/g)||[]).length / total > 0.3) return { lang:'ar', lang_short:'阿拉伯语 AR', css_class:'lang-ar', lang_display:'阿拉伯语' };
+  if ((text.match(/[a-zA-Z]/g)||[]).length / total > 0.5) return { lang:'en', lang_short:'英语 EN', css_class:'lang-en', lang_display:'英语' };
+  return { lang:'other', lang_short:'其他', css_class:'lang-other', lang_display:'其他' };
+}
+
+function addCommentToCard(username, data) {
+  const box = document.getElementById(`comments-box-${username}`); if (!box) return;
+  const fallback = detectLang(data.content);
+  const lang = data.lang || fallback.lang;
+  const cssClass = data.css_class || fallback.css_class;
+  const lang_display = data.lang_display || fallback.lang_display;
+  const label = langLabel(lang, lang_display);
+  const isAnchor = data.is_anchor;
+  const zhLine = (data.text_zh && data.text_zh !== data.content)
+    ? `<div style="font-size:10px;color:var(--text2);margin-top:2px;padding:2px 5px;background:#f9fafb;border-radius:3px;border-left:2px solid var(--border);">中：${escapeHtml(data.text_zh)}</div>`
+    : '';
+  const item = document.createElement('div');
+  item.className = 'comment-item';
+  item.innerHTML = `<span class="comment-user${isAnchor?' anchor':''}">${escapeHtml(data.username)}</span>${isAnchor?'<span class="comment-anchor-tag">主播</span>':''}<span class="comment-lang ${cssClass}" title="${lang_display}">${label}</span><span class="comment-time">${data.timestamp}</span><div class="comment-content">${escapeHtml(data.content)}${zhLine}</div>`;
+  box.insertBefore(item, box.firstChild);
+  while (box.children.length > 50) box.removeChild(box.lastChild);
+}
+
+const LANG_META = {
+  zh:          { name:'中文',      fillClass:'fill-zh',    flag:'🇨🇳' },
+  en:          { name:'英语',      fillClass:'fill-en',    flag:'🇺🇸' },
+  ar:          { name:'阿拉伯语',  fillClass:'fill-ar',    flag:'🌍', hasDialect:true },
+  'ar-gulf':   { name:'🇸🇦 海湾',  fillClass:'fill-ar',    flag:'🇸🇦', parent:'ar' },
+  'ar-egypt':  { name:'🇪🇬 埃及',  fillClass:'fill-ar',    flag:'🇪🇬', parent:'ar' },
+  'ar-levant': { name:'🇱🇧 黎凡特',fillClass:'fill-ar',    flag:'🇱🇧', parent:'ar' },
+  'ar-maghreb':{ name:'🇲🇦 北非',  fillClass:'fill-ar',    flag:'🇲🇦', parent:'ar' },
+  other:       { name:'其他',      fillClass:'fill-other', flag:'🌐' },
+};
+
+function renderLangBar(stats) {
+  const section = document.getElementById('langBarSection');
+  const body = document.getElementById('langBarBody');
+  if (!section || !body) return;
+  const topLangs = ['zh','en','ar','other'];
+  const total = topLangs.reduce((s,k) => s+(stats[k]||0), 0);
+  if (total === 0) return;
+  section.style.display = 'block';
+  let html = '';
+  topLangs.forEach(lang => {
+    const cnt = stats[lang] || 0; if (!cnt) return;
+    const pct = Math.round(cnt/total*100);
+    const meta = LANG_META[lang] || { name:lang, fillClass:'fill-other', flag:'🌐' };
+    let subHtml = '';
+    if (meta.hasDialect) {
+      ['ar-gulf','ar-egypt','ar-levant','ar-maghreb'].forEach(d => {
+        const dc = stats[d]||0; if (!dc) return;
+        const dpct = Math.round(dc/cnt*100);
+        const dm = LANG_META[d];
+        subHtml += `<div class="lang-sub-row"><span>${dm.name}</span><div style="display:flex;align-items:center;gap:5px;"><div class="lang-sub-bar"><div class="lang-sub-fill" style="width:${dpct}%"></div></div><span>${dpct}%</span></div></div>`;
+      });
+    }
+    html += `<div class="lang-bar-row">
+      <div class="lang-bar-top">
+        <span class="lang-bar-name">${meta.flag} ${meta.name}${subHtml?`<span style="cursor:pointer;font-size:10px;color:var(--text3);" onclick="toggleDialect('${lang}')">▶方言</span>`:''}  </span>
+        <span class="lang-bar-pct">${cnt}条 · ${pct}%</span>
+      </div>
+      <div class="lang-progress"><div class="lang-progress-fill ${meta.fillClass}" style="width:${pct}%"></div></div>
+      ${subHtml?`<div class="lang-sub" id="sub-${lang}">${subHtml}</div>`:''}
+    </div>`;
+  });
+  body.innerHTML = html;
+}
+
+function toggleDialect(lang) { const el = document.getElementById(`sub-${lang}`); if (el) el.classList.toggle('open'); }
+function toggleLangBar() {
+  const body = document.getElementById('langBarBody'); const toggle = document.getElementById('langBarToggle');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  toggle.classList.toggle('open', !isOpen);
+}
+
+function updateGlobalStats() {
+  let totalV=0, totalTU=0, totalC=0, totalG=0, totalF=0;
+  Object.values(monitors).forEach(m => {
+    totalV += m.viewers || 0;
+    totalTU += m.totalUser || 0;
+    totalC += m.comments || 0;
+    totalG += m.gifts || 0;
+    totalF += m.followers || 0;
+  });
+  document.getElementById('statLive').textContent = Object.keys(monitors).length;
+  document.getElementById('statViewers').textContent = formatNum(totalV);
+  const tuEl = document.getElementById('statTotalUser');
+  if (tuEl) tuEl.textContent = formatNum(totalTU);
+  document.getElementById('statComments').textContent = formatNum(totalC);
+  document.getElementById('statGifts').textContent = '$'+totalG.toFixed(2);
+  document.getElementById('statFollowers').textContent = formatNum(totalF);
+}
+
+async function startMonitor() {
+  const input = document.getElementById('usernameInput');
+  const btn = document.querySelector('.btn-primary');
+  const username = input.value.trim().replace('@','').trim();
+  const group = document.getElementById('groupSelect').value;
+  if (!username) { showToast('请输入用户名', 'error'); return; }
+  if (monitors[username]) { showToast(`@${username} 已在监控列表中`, 'info'); return; }
+
+  // 立刻创建卡片，不等check_live（避免按钮长时间禁用）
+  createAccountCard(username, group);
+  setBadge(username, '启动中...', 'connecting');
+  input.value = '';
+  closeDropdown();
+  btn.textContent = '启动中...'; btn.disabled = true;
+
+  try {
+    const groups = JSON.parse(localStorage.getItem('accountGroups') || '{}');
+    groups[username] = group;
+    localStorage.setItem('accountGroups', JSON.stringify(groups));
+  } catch(e) {}
+
+  try {
+    // 直接发起监控，后端会处理等待开播逻辑
+    const res = await fetch('/api/monitor/start', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username})
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showToast(data.msg || '启动失败', 'error');
+      removeAccountCard(username);
+    } else {
+      showToast(`✅ @${username} 监控已启动，正在检测直播状态...`, 'success');
+      // 后台异步检测状态（不阻塞UI）
+      _checkLiveAsync(username);
+      loadAccountList();
+    }
+  } catch(e) {
+    showToast('网络错误，请重试', 'error');
+    removeAccountCard(username);
+  } finally {
+    btn.textContent = '开始监控'; btn.disabled = false;
+  }
+}
+
+// 后台异步检测直播状态（不阻塞按钮）
+async function _checkLiveAsync(username) {
+  try {
+    const checkRes = await fetch('/api/check_live', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username})
+    });
+    const checkData = await checkRes.json();
+    if (!monitors[username]) return; // 已被用户手动停止
+    if (!checkData.exists) {
+      showToast(`❌ 用户 @${username} 不存在，已停止监控`, 'error');
+      // 停止后端监控
+      await fetch('/api/monitor/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username}) });
+      removeAccountCard(username);
+      return;
+    }
+    if (checkData.is_live) {
+      showToast(`🔴 @${username} 正在直播！`, 'success');
+      setBadge(username, '连接中...', 'connecting');
+    } else {
+      showToast(`⏳ @${username} 未开播，等待中...`, 'info');
+      setBadge(username, '等待开播', 'waiting');
+    }
+  } catch(e) { /* 检测失败忽略，后端会处理 */ }
+}
+
+async function stopMonitor(username) {
+  // 先立即移除UI卡片（乐观更新）
+  removeAccountCard(username);
+  // 后端停止（无论结果如何卡片已经移除）
+  try {
+    const res = await fetch('/api/monitor/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username}) });
+    const data = await res.json();
+    showToast(data.success ? `@${username} 已停止监控` : `@${username} 已从列表移除`, 'info');
+  } catch(e) {
+    showToast(`@${username} 已从列表移除`, 'info');
+  }
+}
+
+async function batchStartMonitor() {
+  const raw = document.getElementById('batchInput').value.trim();
+  const usernames = raw.split('\n').map(u => u.trim().replace('@','')).filter(Boolean);
+  if (!usernames.length) return;
+  const res = await fetch('/api/monitor/batch_start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({usernames}) });
+  const data = await res.json();
+  data.results.forEach(r => { if (r.success) createAccountCard(r.username, 'own'); showToast(r.success?`@${r.username} 启动成功`:`@${r.username} 启动失败`, r.success?'success':'error'); });
+  document.getElementById('batchArea').style.display = 'none';
+}
+
+function showBatchAdd() { const area = document.getElementById('batchArea'); area.style.display = area.style.display === 'none' ? 'block' : 'none'; }
+
+// 关注分组选择时显示说明
+document.getElementById('groupSelect').addEventListener('change', function() {
+  document.getElementById('watchHint').style.display = this.value === 'watch' ? 'flex' : 'none';
+});
+
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`; toast.textContent = msg;
+  container.appendChild(toast); setTimeout(() => toast.remove(), 4000);
+}
+function formatNum(n) { if (n>=10000) return (n/10000).toFixed(1)+'w'; if (n>=1000) return (n/1000).toFixed(1)+'k'; return n.toString(); }
+function escapeHtml(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── 直播时长计时器 ──
+function formatDuration(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  if (h > 0) return `${h}h${m}m`;
+  return `${m}m`;
+}
+function tickDurations() {
+  Object.keys(monitors).forEach(username => {
+    const m = monitors[username];
+    if (!m || !m.startTs) return;
+    const durEl = document.getElementById(`duration-${username}`);
+    if (durEl) durEl.textContent = formatDuration(Date.now() - m.startTs);
+  });
+}
+// 每30秒更新一次时长
+setInterval(tickDurations, 30000);
+
+document.getElementById('usernameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { closeDropdown(); startMonitor(); }
+  if (e.key === 'Escape') closeDropdown();
+});
+document.addEventListener('click', e => { if (!e.target.closest('.username-selector')) closeDropdown(); });
+
+// ── 账号下拉选择器 ──
+let allAccounts = [];
+
+async function loadAccountList() {
+  try {
+    const res = await fetch('/api/accounts');
+    allAccounts = await res.json();
+    renderDropdown(allAccounts);
+  } catch(e) {}
+}
+
+function renderDropdown(list) {
+  const dd = document.getElementById('usernameDropdown');
+  if (!list.length) { dd.innerHTML = '<div style="padding:12px;text-align:center;font-size:12px;color:var(--text3);">暂无历史账号</div>'; return; }
+  const live = list.filter(a => a.is_live);
+  const offline = list.filter(a => !a.is_live);
+  let html = '';
+  if (live.length) {
+    html += `<div class="dropdown-section">🔴 正在直播</div>`;
+    live.forEach(a => {
+      html += `<div class="dropdown-item" onclick="selectAccount('${a.username}')"><span class="di-name">@${a.username}</span><span class="di-live">LIVE</span></div>`;
+    });
+  }
+  if (offline.length) {
+    html += `<div class="dropdown-section">历史账号</div>`;
+    offline.forEach(a => {
+      html += `<div class="dropdown-item" onclick="selectAccount('${a.username}')"><span class="di-name">@${a.username}</span><span class="di-offline">历史</span></div>`;
+    });
+  }
+  dd.innerHTML = html;
+}
+
+function filterDropdown() {
+  const q = document.getElementById('usernameInput').value.trim().replace('@','').toLowerCase();
+  const filtered = q ? allAccounts.filter(a => a.username.toLowerCase().includes(q)) : allAccounts;
+  renderDropdown(filtered);
+  openDropdown();
+}
+function openDropdown() {
+  if (allAccounts.length === 0) loadAccountList();
+  document.getElementById('usernameDropdown').classList.add('open');
+}
+function closeDropdown() { document.getElementById('usernameDropdown').classList.remove('open'); }
+function selectAccount(username) { document.getElementById('usernameInput').value = username; closeDropdown(); }
+
+// ── 监控账号持久化 ──
+const STORAGE_KEY = 'monitorAccounts_v2';
+function saveMonitorList() {
+  try {
+    const list = Object.entries(monitors).map(([u, m]) => ({ username: u, group: m.group || 'own' }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch(e) {}
+}
+function loadMonitorList() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; }
+}
+
+// ── 竞品面板 ──
+async function loadRivals() {
+  const grid = document.getElementById('rivalGrid');
+  try {
+    const res = await fetch('/api/rivals');
+    const data = await res.json();
+    if (!data.rivals || !data.rivals.length) {
+      grid.innerHTML = '<div class="rival-empty">🔍 暂无竞品数据<br><span style="font-size:11px;color:var(--text3);">添加监控账号时选择「竞品」分组，直播结束后自动统计</span></div>';
+      return;
+    }
+    grid.innerHTML = data.rivals.map(r => {
+      const isLive = r.is_live;
+      return `<div class="rival-card">
+        <div class="rival-card-header">
+          <div class="rival-username">@${r.username}</div>
+          <span class="rival-badge ${isLive ? 'rival-badge-live' : 'rival-badge-offline'}">${isLive ? 'LIVE' : '离线'}</span>
+        </div>
+        <div class="rival-metrics">
+          <div class="rival-metric"><div class="rival-metric-val">${formatNum(r.avg_peak_viewers||0)}</div><div class="rival-metric-label">均值在线</div></div>
+          <div class="rival-metric"><div class="rival-metric-val">${r.session_count||0}</div><div class="rival-metric-label">场次数</div></div>
+          <div class="rival-metric"><div class="rival-metric-val">$${(r.avg_gift_value||0).toFixed(0)}</div><div class="rival-metric-label">均礼物</div></div>
+        </div>
+        <div class="rival-action">
+          ${isLive ? `<button class="btn-rival-monitor" onclick="monitorRival('${r.username}')">📺 开始监控</button>` : `<button class="btn-rival-monitor" onclick="monitorRival('${r.username}')">👁 等待开播</button>`}
+          <a href="/history" style="flex:1;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px;font-size:12px;color:var(--text2);text-decoration:none;">📊 历史</a>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div class="rival-empty">加载失败，请刷新</div>';
+  }
+}
+
+async function refreshRivals() { await loadRivals(); showToast('竞品数据已刷新', 'info'); }
+
+async function monitorRival(username) {
+  if (monitors[username]) { showToast(`@${username} 已在监控中`, 'info'); return; }
+  createAccountCard(username, 'rival');
+  setBadge(username, '连接中...', 'connecting');
+  try {
+    await fetch('/api/monitor/start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username}) });
+    showToast(`已开始监控竞品 @${username}`, 'success');
+  } catch(e) { showToast('启动失败', 'error'); removeAccountCard(username); }
+}
+
+async function quickAddRival() {
+  const input = document.getElementById('rivalAddInput');
+  const username = input.value.trim().replace('@','');
+  if (!username) return;
+  // 设置分组为竞品
+  try {
+    await fetch('/api/account/group', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username, group:'rival'}) });
+  } catch(e) {}
+  // 更新 localStorage
+  const groups = (() => { try { return JSON.parse(localStorage.getItem('accountGroups') || '{}'); } catch(e) { return {}; } })();
+  groups[username] = 'rival'; localStorage.setItem('accountGroups', JSON.stringify(groups));
+  input.value = '';
+  showToast(`@${username} 已加入竞品列表`, 'success');
+  loadRivals();
+  loadAccountList();
+}
+
+// ── 远程访问 ──
+let _cfUrl = null;
+
+function openRemoteModal() {
+  document.getElementById('remoteModal').classList.add('open');
+  // 局域网地址
+  const host = window.location.hostname;
+  const port = window.location.port || '5001';
+  document.getElementById('localIpText').textContent =
+    (host !== 'localhost' && host !== '127.0.0.1')
+      ? `http://${host}:${port}`
+      : `http://[局域网IP]:${port}  (如: 192.168.x.x:${port})`;
+  // 刷新一次 tunnel URL
+  _refreshTunnelUrl();
+}
+
+async function _refreshTunnelUrl() {
+  try {
+    const res = await fetch('/api/tunnel');
+    const data = await res.json();
+    _updateCfUi(data.url);
+  } catch(e) {}
+}
+
+function _updateCfUi(url) {
+  const urlBlock = document.getElementById('cfUrlBlock');
+  const loadingBlock = document.getElementById('cfLoadingBlock');
+  const errorBlock = document.getElementById('cfErrorBlock');
+  const cfStatus = document.getElementById('cfStatus');
+  if (url) {
+    _cfUrl = url;
+    document.getElementById('cfUrlText').textContent = url;
+    urlBlock.style.display = 'block';
+    loadingBlock.style.display = 'none';
+    errorBlock.style.display = 'none';
+    cfStatus.textContent = '🟢 已连接';
+    cfStatus.style.color = '#16a34a';
+  } else {
+    urlBlock.style.display = 'none';
+    loadingBlock.style.display = 'block';
+    errorBlock.style.display = 'none';
+  }
+}
+
+function copyCfUrl() {
+  if (!_cfUrl) return;
+  navigator.clipboard.writeText(_cfUrl).then(() => showToast('公网链接已复制，发给手机/同事即可', 'success')).catch(() => {});
+}
+
+function closeRemoteModal() { document.getElementById('remoteModal').classList.remove('open'); }
+
+// ── 指标放大弹窗 ──
+let _mmChart = null;
+function openMetricsModal(username) {
+  const m = monitors[username];
+  if (!m) return;
+  const modal = document.getElementById('metricsModal');
+  modal.style.display = 'flex';
+  // 标题
+  document.getElementById('mmTitle').textContent = `@${username} · 实时数据`;
+  // 快捷链接
+  document.getElementById('mmLiveLink').href = `https://www.tiktok.com/@${username}/live`;
+  document.getElementById('mmReviewLink').href = m.sessionId ? `/session/${m.sessionId}` : '#';
+  document.getElementById('mmReviewLink').style.opacity = m.sessionId ? '1' : '0.4';
+  // 指标卡
+  const metrics = [
+    { label:'实时在线', val: formatNum(m.viewers||0), color:'#fe2c55' },
+    { label:'累计观看', val: formatNum(m.totalUser||0), color:'#3b82f6' },
+    { label:'评论数',   val: formatNum(m.comments||0), color:'#10b981' },
+    { label:'礼物收入', val: `$${(m.gifts||0).toFixed(1)}`, color:'#f59e0b' },
+  ];
+  document.getElementById('mmMetrics').innerHTML = metrics.map(x =>
+    `<div style="background:#f8f9fb;border-radius:10px;padding:12px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:${x.color};">${x.val}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:3px;">${x.label}</div>
+    </div>`
+  ).join('');
+  // 曲线图
+  const hist = m.history || [];
+  const labels = hist.map(h => h.t);
+  const viewerData = hist.map(h => h.v);
+  const commentData = hist.map(h => h.c);
+  const ctx = document.getElementById('mmChart').getContext('2d');
+  if (_mmChart) { _mmChart.destroy(); _mmChart = null; }
+  _mmChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '实时在线',
+          data: viewerData,
+          borderColor: '#fe2c55',
+          backgroundColor: 'rgba(254,44,85,.08)',
+          fill: true,
+          tension: .4,
+          pointRadius: hist.length > 30 ? 0 : 3,
+          borderWidth: 2,
+          yAxisID: 'y',
+        },
+        {
+          label: '评论数',
+          data: commentData,
+          borderColor: '#10b981',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: .4,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          borderDash: [4,3],
+          yAxisID: 'y2',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { position:'top', labels:{ font:{size:11}, boxWidth:12 } } },
+      scales: {
+        x: { ticks: { maxTicksLimit:8, font:{size:10} }, grid:{ display:false } },
+        y: { position:'left', ticks:{font:{size:10}}, title:{display:true,text:'在线人数',font:{size:10}} },
+        y2: { position:'right', ticks:{font:{size:10}}, grid:{drawOnChartArea:false}, title:{display:true,text:'评论数',font:{size:10}} },
+      }
+    }
+  });
+}
+function closeMetricsModal() {
+  document.getElementById('metricsModal').style.display = 'none';
+  if (_mmChart) { _mmChart.destroy(); _mmChart = null; }
+}
+function copyIp() {
+  const text = document.getElementById('localIpText').textContent;
+  navigator.clipboard.writeText(text).then(() => showToast('地址已复制', 'success')).catch(() => {});
+}
+
+// ── 页面初始化 ──
+async function init() {
+  let activeAccounts = [];
+  try {
+    const statusRes = await fetch('/api/status');
+    const statusData = await statusRes.json();
+    activeAccounts = statusData.active_accounts || [];
+  } catch(e) {}
+
+  const savedList = loadMonitorList();
+  const groups = (() => { try { return JSON.parse(localStorage.getItem('accountGroups') || '{}'); } catch(e) { return {}; } })();
+
+  // 只恢复后端真正在运行的账号，避免页面显示空数据的僵尸卡片
+  const activeSessions = statusData.active_sessions || [];
+  const sessionMap = {};
+  activeSessions.forEach(s => { sessionMap[s.username] = s; });
+
+  activeAccounts.forEach(u => {
+    if (!monitors[u]) {
+      const g = groups[u] || (savedList.find(s => s.username === u) || {}).group || 'own';
+      createAccountCard(u, g);
+      const s = sessionMap[u];
+      if (s) {
+        // 用数据库中的实时数据直接恢复卡片，避免停在"恢复中"
+        monitors[u].viewers   = s.peak_viewers || 0;
+        monitors[u].comments  = s.total_comments || 0;
+        monitors[u].gifts     = s.total_gift_value || 0;
+        monitors[u].sessionId = s.id;
+        if (s.start_time) {
+          monitors[u].startTime = s.start_time.slice(11,16);
+          const startEl = document.getElementById(`start-time-${u}`);
+          if (startEl) startEl.textContent = s.start_time.slice(11,16);
+          const row = document.getElementById(`live-time-row-${u}`);
+          if (row) row.style.display = 'flex';
+        }
+        updateCardMetrics(u);
+        setCardLive(u, true);   // 直接显示"直播中"绿色状态
+      } else {
+        setBadge(u, '连接中...', 'connecting');
+        // 5秒后若仍未收到connected事件则改为等待状态
+        setTimeout(() => {
+          const b = document.getElementById(`badge-${u}`);
+          if (b && b.textContent === '连接中...') setBadge(u, '等待开播', 'waiting');
+        }, 8000);
+      }
+    }
+  });
+
+  // 清理 localStorage 里已不在后端运行的账号
+  const activeSet = new Set(activeAccounts);
+  const cleanedList = savedList.filter(item => activeSet.has(item.username));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanedList)); } catch(e) {}
+
+  updateGlobalStats();
+  await loadAccountList();
+  await loadRivals();
+}
+
+init();
+</script>
+
+<!-- ── 版本日志弹窗 ── -->
+<div class="changelog-modal" id="changelogModal" onclick="if(event.target===this)closeChangelog()">
+  <div class="changelog-box">
+    <div class="changelog-header">
+      <h3>📋 版本日志</h3>
+      <button onclick="closeChangelog()">✕</button>
+    </div>
+    <div class="changelog-content" id="changelogContent">加载中...</div>
+  </div>
+</div>
+<script>
+function openChangelog() {
+  document.getElementById('changelogModal').classList.add('open');
+  fetch('/api/version').then(r=>r.json()).then(d=>{
+    // 简单渲染 markdown（只处理 ## / ### / - 列表）
+    let html = (d.changelog || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    document.getElementById('changelogContent').innerHTML = html;
+  }).catch(()=>{ document.getElementById('changelogContent').textContent = '加载失败'; });
+}
+function closeChangelog() {
+  document.getElementById('changelogModal').classList.remove('open');
+}
+</script>
+</body>
+</html>
