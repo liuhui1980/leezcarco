@@ -3,18 +3,22 @@
 # Jenkins CI 构建脚本
 # 构建 Docker 镜像并推送到私有镜像仓库
 #
-# 仓库地址：192.168.2.111:80/car/leezcarco
-# 用法：在 Jenkins Pipeline 中调用此脚本
+# 仓库：192.168.2.111:80/car/leezcarco
+# 直接在 Jenkins 执行此脚本即可，无需额外配置
 # ===================================================
 
-set -e  # 任意命令失败立即退出
+set -e
 
-# ==================== 配置 ====================
+# ==================== 写死配置 ====================
 REGISTRY="192.168.2.111:80"
 REPO="car/leezcarco"
 IMAGE_NAME="${REGISTRY}/${REPO}"
 
-# 版本号：优先用 Jenkins BUILD_NUMBER，否则用 git commit hash
+# 镜像仓库登录凭据（按实际填写）
+REGISTRY_USER="admin"
+REGISTRY_PASS="Harbor12345"
+
+# 版本 tag：优先用 Jenkins BUILD_NUMBER，否则用 git commit hash
 if [ -n "${BUILD_NUMBER}" ]; then
     TAG="build-${BUILD_NUMBER}"
 else
@@ -35,17 +39,12 @@ log "开始构建 TikTok Monitor"
 log "镜像：${FULL_IMAGE}"
 log "========================================"
 
-# 登录私有镜像仓库
-# 凭据建议用 Jenkins Credentials 注入，这里支持环境变量传入
-if [ -n "${REGISTRY_USER}" ] && [ -n "${REGISTRY_PASS}" ]; then
-    log "登录镜像仓库 ${REGISTRY} ..."
-    echo "${REGISTRY_PASS}" | docker login "${REGISTRY}" -u "${REGISTRY_USER}" --password-stdin
-else
-    log "未检测到 REGISTRY_USER/REGISTRY_PASS，跳过登录（假设已登录）"
-fi
+# 登录镜像仓库
+log "登录镜像仓库 ${REGISTRY} ..."
+echo "${REGISTRY_PASS}" | docker login "${REGISTRY}" -u "${REGISTRY_USER}" --password-stdin
 
 # 构建镜像
-log "构建镜像 ${FULL_IMAGE} ..."
+log "构建镜像 ..."
 docker build \
     --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --build-arg VERSION="${TAG}" \
@@ -65,14 +64,12 @@ docker push "${FULL_IMAGE}"
 log "推送 ${LATEST_IMAGE} ..."
 docker push "${LATEST_IMAGE}"
 
-log "========================================"
-log "构建推送完成！"
-log "镜像：${FULL_IMAGE}"
-log "最新：${LATEST_IMAGE}"
-log "========================================"
-
-# 清理本地悬空镜像（节省磁盘）
+# 清理悬空镜像
 log "清理悬空镜像 ..."
 docker image prune -f
 
+log "========================================"
 log "全部完成 ✓"
+log "镜像：${FULL_IMAGE}"
+log "最新：${LATEST_IMAGE}"
+log "========================================"
