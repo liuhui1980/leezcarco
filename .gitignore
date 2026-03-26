@@ -1,5 +1,6 @@
 # 敏感配置（包含 Token/Session，不上传）
 config.py
+config/config.py
 
 # 数据库文件
 *.db

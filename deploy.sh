@@ -25,7 +25,7 @@ CONTAINER_NAME="tiktok-monitor"
 APP_PORT=5001
 DATA_DIR="/opt/leezcarco/data"
 REPORTS_DIR="/opt/leezcarco/reports"
-CONFIG_FILE="/opt/leezcarco/config.py"
+CONFIG_FILE="/opt/leezcarco/config/config.py"
 
 # ==================== 日志函数 ====================
 log() {
@@ -72,7 +72,7 @@ docker run -d \
     -p "${APP_PORT}:${APP_PORT}" \
     -v "${DATA_DIR}:/app/data" \
     -v "${REPORTS_DIR}:/app/reports" \
-    -v "${CONFIG_FILE}:/app/config.py:ro" \
+    -v "$(dirname ${CONFIG_FILE}):/app/config:ro" \
     -v "whisper-cache:/root/.cache/whisper" \
     -e PYTHONUNBUFFERED=1 \
     --gpus all \

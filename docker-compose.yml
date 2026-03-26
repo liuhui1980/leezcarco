@@ -16,10 +16,10 @@ services:
       - ./data:/app/data
       # Excel 报告持久化
       - ./reports:/app/reports
-      # 配置文件挂载
-      # ⚠️ 重要：config.py 必须提前在宿主机创建好（文件，不是目录）
-      # Windows 用户：在 D:\docker\leezcarco\ 下创建 config.py 文件
-      - ./config.py:/app/config.py:ro
+      # 配置目录挂载（比直接挂载文件更稳定，避免 Docker 误建目录）
+      # ⚠️ 在宿主机 ./config/ 目录下放置 config.py 文件
+      # Windows: D:\docker\leezcarco\config\config.py
+      - ./config:/app/config:ro
       # Whisper 模型缓存（避免每次重启重新下载 ~3GB）
       - whisper-cache:/root/.cache/whisper
     environment:

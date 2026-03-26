@@ -29,6 +29,14 @@ def _read_changelog():
         return ''
 
 APP_VERSION = _read_version()
+
+# ── config 路径兼容：支持 config/config.py 或根目录 config.py ──
+import sys as _sys
+_base = os.path.dirname(os.path.abspath(__file__))
+_config_dir = os.path.join(_base, 'config')
+if os.path.isdir(_config_dir) and _config_dir not in _sys.path:
+    _sys.path.insert(0, _config_dir)  # config/config.py 优先
+
 from flask_socketio import SocketIO
 from src.database import (
     init_db, get_all_sessions, get_session_summary, get_active_sessions,
