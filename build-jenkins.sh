@@ -64,10 +64,6 @@ docker push "${FULL_IMAGE}"
 log "推送 ${LATEST_IMAGE} ..."
 docker push "${LATEST_IMAGE}"
 
-# 清理悬空镜像
-log "清理悬空镜像 ..."
-docker image prune -f
-
 log "========================================"
 log "全部完成 ✓"
 log "镜像：${FULL_IMAGE}"
