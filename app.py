@@ -47,7 +47,7 @@ from src.database import (
     get_auto_monitor_list, upsert_auto_monitor, delete_auto_monitor,
     toggle_auto_monitor, get_enabled_auto_monitors
 )
-from src.monitor import start_monitor, stop_monitor, get_active_usernames
+from src.monitor import start_monitor, stop_monitor, get_active_usernames, get_monitors_snapshot
 
 # ── Cloudflare Tunnel 状态 ──
 _tunnel_url = None
@@ -1010,11 +1010,12 @@ def on_ws_disconnect():
 
 @socketio.on('request_status')
 def on_request_status():
-    """前端请求当前状态"""
+    """前端请求当前状态（页面刷新/重连后恢复看板）"""
     from flask_socketio import emit
     emit('status_update', {
         'active_accounts': get_active_usernames(),
-        'active_sessions': get_active_sessions()
+        'active_sessions': get_active_sessions(),
+        'monitors_snapshot': get_monitors_snapshot(),  # 完整实时状态快照
     })
 
 

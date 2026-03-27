@@ -568,7 +568,58 @@ socket.on('tunnel_url', (data) => {
 });
 
 socket.on('status_update', (data) => {
-  (data.active_accounts || []).forEach(u => { if (!monitors[u]) createAccountCard(u, 'own'); });
+  // 1. 先用快照恢复每个活跃账号的卡片（含实时数据）
+  const snapMap = {};
+  (data.monitors_snapshot || []).forEach(s => { snapMap[s.username] = s; });
+
+  (data.active_accounts || []).forEach(u => {
+    if (!monitors[u]) createAccountCard(u, 'own');
+
+    const snap = snapMap[u];
+    if (snap) {
+      // 恢复实时数据
+      monitors[u].viewers   = snap.viewer_count  || 0;
+      monitors[u].likes     = snap.like_count     || 0;
+      monitors[u].comments  = snap.comment_count  || 0;
+      monitors[u].sessionId = snap.session_id     || null;
+      monitors[u].startTime = snap.start_time     || null;
+
+      // 恢复开播时间显示
+      if (snap.start_time) {
+        const stEl = document.getElementById(`start-time-${u}`);
+        if (stEl) stEl.textContent = snap.start_time.slice(11, 16);
+        const rowEl = document.getElementById(`live-time-row-${u}`);
+        if (rowEl) rowEl.style.display = 'flex';
+        // 恢复已播时长计时器
+        const startTs = new Date(snap.start_time).getTime();
+        if (!isNaN(startTs)) {
+          monitors[u]._startTs = startTs;
+          if (!monitors[u]._durationTimer) {
+            monitors[u]._durationTimer = setInterval(() => {
+              const durEl = document.getElementById(`duration-${u}`);
+              if (durEl) {
+                const m = Math.floor((Date.now() - startTs) / 60000);
+                durEl.textContent = m >= 60 ? `${Math.floor(m/60)}h${m%60}m` : `${m}m`;
+              }
+            }, 30000);
+            // 立即刷新一次
+            const durEl = document.getElementById(`duration-${u}`);
+            if (durEl) {
+              const m = Math.floor((Date.now() - startTs) / 60000);
+              durEl.textContent = m >= 60 ? `${Math.floor(m/60)}h${m%60}m` : `${m}m`;
+            }
+          }
+        }
+      }
+
+      // 若已开播则设为直播状态
+      if (snap.is_live) setCardLive(u, true);
+
+      // 刷新指标显示
+      updateCardMetrics(u);
+    }
+  });
+
   updateGlobalStats();
 });
 

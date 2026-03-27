@@ -523,3 +523,19 @@ def stop_monitor(username: str):
 def get_active_usernames():
     """获取当前正在监控的账号列表"""
     return list(active_monitors.keys())
+
+
+def get_monitors_snapshot():
+    """获取所有活跃监控的当前实时状态快照（用于前端重连恢复）"""
+    result = []
+    for username, monitor in list(active_monitors.items()):
+        result.append({
+            'username': username,
+            'session_id': monitor.session_id,
+            'start_time': monitor.start_time,
+            'viewer_count': monitor.viewer_count,
+            'like_count': monitor.like_count,
+            'comment_count': monitor.comment_count,
+            'is_live': monitor.session_id is not None,  # session_id 存在说明已开播
+        })
+    return result
