@@ -177,8 +177,8 @@
       <div class="navbar-name">Tuke<span>carco</span></div>
       <div class="navbar-sub">TikTok 直播监测系统</div>
     </div>
+    <span class="version-badge" onclick="openChangelog(event)" title="点击查看版本日志">v{{ app_version }}</span>
   </a>
-  <span class="version-badge" onclick="openChangelog()" title="点击查看版本日志">v{{ app_version }}</span>
   <nav class="navbar-nav">
     <a href="/" class="nav-link">实时看板</a>
     <a href="/history" class="nav-link active">历史记录</a>
@@ -511,7 +511,8 @@ fetch('/api/sessions').then(r => r.json()).then(sessions => {
   </div>
 </div>
 <script>
-function openChangelog() {
+function openChangelog(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
   document.getElementById('changelogModal').classList.add('open');
   fetch('/api/version').then(r=>r.json()).then(d=>{
     let html = (d.changelog||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
