@@ -206,7 +206,7 @@ class LiveMonitor:
             except Exception as e:
                 logger.error(f"生成报告失败: {e}")
 
-        # 从活跃列表移除
+        # 从活跃列表移除（统一由此处移除，stop_monitor 不再重复 pop）
         active_monitors.pop(self.username, None)
 
     def _on_transcript(self, username: str, text: str, timestamp: str, lang_info: dict = None):
@@ -217,18 +217,18 @@ class LiveMonitor:
 
         # 翻译到中文（非中文才翻译，在后台线程异步执行避免阻塞）
         import threading
-        text_zh = ''
 
         def _do_translate_and_store():
-            nonlocal text_zh
+            # 使用局部变量，避免多条话术并发翻译时的竞态
+            _text_zh = ''
             lang = lang_info.get('lang', 'other')
             try:
                 src = 'ar' if lang.startswith('ar') else lang if lang != 'other' else 'auto'
                 result = translate_to_zh(text, source_lang=src)
                 # translate_to_zh 成功返回译文，失败返回 None
-                text_zh = result or ''
+                _text_zh = result or ''
             except Exception:
-                text_zh = ''
+                _text_zh = ''
 
             # 统计话术语言分布
             speech_lang_stats.add(self.username, lang_info)
@@ -239,7 +239,7 @@ class LiveMonitor:
                     session_id=self.session_id,
                     anchor=self.username,
                     text=text,
-                    text_zh=text_zh,
+                    text_zh=_text_zh,
                     lang=lang_info.get('lang', 'other'),
                     lang_short=lang_info.get('lang_short', '?'),
                     lang_display=lang_info.get('lang_display', '未知'),
@@ -252,7 +252,7 @@ class LiveMonitor:
             # 推送到前端（含翻译）
             self._emit('new_speech', {
                 'text': text,
-                'text_zh': text_zh,
+                'text_zh': _text_zh,
                 'timestamp': timestamp,
                 'lang': lang_info.get('lang', 'other'),
                 'lang_short': lang_info.get('lang_short', '?'),
@@ -497,9 +497,9 @@ def start_monitor(username: str, socketio=None):
 
 def stop_monitor(username: str):
     """停止对某账号的监控"""
-    monitor = active_monitors.pop(username, None)
+    monitor = active_monitors.get(username)
     if monitor:
-        # 直接设置 running=False，让监控循环自然退出（避免 asyncio.run 嵌套问题）
+        # 直接设置 running=False，让监控循环自然退出
         monitor.running = False
         # 如果有 client 连接，尝试在后台线程断开
         import threading

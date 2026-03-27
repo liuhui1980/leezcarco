@@ -47,6 +47,8 @@ class SpeechMonitor:
 
     SEGMENT_SECS = 6          # 每段音频时长（秒）
     WHISPER_MODEL = "large-v3" # large-v3: 支持中/英/阿拉伯语方言，约 3GB
+    MAX_CONSECUTIVE_ERRORS = 8  # 最大连续错误次数（增大容忍度）
+    RECONNECT_WAIT = 3          # 断流等待重连基础时间（秒）
 
     def __init__(self, username: str, stream_url: str, on_transcript: Callable, socketio=None):
         """
@@ -102,18 +104,25 @@ class SpeechMonitor:
 
         while self.running:
             try:
-                wav_path = os.path.join(self._tmpdir.name, f"seg_{seg_idx:06d}.wav")
+                # 防止 stop() 在检查 running 后、使用 _tmpdir 前将其置为 None
+                tmpdir = self._tmpdir
+                if tmpdir is None:
+                    break
+                wav_path = os.path.join(tmpdir.name, f"seg_{seg_idx:06d}.wav")
                 success = self._pull_segment(wav_path, duration=self.SEGMENT_SECS)
 
                 if not success:
                     consecutive_errors += 1
-                    if consecutive_errors >= 5:
-                        logger.error(f"[{self.username}] 连续 5 次拉流失败，语音监控停止")
+                    if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
+                        logger.error(f"[{self.username}] 连续 {self.MAX_CONSECUTIVE_ERRORS} 次拉流失败，语音监控停止")
                         break
-                    time.sleep(1)
+                    # 指数退避：1s → 2s → 4s → 最大 8s
+                    wait = min(self.RECONNECT_WAIT * (2 ** (consecutive_errors - 1)), 8)
+                    logger.warning(f"[{self.username}] 拉流失败 ({consecutive_errors}/{self.MAX_CONSECUTIVE_ERRORS})，{wait}s 后重试")
+                    time.sleep(wait)
                     continue
 
-                consecutive_errors = 0
+                consecutive_errors = 0  # 重置错误计数
                 text = self._transcribe(model, wav_path)
 
                 # 清理临时文件
@@ -139,6 +148,7 @@ class SpeechMonitor:
 
             except Exception as e:
                 logger.error(f"[{self.username}] 语音处理异常: {e}")
+                consecutive_errors += 1
                 time.sleep(2)
 
     def _pull_segment(self, output_path: str, duration: int) -> bool:
@@ -205,19 +215,35 @@ class SpeechMonitor:
         """
         调用 Whisper 对 WAV 文件转文字，自动检测语言（中/英/阿拉伯语等）
         large-v3 支持 99 种语言，含阿拉伯语方言
+        Task 10 优化：若上一段已是阿拉伯语，本段直接传 language='ar' 提示，速度+准确率双提升
         """
         try:
             import whisper
+
+            # 若上一段是阿拉伯语，给 Whisper 语言提示（减少语言检测耗时，提高阿语准确率）
+            last_lang = getattr(self, '_last_whisper_lang', '')
+            hint_lang = 'ar' if last_lang in ('ar', 'arabic') else None
+
             result = model.transcribe(
                 wav_path,
-                language=None,          # None = 自动检测语言
+                language=hint_lang,     # None = 自动检测，'ar' = 阿语提示
                 task="transcribe",      # transcribe = 保留原语言
                 fp16=False,             # macOS CPU/MPS 模式
-                verbose=False
+                verbose=False,
+                condition_on_previous_text=False,  # 关闭上下文依赖，减少幻觉
+                no_speech_threshold=0.6,           # 提高无语音判断阈值（减少误识别）
+                logprob_threshold=-1.0,            # 降低低概率拒绝阈值
             )
-            # 保存 Whisper 检测到的语言代码供方言识别使用
+            # 保存 Whisper 检测到的语言代码供下一段使用
             self._last_whisper_lang = result.get("language", "")
-            return result.get("text", "").strip()
+            text = result.get("text", "").strip()
+
+            # 过滤 Whisper 幻觉（常见的无意义重复输出）
+            if text and len(set(text.split())) <= 2 and len(text) > 20:
+                logger.debug(f"[{self.username}] 过滤疑似幻觉输出: {text[:40]}")
+                return ""
+
+            return text
         except Exception as e:
             logger.error(f"[{self.username}] Whisper 转写失败: {e}")
             return ""

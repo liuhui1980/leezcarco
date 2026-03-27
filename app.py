@@ -183,7 +183,7 @@ def login_page():
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
     """登录接口"""
-    data = request.get_json()
+    data = request.get_json() or {}
     username = (data.get('username') or '').strip()
     password = (data.get('password') or '').strip()
     if not username or not password:
@@ -214,7 +214,7 @@ def api_logout():
 @app.route('/api/auth/register', methods=['POST'])
 def api_register():
     """自助注册接口 — 注册后进入待审核状态，需管理员批准后才能登录"""
-    data = request.get_json()
+    data = request.get_json() or {}
     username = (data.get('username') or '').strip()
     password = (data.get('password') or '').strip()
     real_name = (data.get('real_name') or '').strip()
@@ -247,7 +247,7 @@ def api_me():
 def api_change_password():
     """修改自己的密码"""
     u = get_current_user()
-    data = request.get_json()
+    data = request.get_json() or {}
     old_pw = (data.get('old_password') or '').strip()
     new_pw = (data.get('new_password') or '').strip()
     if not old_pw or not new_pw:
@@ -277,8 +277,32 @@ def admin_page():
 @app.route('/api/admin/users')
 @admin_required
 def api_admin_users():
-    """获取所有系统用户"""
+    """获取所有系统用户（含使用摘要统计）"""
     users = get_all_users()
+    # 补充每位用户的使用统计
+    try:
+        from src.database import get_conn
+        conn = get_conn()
+        for u in users:
+            uid = u['id']
+            # 监控场次总数
+            row = conn.execute(
+                'SELECT COUNT(*) as cnt FROM live_sessions WHERE owner_user_id=?', (uid,)
+            ).fetchone()
+            u['session_count'] = row['cnt'] if row else 0
+            # 最近一次监控时间
+            row2 = conn.execute(
+                'SELECT start_time FROM live_sessions WHERE owner_user_id=? ORDER BY id DESC LIMIT 1', (uid,)
+            ).fetchone()
+            u['last_active'] = row2['start_time'] if row2 else None
+            # 监控账号数（distinct）
+            row3 = conn.execute(
+                'SELECT COUNT(DISTINCT anchor) as cnt FROM live_sessions WHERE owner_user_id=?', (uid,)
+            ).fetchone()
+            u['account_count'] = row3['cnt'] if row3 else 0
+        conn.close()
+    except Exception as e:
+        logger.warning(f'获取用户统计失败: {e}')
     return jsonify({'users': users})
 
 
@@ -286,7 +310,7 @@ def api_admin_users():
 @admin_required
 def api_admin_create_user():
     """创建新用户"""
-    data = request.get_json()
+    data = request.get_json() or {}
     username = (data.get('username') or '').strip()
     password = (data.get('password') or '').strip()
     if not username or not password:
@@ -316,7 +340,7 @@ def api_admin_delete_user(user_id):
 @admin_required
 def api_admin_reset_password(user_id):
     """管理员重置某用户密码"""
-    data = request.get_json()
+    data = request.get_json() or {}
     new_pw = (data.get('new_password') or '').strip()
     if not new_pw or len(new_pw) < 6:
         return jsonify({'success': False, 'msg': '新密码至少6位'}), 400
@@ -413,6 +437,8 @@ def api_sessions():
 def api_session_detail(session_id):
     """单场直播详情"""
     summary = get_session_summary(session_id)
+    if summary is None:
+        return jsonify({'error': '记录不存在'}), 404
     return jsonify(summary)
 
 
@@ -458,7 +484,7 @@ def api_check_live():
 @login_required
 def api_start_monitor():
     """启动监控"""
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get('username', '').strip().lstrip('@')
     if not username:
         return jsonify({'success': False, 'msg': '用户名不能为空'}), 400
@@ -474,7 +500,7 @@ def api_start_monitor():
 @login_required
 def api_stop_monitor():
     """停止监控"""
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get('username', '').strip().lstrip('@')
     result = stop_monitor(username)
     if result:
@@ -487,7 +513,7 @@ def api_stop_monitor():
 @login_required
 def api_batch_start():
     """批量启动监控"""
-    data = request.get_json()
+    data = request.get_json() or {}
     usernames = data.get('usernames', [])
     results = []
     for u in usernames:
@@ -528,17 +554,13 @@ def api_session_speech(session_id):
 @app.route('/api/session/<int:session_id>/ai_summary', methods=['POST'])
 @login_required
 def api_session_ai_summary(session_id):
-    """AI 智能总结（话术或评论），使用 Gemini Flash 模型"""
+    """AI 智能总结（话术或评论），优先 Gemini → 降级 Pollinations.ai 免费 AI"""
     req = request.get_json(force=True) or {}
     summary_type = req.get('type', 'speech')  # 'speech' 或 'comment'
 
     try:
         from src.gemini_api import summarize_speech, summarize_comments
         from src.database import get_speech_summary as db_speech, get_session_summary
-        import config as cfg
-
-        if not getattr(cfg, 'GEMINI_API_KEY', ''):
-            return jsonify({'success': False, 'summary': '', 'msg': '未配置 Gemini API Key，请在 config.py 中填写 GEMINI_API_KEY'})
 
         if summary_type == 'speech':
             sp = db_speech(session_id)
@@ -548,10 +570,52 @@ def api_session_ai_summary(session_id):
             comments = sess_data.get('comments', [])
             summary = summarize_comments(comments)
 
+        if not summary:
+            return jsonify({'success': False, 'summary': '', 'msg': 'AI 暂时不可用，请稍后重试'})
         return jsonify({'success': True, 'summary': summary})
     except Exception as e:
         logger.error(f'AI 总结失败: {e}')
         return jsonify({'success': False, 'summary': '', 'msg': str(e)})
+
+
+@app.route('/api/card/ai_summary', methods=['POST'])
+@login_required
+def api_card_ai_summary():
+    """卡片实时 AI 摘要（传入话术/评论文本列表，直接总结）"""
+    req = request.get_json(force=True) or {}
+    speech_texts = req.get('speech', [])
+    comment_texts = req.get('comments', [])
+
+    result = {'speech_summary': '', 'comment_summary': ''}
+    try:
+        from src.gemini_api import call_ai
+
+        if speech_texts and len(speech_texts) >= 3:
+            combined = '\n'.join(speech_texts[:30])
+            prompt = f"""以下是 TikTok 直播主播的话术片段：
+
+{combined}
+
+请用中文写一句简洁的摘要（60字以内），概括主播正在说什么/推什么。
+只输出摘要，不要加标题。"""
+            result['speech_summary'] = call_ai(prompt, max_tokens=120) or ''
+
+        if comment_texts and len(comment_texts) >= 5:
+            combined = '\n'.join(comment_texts[:40])
+            prompt = f"""以下是 TikTok 直播间的观众评论：
+
+{combined}
+
+请用中文写一句简洁的摘要（60字以内），说明观众当前最关注什么。
+只输出摘要，不要加标题。"""
+            result['comment_summary'] = call_ai(prompt, max_tokens=120) or ''
+
+    except Exception as e:
+        logger.warning(f'卡片 AI 摘要失败: {e}')
+
+    return jsonify(result)
+
+
 
 
 @app.route('/api/session/<int:session_id>/download_speech')
@@ -611,6 +675,7 @@ def api_download_comments(session_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/session/<int:session_id>/review')
 @login_required
 def api_session_review(session_id):
     """主播复盘对比数据（本场 vs 上场 vs 近7场均值 vs 历史最佳）"""
@@ -632,8 +697,8 @@ def api_accounts():
             seen[un] = s.get('status') == 'live'
     active_now = set(get_active_usernames())
     result = [
-        {'username': un, 'is_live': (un in active_now or is_live)}
-        for un, is_live in seen.items()
+        {'username': un, 'is_live': (un in active_now)}
+        for un, _is_live in seen.items()
     ]
     result.sort(key=lambda x: (0 if x['is_live'] else 1, x['username']))
     return jsonify(result)
@@ -644,7 +709,7 @@ def api_accounts():
 def api_set_account_group():
     """设置账号分组"""
     u = get_current_user()
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get('username', '').strip().lstrip('@')
     group = data.get('group', 'own')
     if not username:
@@ -662,51 +727,53 @@ def api_rivals():
     u = get_current_user()
     from src.database import get_conn
     conn = get_conn()
-    c = conn.cursor()
-    uid = u['id'] if not u['is_admin'] else None
-    if uid:
-        c.execute("SELECT username, display_name FROM account_groups WHERE group_name='rival' AND owner_user_id=?", (uid,))
-    else:
-        c.execute("SELECT username, display_name FROM account_groups WHERE group_name='rival'")
-    rival_rows = [(r['username'], r['display_name']) for r in c.fetchall()]
-    active_now = set(get_active_usernames())
-    result = []
-    for username, display_name in rival_rows:
-        c.execute(
-            "SELECT id, peak_viewers, total_viewers, total_gift_value, total_comments, new_followers, start_time, end_time FROM live_sessions WHERE username=? AND status='ended' ORDER BY start_time DESC LIMIT 10",
-            (username,)
-        )
-        sessions = [dict(r) for r in c.fetchall()]
-        n = len(sessions)
-        # 计算均值、最佳、近3场
-        def avg(key): return round(sum(s[key] or 0 for s in sessions) / n) if n else 0
-        def best(key): return max((s[key] or 0 for s in sessions), default=0)
-        def dur(s):
-            try:
-                from datetime import datetime as dt
-                a = dt.fromisoformat(s['start_time'])
-                b = dt.fromisoformat(s['end_time'])
-                return round((b - a).total_seconds() / 60)
-            except: return 0
-        avg_dur = round(sum(dur(s) for s in sessions) / n) if n else 0
-        result.append({
-            'username': username,
-            'display_name': display_name or username,
-            'is_live': username in active_now,
-            'session_count': n,
-            'avg_peak_viewers': avg('peak_viewers'),
-            'avg_total_viewers': avg('total_viewers'),
-            'avg_gift_value': avg('total_gift_value'),
-            'avg_comments': avg('total_comments'),
-            'avg_followers': avg('new_followers'),
-            'avg_duration_min': avg_dur,
-            'best_peak_viewers': best('peak_viewers'),
-            'best_gift_value': best('total_gift_value'),
-            'recent_sessions': [{'id': s['id'], 'peak': s['peak_viewers'], 'gift': s['total_gift_value'], 'start': s['start_time']} for s in sessions[:5]],
-        })
-    conn.close()
-    result.sort(key=lambda x: (0 if x['is_live'] else 1, -x['avg_peak_viewers']))
-    return jsonify({'rivals': result})
+    try:
+        c = conn.cursor()
+        uid = u['id'] if not u['is_admin'] else None
+        if uid:
+            c.execute("SELECT username, display_name FROM account_groups WHERE group_name='rival' AND owner_user_id=?", (uid,))
+        else:
+            c.execute("SELECT username, display_name FROM account_groups WHERE group_name='rival'")
+        rival_rows = [(r['username'], r['display_name']) for r in c.fetchall()]
+        active_now = set(get_active_usernames())
+        result = []
+        for username, display_name in rival_rows:
+            c.execute(
+                "SELECT id, peak_viewers, total_viewers, total_gift_value, total_comments, new_followers, start_time, end_time FROM live_sessions WHERE username=? AND status='ended' ORDER BY start_time DESC LIMIT 10",
+                (username,)
+            )
+            sessions = [dict(r) for r in c.fetchall()]
+            n = len(sessions)
+            # 计算均值、最佳、近3场
+            def avg(key): return round(sum(s[key] or 0 for s in sessions) / n) if n else 0
+            def best(key): return max((s[key] or 0 for s in sessions), default=0)
+            def dur(s):
+                try:
+                    from datetime import datetime as dt
+                    a = dt.fromisoformat(s['start_time'])
+                    b = dt.fromisoformat(s['end_time'])
+                    return round((b - a).total_seconds() / 60)
+                except: return 0
+            avg_dur = round(sum(dur(s) for s in sessions) / n) if n else 0
+            result.append({
+                'username': username,
+                'display_name': display_name or username,
+                'is_live': username in active_now,
+                'session_count': n,
+                'avg_peak_viewers': avg('peak_viewers'),
+                'avg_total_viewers': avg('total_viewers'),
+                'avg_gift_value': avg('total_gift_value'),
+                'avg_comments': avg('total_comments'),
+                'avg_followers': avg('new_followers'),
+                'avg_duration_min': avg_dur,
+                'best_peak_viewers': best('peak_viewers'),
+                'best_gift_value': best('total_gift_value'),
+                'recent_sessions': [{'id': s['id'], 'peak': s['peak_viewers'], 'gift': s['total_gift_value'], 'start': s['start_time']} for s in sessions[:5]],
+            })
+        result.sort(key=lambda x: (0 if x['is_live'] else 1, -x['avg_peak_viewers']))
+        return jsonify({'rivals': result})
+    finally:
+        conn.close()
 
 
 @app.route('/api/compare')
@@ -717,66 +784,68 @@ def api_compare():
     uid = u['id'] if not u['is_admin'] else None
     from src.database import get_conn
     conn = get_conn()
-    c = conn.cursor()
+    try:
+        c = conn.cursor()
 
-    active_now = set(get_active_usernames())
+        active_now = set(get_active_usernames())
 
-    def get_stats(username, limit=10):
-        c.execute(
-            "SELECT id, peak_viewers, total_viewers, total_gift_value, total_comments, new_followers, start_time, end_time FROM live_sessions WHERE username=? AND status='ended' ORDER BY start_time DESC LIMIT ?",
-            (username, limit)
-        )
-        sessions = [dict(r) for r in c.fetchall()]
-        n = len(sessions)
-        if not n:
-            return None
-        def avg(key): return round(sum(s[key] or 0 for s in sessions) / n, 1)
-        def dur(s):
-            try:
-                from datetime import datetime as dt
-                return round((dt.fromisoformat(s['end_time']) - dt.fromisoformat(s['start_time'])).total_seconds() / 60)
-            except: return 0
-        # 近期场次（旧→新，最多10条，含 peak/gift/start_time）
-        recent = [
-            {
-                'id': s['id'],
-                'peak': s['peak_viewers'] or 0,
-                'gift': s['total_gift_value'] or 0,
-                'start': (s['start_time'] or '')[:10],
+        def get_stats(username, limit=10):
+            c.execute(
+                "SELECT id, peak_viewers, total_viewers, total_gift_value, total_comments, new_followers, start_time, end_time FROM live_sessions WHERE username=? AND status='ended' ORDER BY start_time DESC LIMIT ?",
+                (username, limit)
+            )
+            sessions = [dict(r) for r in c.fetchall()]
+            n = len(sessions)
+            if not n:
+                return None
+            def avg(key): return round(sum(s[key] or 0 for s in sessions) / n, 1)
+            def dur(s):
+                try:
+                    from datetime import datetime as dt
+                    return round((dt.fromisoformat(s['end_time']) - dt.fromisoformat(s['start_time'])).total_seconds() / 60)
+                except: return 0
+            # 近期场次（旧→新，最多10条，含 peak/gift/start_time）
+            recent = [
+                {
+                    'id': s['id'],
+                    'peak': s['peak_viewers'] or 0,
+                    'gift': s['total_gift_value'] or 0,
+                    'start': (s['start_time'] or '')[:10],
+                }
+                for s in reversed(sessions)
+            ]
+            return {
+                'username': username,
+                'is_live': username in active_now,
+                'session_count': n,
+                'avg_peak': avg('peak_viewers'),
+                'avg_total': avg('total_viewers'),
+                'avg_gift': round(sum(s['total_gift_value'] or 0 for s in sessions) / n, 2),
+                'avg_comments': avg('total_comments'),
+                'avg_followers': avg('new_followers'),
+                'avg_duration': round(sum(dur(s) for s in sessions) / n),
+                'recent_sessions': recent,
             }
-            for s in reversed(sessions)
-        ]
-        return {
-            'username': username,
-            'is_live': username in active_now,
-            'session_count': n,
-            'avg_peak': avg('peak_viewers'),
-            'avg_total': avg('total_viewers'),
-            'avg_gift': round(sum(s['total_gift_value'] or 0 for s in sessions) / n, 2),
-            'avg_comments': avg('total_comments'),
-            'avg_followers': avg('new_followers'),
-            'avg_duration': round(sum(dur(s) for s in sessions) / n),
-            'recent_sessions': recent,
-        }
 
-    # 自营账号
-    if uid:
-        c.execute("SELECT username FROM account_groups WHERE group_name='own' AND owner_user_id=?", (uid,))
-    else:
-        c.execute("SELECT username FROM account_groups WHERE group_name='own'")
-    own_users = [r['username'] for r in c.fetchall()]
-    # 竞品账号
-    if uid:
-        c.execute("SELECT username FROM account_groups WHERE group_name='rival' AND owner_user_id=?", (uid,))
-    else:
-        c.execute("SELECT username FROM account_groups WHERE group_name='rival'")
-    rival_users = [r['username'] for r in c.fetchall()]
+        # 自营账号
+        if uid:
+            c.execute("SELECT username FROM account_groups WHERE group_name='own' AND owner_user_id=?", (uid,))
+        else:
+            c.execute("SELECT username FROM account_groups WHERE group_name='own'")
+        own_users = [r['username'] for r in c.fetchall()]
+        # 竞品账号
+        if uid:
+            c.execute("SELECT username FROM account_groups WHERE group_name='rival' AND owner_user_id=?", (uid,))
+        else:
+            c.execute("SELECT username FROM account_groups WHERE group_name='rival'")
+        rival_users = [r['username'] for r in c.fetchall()]
 
-    own_stats = [s for s in (get_stats(un) for un in own_users) if s]
-    rival_stats = [s for s in (get_stats(un) for un in rival_users) if s]
+        own_stats = [s for s in (get_stats(un) for un in own_users) if s]
+        rival_stats = [s for s in (get_stats(un) for un in rival_users) if s]
 
-    conn.close()
-    return jsonify({'own': own_stats, 'rivals': rival_stats})
+        return jsonify({'own': own_stats, 'rivals': rival_stats})
+    finally:
+        conn.close()
 
 
 @app.route('/api/tunnel')
@@ -793,7 +862,7 @@ def api_tunnel():
 def api_save_rivals():
     """保存竞品账号列表（持久化到 account_groups）"""
     u = get_current_user()
-    data = request.get_json()
+    data = request.get_json() or {}
     usernames = data.get('usernames', [])
     saved = []
     for un in usernames:
@@ -831,7 +900,7 @@ def api_automonitor_list():
 def api_automonitor_import():
     """批量导入自动监控账号"""
     u = get_current_user()
-    data = request.get_json()
+    data = request.get_json() or {}
     accounts = data.get('accounts', [])  # [{username, display_name, group_name, note}]
     saved = []
     for a in accounts:
@@ -857,7 +926,7 @@ def api_automonitor_import():
 def api_automonitor_delete():
     """从自动监控列表移除"""
     u = get_current_user()
-    data = request.get_json()
+    data = request.get_json() or {}
     username = (data.get('username') or '').strip().lstrip('@')
     delete_auto_monitor(u['id'], username)
     return jsonify({'success': True})
@@ -868,7 +937,7 @@ def api_automonitor_delete():
 def api_automonitor_toggle():
     """启用/禁用自动监控"""
     u = get_current_user()
-    data = request.get_json()
+    data = request.get_json() or {}
     username = (data.get('username') or '').strip().lstrip('@')
     enabled = bool(data.get('enabled', True))
     toggle_auto_monitor(u['id'], username, enabled)
@@ -954,7 +1023,7 @@ def api_rivals_recommend():
 
     # 4. 基于账号名关键词匹配历史记录中的非自营、非竞品账号
     candidate_pool = set()
-    if top_keywords:
+    if top_keywords and own_users:
         kw_conditions = ' OR '.join(["text LIKE ?" for _ in top_keywords[:5]])
         params = [f'%{kw}%' for kw in top_keywords[:5]]
         c.execute(f"""
@@ -967,6 +1036,20 @@ def api_rivals_recommend():
         for r in c.fetchall():
             un = r['username']
             if un not in rival_users and un not in own_users:
+                candidate_pool.add(un)
+    elif top_keywords:
+        kw_conditions = ' OR '.join(["text LIKE ?" for _ in top_keywords[:5]])
+        params = [f'%{kw}%' for kw in top_keywords[:5]]
+        c.execute(f"""
+            SELECT DISTINCT ls.username
+            FROM speech_records sr
+            JOIN live_sessions ls ON sr.session_id=ls.id
+            WHERE ({kw_conditions})
+            LIMIT 30
+        """, params)
+        for r in c.fetchall():
+            un = r['username']
+            if un not in rival_users:
                 candidate_pool.add(un)
 
     conn.close()

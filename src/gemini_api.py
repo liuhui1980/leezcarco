@@ -1,7 +1,8 @@
 """
-Gemini AI API 工具模块
-用于直播复盘的话术/评论智能总结功能
-免费模型：gemini-1.5-flash（每天1500次请求）
+AI 总结模块（多后端支持）
+优先级：Gemini API → Pollinations.ai 免费 AI → 规则兜底
+- Gemini: 每天 1500 次免费（需配置 API Key）
+- Pollinations.ai: 完全免费，无需注册（自动降级使用）
 """
 import logging
 import json
@@ -10,12 +11,16 @@ logger = logging.getLogger(__name__)
 
 
 def _get_config():
-    """获取 Gemini 配置"""
+    """获取配置"""
     try:
         import config
-        return config.GEMINI_API_KEY or '', getattr(config, 'GEMINI_MODEL', 'gemini-1.5-flash')
+        gemini_key = config.GEMINI_API_KEY or ''
+        gemini_model = getattr(config, 'GEMINI_MODEL', 'gemini-1.5-flash')
+        free_provider = getattr(config, 'FREE_AI_PROVIDER', 'pollinations')
+        free_model = getattr(config, 'FREE_AI_MODEL', 'openai')
+        return gemini_key, gemini_model, free_provider, free_model
     except Exception:
-        return '', 'gemini-1.5-flash'
+        return '', 'gemini-1.5-flash', 'pollinations', 'openai'
 
 
 def _get_proxy():
@@ -24,7 +29,6 @@ def _get_proxy():
         import config
         proxy = getattr(config, 'PROXY_HTTP', '')
         if proxy and 'socks5' in proxy:
-            # httpx 需要格式: socks5h://host:port
             return proxy.replace('socks5://', 'socks5h://')
         return proxy
     except Exception:
@@ -32,11 +36,8 @@ def _get_proxy():
 
 
 def call_gemini(prompt: str, max_tokens: int = 1024) -> str:
-    """
-    调用 Gemini API
-    返回: AI 回复文本，失败返回空字符串
-    """
-    api_key, model = _get_config()
+    """调用 Gemini API，返回 AI 回复文本，失败返回空字符串"""
+    api_key, model, _, _ = _get_config()
     if not api_key:
         return ''
 
@@ -68,6 +69,70 @@ def call_gemini(prompt: str, max_tokens: int = 1024) -> str:
         return ''
 
 
+def call_free_ai(prompt: str, max_tokens: int = 800) -> str:
+    """
+    调用 Pollinations.ai 免费 AI（无需 API Key）
+    使用 OpenAI 兼容接口，模型：openai（GPT-4o-mini）
+    """
+    _, _, free_provider, free_model = _get_config()
+    if free_provider == 'disabled':
+        return ''
+
+    try:
+        import httpx
+        proxy = _get_proxy()
+
+        # httpx proxy 参数兼容新旧版本
+        proxy_arg = {}
+        if proxy:
+            try:
+                import httpx as _hx
+                ver = tuple(int(x) for x in _hx.__version__.split('.')[:2])
+                if ver >= (0, 28):
+                    proxy_arg = {'proxy': proxy}
+                else:
+                    proxy_arg = {'proxies': {'http://': proxy, 'https://': proxy}}
+            except Exception:
+                proxy_arg = {'proxy': proxy}
+
+        url = 'https://text.pollinations.ai/openai'
+        headers = {'Content-Type': 'application/json'}
+        body = {
+            'model': free_model,
+            'messages': [
+                {'role': 'system', 'content': '你是一个专业的 TikTok 直播数据分析师，擅长分析主播话术和观众评论。请用中文回复，简洁精炼。'},
+                {'role': 'user', 'content': prompt}
+            ],
+            'max_tokens': max_tokens,
+            'temperature': 0.4,
+        }
+
+        with httpx.Client(**proxy_arg, timeout=40) as client:
+            resp = client.post(url, headers=headers, json=body)
+            resp.raise_for_status()
+            data = resp.json()
+            text = data['choices'][0]['message']['content']
+            return text.strip() if text else ''
+
+    except Exception as e:
+        logger.warning(f'Pollinations AI 调用失败: {e}')
+        return ''
+
+
+def call_ai(prompt: str, max_tokens: int = 800) -> str:
+    """
+    统一 AI 调用入口
+    优先 Gemini → 降级 Pollinations.ai → 返回空字符串
+    """
+    # 先尝试 Gemini
+    result = call_gemini(prompt, max_tokens)
+    if result:
+        return result
+    # 降级免费 AI
+    result = call_free_ai(prompt, max_tokens)
+    return result
+
+
 def summarize_speech(speech_records: list) -> str:
     """
     对话术记录生成智能总结
@@ -77,13 +142,9 @@ def summarize_speech(speech_records: list) -> str:
     if not speech_records:
         return ''
 
-    api_key, _ = _get_config()
-    if not api_key:
-        return _rule_based_speech_summary(speech_records)
-
     # 准备话术文本（优先用中文翻译，没有则用原文）
     texts = []
-    for r in speech_records[:80]:  # 最多80条，避免token超限
+    for r in speech_records[:80]:
         t = r.get('text_zh') or r.get('text', '')
         if t and t.strip():
             texts.append(t.strip())
@@ -103,7 +164,7 @@ def summarize_speech(speech_records: list) -> str:
 
 只输出总结内容，不要加标题或序号。"""
 
-    result = call_gemini(prompt, max_tokens=512)
+    result = call_ai(prompt, max_tokens=512)
     return result or _rule_based_speech_summary(speech_records)
 
 
@@ -115,10 +176,6 @@ def summarize_comments(comment_records: list) -> str:
     """
     if not comment_records:
         return ''
-
-    api_key, _ = _get_config()
-    if not api_key:
-        return _rule_based_comment_summary(comment_records)
 
     # 准备评论文本（过滤表情、去重）
     seen = set()
@@ -148,12 +205,12 @@ def summarize_comments(comment_records: list) -> str:
 
 只输出总结内容，不要加标题或序号。"""
 
-    result = call_gemini(prompt, max_tokens=400)
+    result = call_ai(prompt, max_tokens=400)
     return result or _rule_based_comment_summary(comment_records)
 
 
 def _rule_based_speech_summary(records: list) -> str:
-    """规则兜底：无 Gemini 时用规则生成简单总结"""
+    """规则兜底：无 AI 时用规则生成简单总结"""
     if not records:
         return ''
     total = len(records)
@@ -163,11 +220,11 @@ def _rule_based_speech_summary(records: list) -> str:
         langs[l] = langs.get(l, 0) + 1
     dominant = max(langs, key=langs.get) if langs else 'other'
     lang_name = {'zh': '中文', 'en': '英语', 'ar': '阿拉伯语'}.get(dominant.split('-')[0], dominant)
-    return f'本场共采集 {total} 段话术，主要语言为{lang_name}。（配置 Gemini API 可获得更深度的 AI 分析）'
+    return f'本场共采集 {total} 段话术，主要语言为{lang_name}。'
 
 
 def _rule_based_comment_summary(records: list) -> str:
-    """规则兜底：无 Gemini 时用规则生成简单总结"""
+    """规则兜底：无 AI 时用规则生成简单总结"""
     if not records:
         return ''
     total = len(records)
@@ -177,4 +234,4 @@ def _rule_based_comment_summary(records: list) -> str:
         langs[l] = langs.get(l, 0) + 1
     dominant = max(langs, key=langs.get) if langs else 'other'
     lang_name = {'zh': '中文', 'en': '英语', 'ar': '阿拉伯语'}.get(dominant.split('-')[0], dominant)
-    return f'本场共有 {total} 条评论，主要语言为{lang_name}。（配置 Gemini API 可获得更深度的 AI 分析）'
+    return f'本场共有 {total} 条评论，主要语言为{lang_name}。'

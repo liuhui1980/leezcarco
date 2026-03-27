@@ -127,6 +127,27 @@
   .no-data-title { font-size:14px; font-weight:600; color:var(--text2); margin-bottom:6px; }
   .no-data-desc { font-size:12px; line-height:1.6; }
 
+  /* ── 响应式 ── */
+  @media(max-width:1000px) { .main { padding:16px; } }
+  @media(max-width:768px) {
+    .main { max-width:100%; }
+    .page-header { flex-direction:column; align-items:flex-start; }
+  }
+  @media(max-width:640px) {
+    .navbar { padding:0 12px; height:auto; min-height:56px; flex-wrap:wrap; padding-top:8px; padding-bottom:8px; }
+    .navbar-nav { flex-wrap:wrap; gap:2px; }
+    .nav-link { font-size:12px; padding:4px 8px; }
+    .main { padding:10px; }
+    .section { padding:14px; }
+    .add-rival-form { flex-wrap:wrap; gap:8px; }
+    .rival-input { width:100%; max-width:100% !important; }
+    .tab-bar { flex-wrap:wrap; }
+  }
+  @media(max-width:480px) {
+    .navbar-sub, .version-badge { display:none; }
+    .page-title { font-size:17px; }
+  }
+
   /* ── Toast ── */
   .toast { position:fixed; top:20px; right:20px; background:var(--text); color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; z-index:9999; animation:fadeIn .2s; box-shadow:0 4px 20px rgba(0,0,0,.2); }
   @keyframes fadeIn { from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)} }

@@ -99,6 +99,25 @@
   #toast.show { transform:translateY(0); opacity:1; }
   #toast.success { background:var(--success); }
   #toast.error { background:var(--danger); }
+
+  /* ── 响应式 ── */
+  @media(max-width:768px) {
+    .main { padding:16px; max-width:100%; }
+    .import-area { grid-template-columns:1fr; }
+    .import-actions { flex-direction:row; flex-wrap:wrap; min-width:unset; }
+  }
+  @media(max-width:640px) {
+    .navbar { padding:0 12px; height:auto; min-height:56px; flex-wrap:wrap; padding-top:8px; padding-bottom:8px; }
+    .nav-link { font-size:12px; padding:4px 8px; }
+    .main { padding:10px; }
+    .panel { padding:14px; }
+    .am-header { flex-wrap:wrap; gap:6px; }
+  }
+  @media(max-width:480px) {
+    .navbar-sub, .version-badge { display:none; }
+    .page-title { font-size:17px; }
+  }
+
   /* ── 版本徽章 ── */
   .version-badge { font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;padding:2px 7px;cursor:pointer;transition:all .15s;user-select:none;letter-spacing:.3px;white-space:nowrap; }
   .version-badge:hover { background:#e5e7eb;color:#374151; }

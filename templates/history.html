@@ -165,6 +165,27 @@
   .changelog-content h2 { font-size:14px;font-weight:700;color:#fe2c55;margin:12px 0 4px; }
   .changelog-content h3 { font-size:13px;font-weight:600;color:#1a1d2e;margin:8px 0 4px; }
   .changelog-content li { margin-left:16px; }
+
+  /* ── 响应式 ── */
+  @media(max-width:900px) {
+    .main { padding:16px; }
+    .ac-stats { gap:8px; }
+  }
+  @media(max-width:640px) {
+    .navbar { padding:0 12px; height:auto; min-height:56px; flex-wrap:wrap; gap:4px; padding-top:8px; padding-bottom:8px; }
+    .navbar-nav { flex-wrap:wrap; gap:2px; }
+    .nav-link { font-size:12px; padding:4px 8px; }
+    .main { padding:10px; max-width:100%; }
+    .filter-bar { flex-wrap:wrap; }
+    .ac-header { flex-wrap:wrap; }
+    .ac-stats { display:none; }
+    .sr-left { flex:1; min-width:0; }
+    .sr-m { display:none; }
+  }
+  @media(max-width:480px) {
+    .navbar-sub, .version-badge { display:none; }
+    .page-title { font-size:17px; }
+  }
 </style>
 </head>
 <body>
@@ -221,9 +242,15 @@
 
 <script>
 let allSessions = [];
+let activeUsernames = new Set(); // 真正在监控中的账号（实时状态）
 const GROUP_MAP = { own:{label:'自营',cls:'tag-own'}, rival:{label:'竞品',cls:'tag-rival'}, watch:{label:'关注',cls:'tag-watch'} };
 // 记录哪些账号卡片是展开状态
 const expandedAccounts = new Set();
+
+// 判断账号是否真正在直播（只看实时监控状态，不看历史 status 字段）
+function isUserLive(username) {
+  return activeUsernames.has(username);
+}
 
 function durationMin(s) {
   if (!s.start_time || !s.end_time) return 0;
@@ -286,7 +313,8 @@ function toggleAccount(username) {
 // ── 构建单场次行 HTML ──
 function buildSessionRow(s, maxPeak, isLatest) {
   const dur = durationMin(s);
-  const isLive = s.status === 'live';
+  // 只有「当前正在监控中」且 status 还是 live 才显示直播中
+  const isLive = isUserLive(s.username) && s.status === 'live';
   const sc = s.speech_count || 0;
   const barPct = Math.round((s.peak_viewers||0) / maxPeak * 100);
   const speechBadge = sc > 0
@@ -298,9 +326,9 @@ function buildSessionRow(s, maxPeak, isLatest) {
         ${isLive ? '<span class="badge-live">🔴 直播中</span>' : ''}
         ${isLatest && !isLive ? '<span style="font-size:10px;background:#eff6ff;color:#3b82f6;padding:1px 6px;border-radius:8px;font-weight:600;">最新</span>' : ''}
         ${formatTime(s.start_time)}
-        ${!isLive ? `→ ${formatTime(s.end_time)}` : ''}
+        ${!isLive ? `→ ${formatTime(s.end_time) || '未知'}` : ''}
       </div>
-      <div class="sr-duration">时长 ${durationStr(dur)} &nbsp; ${speechBadge}</div>
+      <div class="sr-duration">时长 ${isLive ? '直播中' : durationStr(dur)} &nbsp; ${speechBadge}</div>
       <div class="mini-bar"><div class="mini-bar-fill" style="width:${barPct}%"></div></div>
     </div>
     <div class="sr-metrics">
@@ -322,7 +350,8 @@ function buildAccountCard(username, sessions) {
   const gInfo = GROUP_MAP[sessions[0]?._group] || {label:'',cls:''};
   const groupTag = gInfo.label ? `<span class="group-tag ${gInfo.cls}">${gInfo.label}</span>` : '';
   const latest = sessions[0];
-  const isLive = latest?.status === 'live';
+  // 只有真正在监控中的账号才算「直播中」
+  const isLive = isUserLive(username) && latest?.status === 'live';
   const totalSessions = sessions.length;
   const totalViewers = sessions.reduce((a,s) => a + (s.total_viewers||0), 0);
   const totalGifts = sessions.reduce((a,s) => a + (s.total_gift_value||0), 0);
@@ -332,7 +361,8 @@ function buildAccountCard(username, sessions) {
   const isOpen = expandedAccounts.has(username) || isLive;
   if (isLive) expandedAccounts.add(username);
 
-  const endedCount = sessions.filter(s => s.status !== 'live').length;
+  // 可删除的场次：非直播中的
+  const endedCount = sessions.filter(s => !isUserLive(s.username) || s.status !== 'live').length;
 
   // 最新场摘要行
   const latestLine = latest ? `
@@ -397,13 +427,15 @@ function renderAccounts() {
 function updateStats(list) {
   const accounts = new Set(list.map(s => s.username)).size;
   const total = list.length;
-  const live = list.filter(s => s.status === 'live').length;
+  // 直播中：该账号名在 activeUsernames 里，且有 status=live 的场次
+  const liveAccounts = new Set(list.filter(s => isUserLive(s.username) && s.status === 'live').map(s => s.username));
+  const live = liveAccounts.size;
   const totalSpeech = list.reduce((a,s) => a + (s.speech_count||0), 0);
   const bar = document.getElementById('statsBar');
   bar.innerHTML = `
     <div class="stat-pill">共 <strong>${accounts}</strong> 个账号</div>
     <div class="stat-pill"><strong>${total}</strong> 场记录</div>
-    ${live ? `<div class="stat-pill" style="color:var(--primary)">🔴 当前直播中 <strong>${live}</strong> 场</div>` : ''}
+    ${live ? `<div class="stat-pill" style="color:var(--primary)">🔴 当前直播中 <strong>${live}</strong> 个账号</div>` : ''}
     ${totalSpeech ? `<div class="stat-pill">话术合计 <strong>${totalSpeech}</strong> 条</div>` : ''}
   `;
   document.getElementById('pageSubtitle').textContent = `${accounts} 个账号 · ${total} 场历史`;
@@ -434,20 +466,26 @@ async function deleteSession(sessionId, e) {
 // ── 删除某账号所有历史 ──
 async function deleteAccountSessions(username, count) {
   if (!confirm(`确定清空 @${username} 的 ${count} 条历史记录吗？此操作无法恢复。`)) return;
-  const res = await fetch(`/api/account/${encodeURIComponent(username)}/delete`, { method: 'POST' });
-  const data = await res.json();
-  if (data.success) {
-    allSessions = allSessions.filter(s => s.username !== username || s.status === 'live');
-    renderAccounts();
-  } else {
-    alert('删除失败，请重试');
+  try {
+    const res = await fetch(`/api/account/${encodeURIComponent(username)}/delete`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      // 保留仍在直播中的场次
+      allSessions = allSessions.filter(s => s.username !== username || (isUserLive(s.username) && s.status === 'live'));
+      renderAccounts();
+    } else {
+      alert('删除失败，请重试');
+    }
+  } catch(e) {
+    alert('网络错误，请重试');
   }
 }
 
 // ── 批量删除筛选结果 ──
 async function deleteFilteredSessions() {
   const entries = getFilteredAccountGroups();
-  const toDelete = entries.flatMap(([,s]) => s).filter(s => s.status !== 'live');
+  // 不删除正在直播中的场次
+  const toDelete = entries.flatMap(([,s]) => s).filter(s => !(isUserLive(s.username) && s.status === 'live'));
   if (!toDelete.length) { alert('当前筛选下没有可删除的记录'); return; }
   if (!confirm(`确定删除当前筛选出的 ${toDelete.length} 条历史记录吗？此操作无法恢复。`)) return;
   let deleted = 0;
@@ -487,17 +525,29 @@ if (_urlU) {
   if (el) el.value = _urlU;
 }
 
-fetch('/api/sessions').then(r => r.json()).then(sessions => {
+// 先获取实时监控状态，再加载历史记录，确保直播中状态准确
+async function initPage() {
+  try {
+    // 获取正在监控的账号列表
+    const statusRes = await fetch('/api/status');
+    if (statusRes.ok) {
+      const statusData = await statusRes.json();
+      activeUsernames = new Set(statusData.active_accounts || []);
+    }
+  } catch(e) {}
+
   try {
     const groups = JSON.parse(localStorage.getItem('accountGroups') || '{}');
+    const res = await fetch('/api/sessions');
+    const sessions = await res.json();
     allSessions = sessions.map(s => ({ ...s, _group: groups[s.username] || 'own' }));
+    renderAccounts();
   } catch(e) {
-    allSessions = sessions.map(s => ({ ...s, _group: 'own' }));
+    document.getElementById('accountsList').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div>加载失败，请刷新重试</div></div>';
   }
-  renderAccounts();
-}).catch(() => {
-  document.getElementById('accountsList').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div>加载失败，请刷新重试</div></div>';
-});
+}
+
+initPage();
 </script>
 
 <!-- ── 版本日志弹窗 ── -->

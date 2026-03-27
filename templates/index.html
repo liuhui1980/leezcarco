@@ -207,10 +207,13 @@
   @media(max-width:1000px) { .accounts-grid { grid-template-columns: repeat(2, 1fr); } }
   @media(max-width:640px)  { .accounts-grid { grid-template-columns: 1fr; } }
 
-  .account-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; position: relative; transition: box-shadow .2s; box-shadow: var(--shadow); overflow: hidden; }
+  .account-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; position: relative; transition: box-shadow .2s, opacity .2s, transform .2s; box-shadow: var(--shadow); overflow: hidden; cursor: grab; }
   .account-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.08); }
   .account-card.live { border-color: var(--primary); }
   .account-card.live::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #fe2c55, #ff8800); border-radius: var(--radius) var(--radius) 0 0; }
+  /* 拖拽状态 */
+  .account-card.dragging { opacity: 0.45; transform: scale(0.97); box-shadow: none; cursor: grabbing; }
+  .account-card.drag-over { border: 2px dashed var(--primary); background: var(--primary-bg); }
   .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .card-username { font-size: 13px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card-username a:hover { text-decoration: underline !important; opacity: .85; }
@@ -218,6 +221,7 @@
   .offline-badge { background: var(--border); color: var(--text2); font-size: 11px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
   .waiting-badge { background: #fef3c7; color: #b45309; font-size: 11px; padding: 2px 7px; border-radius: 10px; animation: pulse 2s infinite; flex-shrink: 0; }
   .error-badge { background: #fee2e2; color: #dc2626; font-size: 11px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+  .connected-badge { background: #dc2626; color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; flex-shrink: 0; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
 
   .metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px; }
@@ -272,32 +276,6 @@
   .speech-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; margin-top: 6px; display: flex; align-items: center; gap: 5px; }
   .speech-dot { width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; animation: pulse 2s infinite; flex-shrink: 0; }
   .section-label { font-size: 10px; color: var(--text2); margin-bottom: 4px; font-weight: 600; }
-
-  /* ── 竞品推荐面板 ── */
-  .rival-panel { background: linear-gradient(135deg, #fdf4ff, #fce7f3); border: 1px solid #f0abfc; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
-  .rival-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .rival-panel-title { font-size: 14px; font-weight: 800; color: #86198f; display: flex; align-items: center; gap: 8px; }
-  .rival-desc { font-size: 12px; color: #a21caf; margin-bottom: 10px; line-height: 1.6; }
-  .rival-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-  .rival-card { background: #fff; border: 1px solid #f0abfc; border-radius: 10px; padding: 12px 14px; }
-  .rival-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .rival-username { font-size: 13px; font-weight: 700; color: var(--text); }
-  .rival-badge { font-size: 10px; padding: 2px 7px; border-radius: 8px; font-weight: 600; }
-  .rival-badge-live { background: var(--primary); color: #fff; animation: pulse 2s infinite; }
-  .rival-badge-offline { background: var(--border); color: var(--text3); }
-  .rival-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 8px; }
-  .rival-metric { text-align: center; }
-  .rival-metric-val { font-size: 13px; font-weight: 700; color: #86198f; }
-  .rival-metric-label { font-size: 10px; color: var(--text3); }
-  .rival-action { display: flex; gap: 6px; }
-  .btn-rival-monitor { flex: 1; background: #f0abfc; color: #86198f; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
-  .btn-rival-monitor:hover { background: #d946ef; color: #fff; }
-  .rival-empty { text-align: center; padding: 20px; color: var(--text3); font-size: 13px; }
-  .rival-add-form { display: flex; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0abfc; }
-  .rival-add-input { flex: 1; background: #fff; border: 1px solid #f0abfc; border-radius: 6px; padding: 7px 12px; font-size: 13px; color: var(--text); outline: none; }
-  .rival-add-input:focus { border-color: #d946ef; }
-  .btn-rival-add { background: #9333ea; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
-  .btn-rival-add:hover { background: #7c3aed; }
 
   /* ── 关注说明 ── */
   .watch-hint { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 14px; margin-top: 10px; font-size: 12px; color: #065f46; display: flex; align-items: flex-start; gap: 8px; }
@@ -513,25 +491,6 @@
       <p style="font-size:12px;margin-top:6px;color:#9ca3af;">在上方输入 TikTok 用户名即可开始监控，最多可同时监控 4 场</p>
     </div>
   </div>
-
-  <!-- 竞品对比面板 -->
-  <div class="rival-panel" id="rivalPanel">
-    <div class="rival-panel-header">
-      <div class="rival-panel-title">⚔️ 竞品账号管理</div>
-      <button class="btn-icon" onclick="refreshRivals()">🔄 刷新</button>
-    </div>
-    <div class="rival-desc">
-      竞品账号用于与自营账号进行数据对比。系统会自动统计历史上被标记为「竞品」的账号数据，帮你发现差距和机会点。<br>
-      <strong>怎么用：</strong>在上方添加账号时选择「竞品」分组，直播结束后即可在历史复盘中看到与自营的对比数据。
-    </div>
-    <div class="rival-grid" id="rivalGrid">
-      <div class="rival-empty">加载竞品账号数据中...</div>
-    </div>
-    <div class="rival-add-form">
-      <input type="text" class="rival-add-input" id="rivalAddInput" placeholder="快速添加竞品用户名（不用@）" />
-      <button class="btn-rival-add" onclick="quickAddRival()">+ 添加竞品</button>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -584,7 +543,7 @@ socket.on('status_update', (data) => {
       monitors[u].sessionId = snap.session_id     || null;
       monitors[u].startTime = snap.start_time     || null;
 
-      // 恢复开播时间显示
+        // 恢复开播时间显示
       if (snap.start_time) {
         const stEl = document.getElementById(`start-time-${u}`);
         if (stEl) stEl.textContent = snap.start_time.slice(11, 16);
@@ -593,7 +552,7 @@ socket.on('status_update', (data) => {
         // 恢复已播时长计时器
         const startTs = new Date(snap.start_time).getTime();
         if (!isNaN(startTs)) {
-          monitors[u]._startTs = startTs;
+          monitors[u].startTs = startTs;
           if (!monitors[u]._durationTimer) {
             monitors[u]._durationTimer = setInterval(() => {
               const durEl = document.getElementById(`duration-${u}`);
@@ -626,8 +585,12 @@ socket.on('status_update', (data) => {
 socket.on('connected', (data) => {
   const u = data.username;
   if (!monitors[u]) createAccountCard(u, 'own');
-  setCardLive(u, true);
+  // 先显示"已连接"红色徽章，再切到 LIVE
+  setBadge(u, '已连接', 'connected');
+  setTimeout(() => setCardLive(u, true), 400);
   showToast(`@${u} 直播间已连接 ✅`, 'success');
+  // 启动 AI 摘要定时更新
+  startCardAiSummaryTimer(u);
   const statusEl = document.getElementById(`speech-status-${u}`);
   if (statusEl) statusEl.textContent = '语音采集中...';
   // 更新直播链接（如果后端未携带则用默认 /live 链接）
@@ -755,6 +718,7 @@ socket.on('new_speech', (data) => {
 
 socket.on('live_ended', (data) => {
   setCardLive(data.username, false);
+  stopCardAiSummaryTimer(data.username);
   showToast(`@${data.username} 直播已结束，报告已生成`, 'info');
   setTimeout(() => removeAccountCard(data.username), 3000);
   loadRivals(); // 刷新竞品面板
@@ -770,6 +734,14 @@ function createAccountCard(username, group = 'own') {
   card.className = 'account-card';
   card.id = `card-${username}`;
   card.dataset.group = group;
+  card.draggable = true;
+  card.dataset.username = username;
+  // 绑定拖拽事件
+  card.addEventListener('dragstart', onCardDragStart);
+  card.addEventListener('dragend', onCardDragEnd);
+  card.addEventListener('dragover', onCardDragOver);
+  card.addEventListener('dragleave', onCardDragLeave);
+  card.addEventListener('drop', onCardDrop);
   const groupTagMap = { own: '<span class="group-tag tag-own">自营</span>', rival: '<span class="group-tag tag-rival">竞品</span>', watch: '<span class="group-tag tag-watch">关注</span>' };
   const groupTag = groupTagMap[group] || '';
   card.innerHTML = `
@@ -876,13 +848,28 @@ function switchDialectTab(username, type, btn) {
 
 // ── 语言分析小方块（按账号，放在全局统计与卡片之间） ──
 const LANG_META = {
-  'zh':         { name: '中文',     cls: 'lp-zh',    short: 'ZH' },
-  'en':         { name: '英语',     cls: 'lp-en',    short: 'EN' },
-  'ar':         { name: '阿语(标)', cls: 'lp-ar',    short: 'AR' },
-  'ar-gulf':    { name: '阿语·海湾',cls: 'lp-ar',    short: '海湾' },
-  'ar-egypt':   { name: '阿语·埃及',cls: 'lp-ar',    short: '埃及' },
-  'ar-levant':  { name: '阿语·黎凡',cls: 'lp-ar',    short: '黎凡特' },
-  'ar-maghreb': { name: '阿语·北非',cls: 'lp-ar',    short: '北非' },
+  'zh':         { name: '中文',     cls: 'lp-zh',    short: 'ZH', fillClass:'fill-zh',    flag:'🇨🇳' },
+  'en':         { name: '英语',     cls: 'lp-en',    short: 'EN', fillClass:'fill-en',    flag:'🇬🇧' },
+  'ar':         { name: '阿语(标)', cls: 'lp-ar',    short: 'AR', fillClass:'fill-ar',    flag:'🌍', hasDialect:true },
+  'ar-gulf':    { name: '阿语·海湾',cls: 'lp-ar',    short: '海湾',  fillClass:'fill-ar',  flag:'🇸🇦', parent:'ar' },
+  'ar-egypt':   { name: '阿语·埃及',cls: 'lp-ar',    short: '埃及',  fillClass:'fill-ar',  flag:'🇪🇬', parent:'ar' },
+  'ar-levant':  { name: '阿语·黎凡',cls: 'lp-ar',    short: '黎凡特',fillClass:'fill-ar',  flag:'🇱🇧', parent:'ar' },
+  'ar-maghreb': { name: '阿语·北非',cls: 'lp-ar',    short: '北非',  fillClass:'fill-ar',  flag:'🇲🇦', parent:'ar' },
+  // 具体语种显示
+  'ko': { name: '韩语',   flag:'🇰🇷' }, 'ja': { name: '日语',     flag:'🇯🇵' },
+  'fr': { name: '法语',   flag:'🇫🇷' }, 'de': { name: '德语',     flag:'🇩🇪' },
+  'es': { name: '西班牙语',flag:'🇪🇸' }, 'pt': { name: '葡萄牙语', flag:'🇧🇷' },
+  'ru': { name: '俄语',   flag:'🇷🇺' }, 'tr': { name: '土耳其语', flag:'🇹🇷' },
+  'hi': { name: '印地语', flag:'🇮🇳' }, 'id': { name: '印尼语',   flag:'🇮🇩' },
+  'other':      { name: '其他',     cls: '',          short: '?',  fillClass:'fill-other', flag:'🌐' },
+};
+
+// 语种码→中文名映射（用于"其他语言"显示具体语种）
+const LANG_NAME_MAP = {
+  'ko':'韩语','ja':'日语','fr':'法语','de':'德语','es':'西班牙语','pt':'葡萄牙语',
+  'ru':'俄语','tr':'土耳其语','hi':'印地语','id':'印尼语','it':'意大利语','nl':'荷兰语',
+  'th':'泰语','vi':'越南语','ms':'马来语','fa':'波斯语','ur':'乌尔都语','sw':'斯瓦希里语',
+  'tl':'菲律宾语','pl':'波兰语','uk':'乌克兰语','ro':'罗马尼亚语','cs':'捷克语','hu':'匈牙利语',
 };
 
 function updateLangChip(username, cStats, sStats) {
@@ -907,11 +894,11 @@ function updateLangChip(username, cStats, sStats) {
 
   const total = Object.values(merged).reduce((a, b) => a + b, 0);
   if (total === 0) {
-    chip.innerHTML = `<div class="lang-chip-header"><span class="lang-chip-name">@${username}</span><span class="lang-chip-status ${monitors[username]?.isLive ? 'live' : ''}"></span></div><div class="lang-chip-empty">等待数据...</div>`;
+    chip.innerHTML = `<div class="lang-chip-header"><span class="lang-chip-name">@${username}</span><span class="lang-chip-status ${monitors[username]?.sessionId ? 'live' : ''}"></span></div><div class="lang-chip-empty">等待数据...</div>`;
     return;
   }
 
-  // 聚合阿拉伯语方言
+  // 已知大类
   const arDialects = ['ar-gulf','ar-egypt','ar-levant','ar-maghreb'];
   const arDialectTotal = arDialects.reduce((a, k) => a + (merged[k] || 0), 0);
   const arStd = merged['ar'] || 0;
@@ -919,28 +906,48 @@ function updateLangChip(username, cStats, sStats) {
   const enTotal = merged['en'] || 0;
   const zhTotal = merged['zh'] || 0;
 
+  // 其他语言：汇总所有非 zh/en/ar* 的
+  const knownKeys = new Set(['zh','en','ar','ar-gulf','ar-egypt','ar-levant','ar-maghreb','other']);
+  const otherByLang = {};
+  Object.entries(merged).forEach(([k, v]) => {
+    if (!knownKeys.has(k)) { otherByLang[k] = (otherByLang[k] || 0) + v; }
+  });
+  const otherLegacyTotal = merged['other'] || 0;
+
   // 生成语言胶囊（按数量排序）
   const langItems = [];
   if (arTotal > 0) langItems.push({ name: '阿语', cls: 'lp-ar', count: arTotal, pct: Math.round(arTotal/total*100) });
   if (enTotal > 0) langItems.push({ name: '英语', cls: 'lp-en', count: enTotal, pct: Math.round(enTotal/total*100) });
   if (zhTotal > 0) langItems.push({ name: '中文', cls: 'lp-zh', count: zhTotal, pct: Math.round(zhTotal/total*100) });
-  const otherTotal = total - arTotal - enTotal - zhTotal;
-  if (otherTotal > 0) langItems.push({ name: '其他', cls: '', count: otherTotal, pct: Math.round(otherTotal/total*100) });
+
+  // 具体"其他语言"单独显示
+  Object.entries(otherByLang).sort(([,a],[,b]) => b-a).slice(0,3).forEach(([k, v]) => {
+    const meta = LANG_NAME_MAP[k];
+    if (meta) langItems.push({ name: meta, cls: '', count: v, pct: Math.round(v/total*100), flag: LANG_META[k]?.flag || '🌐' });
+    else langItems.push({ name: k.toUpperCase(), cls: '', count: v, pct: Math.round(v/total*100), flag: '🌐' });
+  });
+
+  const otherCount = Object.values(otherByLang).reduce((a,b)=>a+b,0) + otherLegacyTotal;
+  // 如果有未识别的其他，合并显示
+  const shownOtherCount = Object.entries(otherByLang).sort(([,a],[,b])=>b-a).slice(0,3).reduce((a,[,v])=>a+v, 0);
+  const remainOther = otherCount - shownOtherCount;
+  if (remainOther > 0) langItems.push({ name: '其他', cls: '', count: remainOther, pct: Math.round(remainOther/total*100), flag: '🌐' });
+
   langItems.sort((a, b) => b.count - a.count);
 
   const langPills = langItems.map((l, i) =>
-    `<span class="lc-lang-pill ${l.cls}${i===0?' lp-dominant':''}">${l.name} ${l.pct}%</span>`
+    `<span class="lc-lang-pill ${l.cls}${i===0?' lp-dominant':''}" title="${l.name}: ${l.count}条">${l.flag ? l.flag+' ' : ''}${l.name} ${l.pct}%</span>`
   ).join('');
 
-  // 方言详情行
+  // 方言详情行（精确到国家大区）
   let dialectLine = '';
   if (arTotal > 0 && arDialectTotal > 0) {
     const top = arDialects.map(k => ({ key: k, cnt: merged[k] || 0 })).filter(x => x.cnt > 0).sort((a,b) => b.cnt-a.cnt);
-    const DNAME = { 'ar-gulf':'海湾', 'ar-egypt':'埃及', 'ar-levant':'黎凡特', 'ar-maghreb':'北非' };
-    dialectLine = `<div class="lang-chip-dialect">阿语方言：${top.map(x => `${DNAME[x.key]} ${Math.round(x.cnt/arTotal*100)}%`).join(' · ')}</div>`;
+    const DNAME = { 'ar-gulf':'🇸🇦海湾', 'ar-egypt':'🇪🇬埃及', 'ar-levant':'🇱🇧黎凡特', 'ar-maghreb':'🇲🇦北非' };
+    dialectLine = `<div class="lang-chip-dialect">阿语：${top.map(x => `${DNAME[x.key]} ${Math.round(x.cnt/arTotal*100)}%`).join(' · ')}</div>`;
   }
 
-  const isLive = monitors[username]?.isLive || false;
+  const isLive = !!(monitors[username]?.sessionId);
   chip.innerHTML = `
     <div class="lang-chip-header">
       <span class="lang-chip-name" title="@${username}">@${username}</span>
@@ -1032,6 +1039,65 @@ function updateSpeechSummary(username) {
   if (total > 0) wrapEl.classList.add('has-content');
 }
 
+// ── 卡片 AI 摘要（调用免费大模型，每2分钟定时刷新）──────────────
+const _aiSummaryTimers = {};   // username → setInterval id
+const _aiSummaryRunning = {};  // username → bool（防并发）
+
+async function requestCardAiSummary(username) {
+  if (_aiSummaryRunning[username]) return;
+  const m = monitors[username];
+  if (!m || !m.sessionId) return;
+
+  // 收集卡片中的话术文本（最近20条）
+  const speechItems = document.querySelectorAll(`#speech-box-${username} .speech-text`);
+  const speechTexts = Array.from(speechItems).slice(-20).map(el => el.textContent.trim()).filter(t => t.length > 3);
+
+  // 收集卡片中的评论文本（最近30条）
+  const commentItems = document.querySelectorAll(`#comments-box-${username} .cmt-text, #comments-box-${username} .comment-text`);
+  const commentTexts = Array.from(commentItems).slice(-30).map(el => el.textContent.trim()).filter(t => t.length > 1);
+
+  if (speechTexts.length < 3 && commentTexts.length < 5) return;  // 数据太少不请求
+
+  _aiSummaryRunning[username] = true;
+  try {
+    const resp = await fetch('/api/card/ai_summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, speech: speechTexts, comments: commentTexts })
+    });
+    const data = await resp.json();
+    if (data.speech_summary) {
+      const el = document.getElementById(`speech-summary-text-${username}`);
+      const wrap = document.getElementById(`speech-summary-${username}`);
+      if (el) { el.textContent = data.speech_summary; if (wrap) wrap.classList.add('has-content'); }
+    }
+    if (data.comment_summary) {
+      const el = document.getElementById(`comment-summary-text-${username}`);
+      const wrap = document.getElementById(`comment-summary-${username}`);
+      if (el) { el.textContent = data.comment_summary; if (wrap) wrap.classList.add('has-content'); }
+    }
+  } catch(e) {
+    // 静默失败，不影响其他功能
+  } finally {
+    _aiSummaryRunning[username] = false;
+  }
+}
+
+function startCardAiSummaryTimer(username) {
+  stopCardAiSummaryTimer(username);
+  // 首次在30秒后执行，之后每2分钟刷新一次
+  _aiSummaryTimers[username] = setTimeout(() => {
+    requestCardAiSummary(username);
+    _aiSummaryTimers[username] = setInterval(() => requestCardAiSummary(username), 120000);
+  }, 30000);
+}
+
+function stopCardAiSummaryTimer(username) {
+  const t = _aiSummaryTimers[username];
+  if (t) { clearTimeout(t); clearInterval(t); delete _aiSummaryTimers[username]; }
+}
+// ────────────────────────────────────────────────────────────
+
 function filterGroup(group, el) {
   currentFilter = group;
   document.querySelectorAll('.group-tab').forEach(t => t.classList.remove('active'));
@@ -1074,11 +1140,64 @@ function setBadge(username, text, state) {
   const card = document.getElementById(`card-${username}`);
   const badge = document.getElementById(`badge-${username}`);
   if (!badge) return;
-  const stateMap = { waiting: 'waiting-badge', connecting: 'offline-badge', error: 'error-badge', live: 'live-badge' };
+  const stateMap = {
+    waiting: 'waiting-badge',
+    connecting: 'offline-badge',
+    connected: 'connected-badge',
+    error: 'error-badge',
+    live: 'live-badge'
+  };
   badge.className = stateMap[state] || 'offline-badge';
   badge.textContent = text;
   if (card) { state === 'live' ? card.classList.add('live') : card.classList.remove('live'); }
 }
+
+// ── 卡片拖拽排序 ────────────────────────────────────────────
+let _dragSrcCard = null;
+
+function onCardDragStart(e) {
+  _dragSrcCard = this;
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', this.id);
+}
+
+function onCardDragEnd(e) {
+  this.classList.remove('dragging');
+  document.querySelectorAll('.account-card').forEach(c => c.classList.remove('drag-over'));
+  _dragSrcCard = null;
+}
+
+function onCardDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (_dragSrcCard && _dragSrcCard !== this) {
+    this.classList.add('drag-over');
+  }
+  return false;
+}
+
+function onCardDragLeave(e) {
+  this.classList.remove('drag-over');
+}
+
+function onCardDrop(e) {
+  e.stopPropagation();
+  e.preventDefault();
+  this.classList.remove('drag-over');
+  if (!_dragSrcCard || _dragSrcCard === this) return false;
+  const grid = document.getElementById('accountsGrid');
+  const cards = Array.from(grid.querySelectorAll('.account-card'));
+  const srcIdx = cards.indexOf(_dragSrcCard);
+  const tgtIdx = cards.indexOf(this);
+  if (srcIdx < tgtIdx) {
+    grid.insertBefore(_dragSrcCard, this.nextSibling);
+  } else {
+    grid.insertBefore(_dragSrcCard, this);
+  }
+  return false;
+}
+// ────────────────────────────────────────────────────────────
 
 function removeAccountCard(username) {
   const card = document.getElementById(`card-${username}`);
@@ -1185,17 +1304,6 @@ function addCommentToCard(username, data) {
   box.insertBefore(item, box.firstChild);
   while (box.children.length > 50) box.removeChild(box.lastChild);
 }
-
-const LANG_META = {
-  zh:          { name:'中文',      fillClass:'fill-zh',    flag:'🇨🇳' },
-  en:          { name:'英语',      fillClass:'fill-en',    flag:'🇺🇸' },
-  ar:          { name:'阿拉伯语',  fillClass:'fill-ar',    flag:'🌍', hasDialect:true },
-  'ar-gulf':   { name:'🇸🇦 海湾',  fillClass:'fill-ar',    flag:'🇸🇦', parent:'ar' },
-  'ar-egypt':  { name:'🇪🇬 埃及',  fillClass:'fill-ar',    flag:'🇪🇬', parent:'ar' },
-  'ar-levant': { name:'🇱🇧 黎凡特',fillClass:'fill-ar',    flag:'🇱🇧', parent:'ar' },
-  'ar-maghreb':{ name:'🇲🇦 北非',  fillClass:'fill-ar',    flag:'🇲🇦', parent:'ar' },
-  other:       { name:'其他',      fillClass:'fill-other', flag:'🌐' },
-};
 
 function renderLangBar(stats) {
   const section = document.getElementById('langBarSection');
@@ -1345,9 +1453,13 @@ async function batchStartMonitor() {
   const raw = document.getElementById('batchInput').value.trim();
   const usernames = raw.split('\n').map(u => u.trim().replace('@','')).filter(Boolean);
   if (!usernames.length) return;
-  const res = await fetch('/api/monitor/batch_start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({usernames}) });
-  const data = await res.json();
-  data.results.forEach(r => { if (r.success) createAccountCard(r.username, 'own'); showToast(r.success?`@${r.username} 启动成功`:`@${r.username} 启动失败`, r.success?'success':'error'); });
+  try {
+    const res = await fetch('/api/monitor/batch_start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({usernames}) });
+    const data = await res.json();
+    data.results.forEach(r => { if (r.success) createAccountCard(r.username, 'own'); showToast(r.success?`@${r.username} 启动成功`:`@${r.username} 启动失败`, r.success?'success':'error'); });
+  } catch(e) {
+    showToast('批量启动请求失败，请检查网络', 'error');
+  }
   document.getElementById('batchArea').style.display = 'none';
 }
 
@@ -1447,68 +1559,6 @@ function saveMonitorList() {
 }
 function loadMonitorList() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; }
-}
-
-// ── 竞品面板 ──
-async function loadRivals() {
-  const grid = document.getElementById('rivalGrid');
-  try {
-    const res = await fetch('/api/rivals');
-    const data = await res.json();
-    if (!data.rivals || !data.rivals.length) {
-      grid.innerHTML = '<div class="rival-empty">🔍 暂无竞品数据<br><span style="font-size:11px;color:var(--text3);">添加监控账号时选择「竞品」分组，直播结束后自动统计</span></div>';
-      return;
-    }
-    grid.innerHTML = data.rivals.map(r => {
-      const isLive = r.is_live;
-      return `<div class="rival-card">
-        <div class="rival-card-header">
-          <div class="rival-username">@${r.username}</div>
-          <span class="rival-badge ${isLive ? 'rival-badge-live' : 'rival-badge-offline'}">${isLive ? 'LIVE' : '离线'}</span>
-        </div>
-        <div class="rival-metrics">
-          <div class="rival-metric"><div class="rival-metric-val">${formatNum(r.avg_peak_viewers||0)}</div><div class="rival-metric-label">均值在线</div></div>
-          <div class="rival-metric"><div class="rival-metric-val">${r.session_count||0}</div><div class="rival-metric-label">场次数</div></div>
-          <div class="rival-metric"><div class="rival-metric-val">$${(r.avg_gift_value||0).toFixed(0)}</div><div class="rival-metric-label">均礼物</div></div>
-        </div>
-        <div class="rival-action">
-          ${isLive ? `<button class="btn-rival-monitor" onclick="monitorRival('${r.username}')">📺 开始监控</button>` : `<button class="btn-rival-monitor" onclick="monitorRival('${r.username}')">👁 等待开播</button>`}
-          <a href="/history" style="flex:1;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px;font-size:12px;color:var(--text2);text-decoration:none;">📊 历史</a>
-        </div>
-      </div>`;
-    }).join('');
-  } catch(e) {
-    grid.innerHTML = '<div class="rival-empty">加载失败，请刷新</div>';
-  }
-}
-
-async function refreshRivals() { await loadRivals(); showToast('竞品数据已刷新', 'info'); }
-
-async function monitorRival(username) {
-  if (monitors[username]) { showToast(`@${username} 已在监控中`, 'info'); return; }
-  createAccountCard(username, 'rival');
-  setBadge(username, '连接中...', 'connecting');
-  try {
-    await fetch('/api/monitor/start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username}) });
-    showToast(`已开始监控竞品 @${username}`, 'success');
-  } catch(e) { showToast('启动失败', 'error'); removeAccountCard(username); }
-}
-
-async function quickAddRival() {
-  const input = document.getElementById('rivalAddInput');
-  const username = input.value.trim().replace('@','');
-  if (!username) return;
-  // 设置分组为竞品
-  try {
-    await fetch('/api/account/group', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username, group:'rival'}) });
-  } catch(e) {}
-  // 更新 localStorage
-  const groups = (() => { try { return JSON.parse(localStorage.getItem('accountGroups') || '{}'); } catch(e) { return {}; } })();
-  groups[username] = 'rival'; localStorage.setItem('accountGroups', JSON.stringify(groups));
-  input.value = '';
-  showToast(`@${username} 已加入竞品列表`, 'success');
-  loadRivals();
-  loadAccountList();
 }
 
 // ── 远程访问 ──
@@ -1650,9 +1700,10 @@ function copyIp() {
 // ── 页面初始化 ──
 async function init() {
   let activeAccounts = [];
+  let statusData = {};
   try {
     const statusRes = await fetch('/api/status');
-    const statusData = await statusRes.json();
+    statusData = await statusRes.json();
     activeAccounts = statusData.active_accounts || [];
   } catch(e) {}
 

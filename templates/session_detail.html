@@ -54,25 +54,80 @@
 
   /* 话术时间轴（紧贴趋势图下方） */
   .speech-timeline { margin-top:14px; border-top:1px solid var(--border2); padding-top:12px; }
-  .stl-title { font-size:12px; font-weight:600; color:var(--text2); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
-  .stl-scroll { overflow-x:auto; padding-bottom:4px; }
-  .stl-track { display:flex; gap:6px; min-width:max-content; flex-wrap:nowrap; align-items:flex-start; padding:4px 0; }
+  .stl-title { font-size:12px; font-weight:600; color:var(--text2); margin-bottom:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .stl-legend { display:flex; align-items:center; gap:12px; font-size:11px; color:var(--text3); }
+  .stl-legend span { display:flex; align-items:center; gap:4px; }
+
+  /* 横向滚动模式（无时间范围时） */
+  .stl-scroll { overflow-x:auto; padding-bottom:6px; }
+  .stl-track-flow { display:flex; gap:8px; min-width:max-content; flex-wrap:nowrap; align-items:flex-start; padding:4px 0 8px; }
+
+  /* 绝对定位模式（有时间范围时） */
+  .stl-track-abs { position:relative; min-height:100px; margin-bottom:4px; }
+  .stl-baseline { position:absolute; bottom:10px; left:0; right:0; height:2px; background:var(--border2); border-radius:1px; }
+
+  /* 每个条目 */
   .stl-item {
-    display:flex; flex-direction:column; align-items:center; gap:3px;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
     cursor:pointer; position:relative;
   }
+  .stl-item.peak-item .stl-dot { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.25); }
+  .stl-item.peak-item .stl-chip { border-color:#fde68a; background:#fffbeb; }
+
+  /* 绝对定位的 item */
+  .stl-item-abs {
+    position:absolute; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    cursor:pointer;
+  }
+  /* 上排和下排交替，避免遮挡 */
+  .stl-item-abs.row-top { bottom:18px; flex-direction:column-reverse; }
+  .stl-item-abs.row-bottom { top:0; flex-direction:column; }
+  .stl-item-abs.peak-item .stl-dot { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.25); }
+
   .stl-dot { width:8px; height:8px; border-radius:50%; background:var(--primary); flex-shrink:0; }
   .stl-chip {
-    background:var(--bg); border:1px solid var(--border); border-radius:12px;
-    padding:2px 8px; font-size:11px; color:var(--text); white-space:nowrap;
-    max-width:140px; overflow:hidden; text-overflow:ellipsis;
-    transition:all .15s;
+    background:var(--bg); border:1px solid var(--border); border-radius:10px;
+    padding:3px 8px; font-size:10px; color:var(--text); white-space:nowrap;
+    max-width:120px; overflow:hidden; text-overflow:ellipsis;
+    transition:all .15s; line-height:1.4;
   }
+  /* 原文小标注（非中文时，气泡下方显示） */
+  .stl-chip-orig {
+    font-size:8px; color:var(--text3); white-space:nowrap;
+    max-width:100px; overflow:hidden; text-overflow:ellipsis;
+    padding:0 4px; margin-top:1px; line-height:1.3;
+    display:block;
+  }
+  /* 流量峰值话术摘要卡区域 */
+  .stl-peak-section {
+    background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1.5px solid #fde68a;
+    border-radius:10px; padding:10px 14px; margin-bottom:10px;
+  }
+  .stl-peak-title { font-size:12px; font-weight:700; color:#92400e; margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .stl-peak-list { display:flex; flex-wrap:wrap; gap:6px; }
+  .stl-peak-card {
+    background:#fff; border:1px solid #fde68a; border-radius:8px;
+    padding:5px 10px; display:flex; align-items:center; gap:8px; font-size:11px;
+    box-shadow:0 1px 4px rgba(245,158,11,.1);
+  }
+  .stl-peak-time { font-weight:700; color:#b45309; white-space:nowrap; flex-shrink:0; }
+  .stl-peak-text { color:var(--text); line-height:1.4; }
+  .stl-chip-zh {
+    font-size:9px; white-space:nowrap;
+    max-width:140px; overflow:hidden; text-overflow:ellipsis;
+    background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;
+    padding:1px 6px; margin-top:1px; color:#15803d;
+    display:block; /* 默认显示中文翻译 */
+  }
+  /* peak 节点翻译强调 */
+  .stl-item-abs.peak-item .stl-chip-zh { background:#fffbeb; border-color:#fde68a; color:#92400e; font-weight:600; }
   .stl-chip.ar { background:#fef3c7; border-color:#fde68a; color:#92400e; }
   .stl-chip.en { background:#dbeafe; border-color:#bfdbfe; color:#1e40af; }
   .stl-chip:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
   .stl-time { font-size:9px; color:var(--text3); }
   .stl-empty { font-size:12px; color:var(--text3); padding:8px 0; }
+  .stl-stem { width:1px; height:8px; background:var(--border); flex-shrink:0; }
 
   /* 复盘对比表 */
   .review-table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -99,6 +154,27 @@
 
   .keywords-wrap { display:flex; flex-wrap:wrap; gap:6px; }
   .keyword-chip { background:var(--bg); border:1px solid var(--border); border-radius:16px; padding:4px 10px; font-size:12px; color:var(--text); }
+
+  /* ── 词频气泡图 ── */
+  .kw-cloud { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:4px 0; min-height:40px; }
+  .kw-bubble {
+    display:inline-flex; align-items:center; gap:4px;
+    border-radius:20px; padding:3px 10px 3px 8px;
+    font-weight:700; cursor:default;
+    transition:transform .15s, box-shadow .15s;
+    white-space:nowrap;
+  }
+  .kw-bubble:hover { transform:scale(1.06); box-shadow:0 3px 12px rgba(0,0,0,.12); }
+  .kw-bubble .kw-rank { font-size:9px; opacity:.7; font-weight:600; }
+  .kw-bubble .kw-pct { font-size:10px; opacity:.8; }
+  /* 按频次梯度着色 */
+  .kw-tier-1 { background:#fe2c55; color:#fff; }   /* TOP 1 最大 */
+  .kw-tier-2 { background:#ff6b35; color:#fff; }   /* TOP 2-3 */
+  .kw-tier-3 { background:#f59e0b; color:#fff; }   /* TOP 4-6 */
+  .kw-tier-4 { background:#10b981; color:#fff; }   /* TOP 7-10 */
+  .kw-tier-5 { background:#3b82f6; color:#fff; }   /* 11-15 */
+  .kw-tier-6 { background:#8b5cf6; color:#fff; }   /* 其余 */
+  /* 字号根据 data-size 属性控制（由 JS 内联设置） */
 
   /* 话术列表 */
   .speech-list { max-height:400px; overflow-y:auto; }
@@ -171,6 +247,31 @@
 
   ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
   /* ── 版本徽章 ── */
+  /* ── 响应式 ── */
+  @media(max-width:900px) {
+    .main { padding:16px; }
+    .metrics-row { grid-template-columns:repeat(3,1fr); }
+  }
+  @media(max-width:640px) {
+    .navbar { padding:0 12px; height:auto; min-height:56px; flex-wrap:wrap; gap:4px; padding-top:8px; padding-bottom:8px; }
+    nav[style] { flex-wrap:wrap; gap:2px; }
+    .nav-link { font-size:12px; padding:4px 8px; }
+    .main { padding:10px; max-width:100%; }
+    .metrics-row { grid-template-columns:repeat(2,1fr); }
+    .metric-val { font-size:18px; }
+    .speech-section { grid-template-columns:1fr !important; }
+    .two-col { grid-template-columns:1fr !important; }
+    .stl-chip { max-width:90px; font-size:9px; }
+    .stl-chip-zh { max-width:90px; }
+    .page-title { font-size:17px; flex-wrap:wrap; }
+  }
+  @media(max-width:480px) {
+    .navbar-sub, .version-badge { display:none; }
+    .metrics-row { grid-template-columns:repeat(2,1fr); }
+    .metric-card { padding:10px; }
+    .panel { padding:14px; }
+  }
+
   .version-badge { font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;padding:2px 7px;cursor:pointer;transition:all .15s;user-select:none;letter-spacing:.3px;white-space:nowrap; }
   .version-badge:hover { background:#e5e7eb;color:#374151; }
   .changelog-modal { display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center; }
@@ -224,8 +325,15 @@
     <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
     <!-- 话术关键词时间轴 -->
     <div class="speech-timeline" id="speechTimeline" style="display:none;">
-      <div class="stl-title">🎤 主播话术时间轴（点击查看中文翻译）</div>
-      <div class="stl-scroll"><div class="stl-track" id="stlTrack"></div></div>
+      <div class="stl-title">
+        🎤 主播话术时间轴
+        <div class="stl-legend">
+          <span><span style="width:8px;height:8px;border-radius:50%;background:#fe2c55;display:inline-block;"></span> 普通话术</span>
+          <span><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;"></span> 流量峰值节点</span>
+          <span style="color:var(--text3);">· 悬停显示中文 · 点击固定</span>
+        </div>
+      </div>
+      <div class="stl-scroll" id="stlScrollWrap"><div class="stl-track-flow" id="stlTrack"></div></div>
     </div>
   </div>
 
@@ -257,7 +365,7 @@
       <span>🎤 话术分析 <span class="badge badge-new" id="speechCount"></span></span>
       <div style="display:flex;gap:6px;">
         <a id="downloadSpeechBtn" href="#" onclick="downloadDoc('speech');return false;" style="font-size:12px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:6px;padding:5px 12px;text-decoration:none;font-weight:600;">📥 下载 Word</a>
-        <button onclick="requestAiSummary('speech')" style="font-size:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600;">✨ AI 智能总结</button>
+        <button onclick="requestAiSummary('speech', event)" style="font-size:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600;">✨ AI 智能总结</button>
       </div>
     </div>
     <!-- AI 总结区域 -->
@@ -318,7 +426,7 @@
         <span>💬 评论记录（最新 100 条）</span>
         <div style="display:flex;gap:6px;">
           <a href="#" onclick="downloadDoc('comment');return false;" style="font-size:12px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:6px;padding:5px 12px;text-decoration:none;font-weight:600;">📥 下载 Word</a>
-          <button onclick="requestAiSummary('comment')" style="font-size:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600;">✨ AI 总结评论</button>
+          <button onclick="requestAiSummary('comment', event)" style="font-size:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600;">✨ AI 总结评论</button>
         </div>
       </div>
       <div id="commentAiSummary" style="display:none;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;color:#3730a3;line-height:1.7;"></div>
@@ -360,15 +468,14 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 
 // ── AI 智能总结 ──
 const _sessionIdForAi = window.location.pathname.split('/').pop();
-async function requestAiSummary(type) {
-  const btn = event.currentTarget;
+async function requestAiSummary(type, event) {
+  const btn = event ? event.currentTarget : null;
   const summaryEl = document.getElementById(type === 'speech' ? 'speechAiSummary' : 'commentAiSummary');
   if (!summaryEl) return;
 
-  btn.disabled = true;
-  btn.textContent = '⏳ AI 分析中...';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ AI 分析中...'; }
   summaryEl.style.display = '';
-  summaryEl.textContent = '正在调用 Gemini AI 分析，请稍候（约5-10秒）...';
+  summaryEl.textContent = '正在调用 AI 分析，请稍候（约5-15秒）...';
 
   try {
     const resp = await fetch(`/api/session/${_sessionIdForAi}/ai_summary`, {
@@ -380,13 +487,12 @@ async function requestAiSummary(type) {
     if (data.success && data.summary) {
       summaryEl.innerHTML = `<b>✨ AI 总结</b><br><br>${escHtml(data.summary).replace(/\n/g,'<br>')}`;
     } else {
-      summaryEl.innerHTML = `<span style="color:#dc2626;">${escHtml(data.msg || '总结失败，请检查 Gemini API Key 配置')}</span>`;
+      summaryEl.innerHTML = `<span style="color:#dc2626;">${escHtml(data.msg || 'AI 总结失败，请稍后重试')}</span>`;
     }
   } catch(e) {
     summaryEl.innerHTML = `<span style="color:#dc2626;">请求失败：${e.message}</span>`;
   } finally {
-    btn.disabled = false;
-    btn.textContent = type === 'speech' ? '✨ AI 智能总结' : '✨ AI 总结评论';
+    if (btn) { btn.disabled = false; btn.textContent = type === 'speech' ? '✨ AI 智能总结' : '✨ AI 总结评论'; }
   }
 }
 
@@ -453,8 +559,16 @@ const REVIEW_METRICS = [
 ];
 
 // ── 加载基础场次数据 ──
+// chartMinTime/chartMaxTime 提升为模块级，供 speech fetch 回调使用，避免竞态
+let chartMinTime = 0, chartMaxTime = 0;
+// _sessionData 提升为模块级，供 speech fetch 完成后更新调优建议
+let _sessionData = null;
+// _viewerSnaps 提升为模块级，供时间轴流量节点检测
+let _viewerSnaps = [];
+
 fetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
   const s = data.session || {};
+  _sessionData = s;
   document.getElementById('pageTitle').textContent = `直播复盘 — @${s.username}`;
 
   // 时长
@@ -476,7 +590,7 @@ fetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
   // 指标卡片
   const metrics = [
     {val: fmtDateTime(s.start_time), label:'开播时间'},
-    {val: s.status === 'live' ? '🔴 直播中' : fmtDateTime(s.end_time), label:'结束时间'},
+    {val: (s.status === 'live' && !s.end_time) ? '🔴 直播中' : fmtDateTime(s.end_time), label:'结束时间'},
     {val:dur, label:'直播时长'},
     {val:fmt(s.peak_viewers), label:'峰值在线'},
     {val:fmt(s.total_viewers), label:'累计观看'},
@@ -491,7 +605,7 @@ fetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
 
   // 趋势图
   const snaps = data.snapshots || [];
-  let chartMinTime = 0, chartMaxTime = 0;
+  _viewerSnaps = snaps; // 保存供时间轴流量节点检测
   if (snaps.length > 1) {
     // 存储趋势图时间范围（毫秒时间戳，用于时间轴对齐）
     chartMinTime = snaps[0].timestamp ? new Date(snaps[0].timestamp.replace(' ','T')).getTime() : 0;
@@ -678,15 +792,9 @@ fetch(`/api/session/${sessionId}/speech`).then(r=>r.json()).then(sp => {
     ? summary.map((s,i) => `<li class="summary-item"><span class="summary-num">${i+1}</span><span>${escHtml(s)}</span></li>`).join('')
     : '<li class="summary-item" style="color:var(--text3);">暂无摘要</li>';
 
-  // 关键词（新格式 [{word, zh}] 或旧格式 [string]）
+  // 关键词词频气泡图（新格式 [{word, zh, count}] 或旧格式 [string]）
   const kws = sp.keywords || [];
-  document.getElementById('keywordsWrap').innerHTML = kws.map(k => {
-    if (typeof k === 'object') {
-      const zhPart = k.zh ? `<span style="color:var(--text3);font-size:10px;margin-left:3px;">· ${escHtml(k.zh)}</span>` : '';
-      return `<span class="keyword-chip">${escHtml(k.word)}${zhPart}</span>`;
-    }
-    return `<span class="keyword-chip">${escHtml(k)}</span>`;
-  }).join('');
+  renderKeywordCloud(kws, document.getElementById('keywordsWrap'));
 
   // 全量话术
   document.getElementById('speechList').innerHTML = sp.records.map(r => {
@@ -708,55 +816,204 @@ fetch(`/api/session/${sessionId}/speech`).then(r=>r.json()).then(sp => {
 
   // ── 渲染话术方言分析面板 ──
   renderSpeechDialectAnalysis(sp.records);
+
+  // ── 用正确的 speechCount 重新更新调优建议 ──
+  if (_sessionData) renderOptimPanel(_sessionData, sp);
 });
 
-function renderSpeechTimeline(records, minTs, maxTs) {
+// ── 词频气泡图渲染 ──────────────────────────────────────────
+const KW_STOPWORDS = new Set([
+  // 英语停用词
+  'do','to','the','a','an','is','it','in','on','at','of','for','and','or','but','not','be',
+  'was','are','were','have','has','had','this','that','with','from','by','as','up','out',
+  'so','if','then','than','can','will','my','your','we','they','he','she','me','you','us',
+  'im','i','get','got','go','ok','yes','no','just','like','want','need','know','make','come',
+  'see','look','think','take','use','keep','let','well','also','now','one','two','all','any',
+  'new','good','more','some','what','which','who','when','how','would','could','should',
+  'oh','hi','hey','wow','hmm','ah','hm','br','re','ve','ll','d','t','s',
+  // 阿拉伯语常见停用词
+  'من','في','على','إلى','عن','مع','هذا','هذه','التي','الذي','وهو','وهي','إن','أن',
+  'كان','كانت','ما','لا','هو','هي','هم','نحن','أنت','أنا',
+  // 中文停用词
+  '的','了','是','在','有','我','你','他','这','那','和','也','都','很','不','吗','啊','哦',
+  '哈','就','要','会','对','好','说','没','一','去','来','大','小','多','少','上','下',
+]);
+
+function renderKeywordCloud(kws, container) {
+  if (!container) return;
+  if (!kws || !kws.length) {
+    container.innerHTML = '<span style="color:var(--text3);font-size:12px;">暂无关键词</span>';
+    return;
+  }
+
+  // 标准化格式，过滤停用词
+  const items = kws
+    .map((k, i) => {
+      if (typeof k === 'object') return { word: k.word || '', zh: k.zh || '', count: k.count || (kws.length - i) };
+      return { word: String(k), zh: '', count: kws.length - i };
+    })
+    .filter(k => {
+      const w = k.word.trim().toLowerCase();
+      return w.length >= 2 && !KW_STOPWORDS.has(w);
+    });
+
+  if (!items.length) {
+    container.innerHTML = '<span style="color:var(--text3);font-size:12px;">暂无关键词</span>';
+    return;
+  }
+
+  const totalCount = items.reduce((s, k) => s + k.count, 0);
+  const maxCount = items[0].count;
+
+  // 字号映射：最高词 24px → 最低词 11px（线性插值）
+  const sizeMax = 24, sizeMin = 11;
+
+  // 颜色梯度
+  const getTier = (i) => {
+    if (i === 0) return 'kw-tier-1';
+    if (i <= 2) return 'kw-tier-2';
+    if (i <= 5) return 'kw-tier-3';
+    if (i <= 9) return 'kw-tier-4';
+    if (i <= 14) return 'kw-tier-5';
+    return 'kw-tier-6';
+  };
+
+  container.className = 'kw-cloud';
+  container.innerHTML = items.slice(0, 30).map((k, i) => {
+    const pct = totalCount > 0 ? Math.round(k.count / totalCount * 100) : 0;
+    const fontSize = maxCount > 0
+      ? Math.round(sizeMin + (k.count / maxCount) * (sizeMax - sizeMin))
+      : 13;
+    const tier = getTier(i);
+    const zhLabel = k.zh ? ` · ${escHtml(k.zh)}` : '';
+    const tooltip = `${k.word}${k.zh ? ' / '+k.zh : ''} — 出现 ${k.count} 次，占 ${pct}%`;
+    return `<span class="kw-bubble ${tier}" style="font-size:${fontSize}px;" title="${tooltip}">
+      <span class="kw-rank">#${i+1}</span>
+      <span class="kw-word">${escHtml(k.word)}${zhLabel}</span>
+      <span class="kw-pct">${pct}%</span>
+    </span>`;
+  }).join('');
+}
+// ────────────────────────────────────────────────────────────
+
+function renderSpeechTimeline(records, minTs, maxTs, viewerSnapshots) {
   const tl = document.getElementById('speechTimeline');
   const track = document.getElementById('stlTrack');
+  const scrollWrap = document.getElementById('stlScrollWrap');
   if (!tl || !track || !records.length) return;
   tl.style.display = '';
 
+  // ── 找流量峰值时间点（取变化最大的前3个相邻增量时刻）──
+  const peakTimes = new Set();
+  const peakDiffs = []; // {ts, diff, viewers}
+  if (viewerSnapshots && viewerSnapshots.length > 2) {
+    const diffs = [];
+    for (let i = 1; i < viewerSnapshots.length; i++) {
+      const diff = (viewerSnapshots[i].viewer_count || 0) - (viewerSnapshots[i-1].viewer_count || 0);
+      diffs.push({ ts: viewerSnapshots[i].timestamp, diff, viewers: viewerSnapshots[i].viewer_count || 0 });
+    }
+    diffs.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+    diffs.slice(0, 3).forEach(d => {
+      const t = new Date(d.ts.replace(' ', 'T')).getTime();
+      peakTimes.add(t);
+      peakDiffs.push(d);
+    });
+  }
+
+  // 判断某条话术是否在流量峰值附近（±3分钟）
+  function isNearPeak(ts) {
+    if (!peakTimes.size) return false;
+    const t = new Date(ts.replace(' ', 'T')).getTime();
+    for (const pt of peakTimes) {
+      if (Math.abs(t - pt) <= 3 * 60 * 1000) return true;
+    }
+    return false;
+  }
+
   const timeRange = (maxTs && minTs && maxTs > minTs) ? (maxTs - minTs) : 0;
 
-  if (timeRange > 0) {
-    // 对齐模式：按时间比例定位，与趋势图X轴对齐
-    track.style.position = 'relative';
-    track.style.minHeight = '64px';
-    track.style.minWidth = '100%';
-    track.style.display = 'block';
-
-    track.innerHTML = records.map(r => {
+  // ── 提炼峰值节点附近话术摘要卡 ──
+  function buildPeakCards() {
+    if (!peakDiffs.length) return '';
+    const peakRecords = records.filter(r => r.timestamp && isNearPeak(r.timestamp));
+    if (!peakRecords.length) return '';
+    const cards = peakRecords.slice(0, 5).map(r => {
       const time = (r.timestamp||'').slice(-8).slice(0,5);
+      const zh = r.text_zh && r.text_zh !== r.text ? r.text_zh : r.text || '';
+      const isUp = peakDiffs.some(d => {
+        const pt = new Date(d.ts.replace(' ','T')).getTime();
+        const rt = new Date((r.timestamp||'').replace(' ','T')).getTime();
+        return Math.abs(rt - pt) <= 3*60*1000 && d.diff > 0;
+      });
+      const arrow = isUp ? '📈' : '📉';
+      return `<div class="stl-peak-card">
+        <span class="stl-peak-time">${arrow} ${time}</span>
+        <span class="stl-peak-text">${escHtml(zh.slice(0,40))}${zh.length>40?'…':''}</span>
+      </div>`;
+    }).join('');
+    return `<div class="stl-peak-section">
+      <div class="stl-peak-title">🔥 流量变化时刻的主播话术</div>
+      <div class="stl-peak-list">${cards}</div>
+    </div>`;
+  }
+
+  // ── 构建每条 item（通用，中文翻译默认显示）──
+  function buildItem(r, isPeak, labelSlice) {
+    const time = (r.timestamp||'').slice(-8).slice(0,5);
+    const orig = r.text || '';
+    const zhText = r.text_zh && r.text_zh !== r.text ? r.text_zh : '';
+    // 优先显示中文翻译，否则显示原文
+    const display = zhText || orig;
+    const label = display.slice(0, labelSlice || 16) + (display.length > (labelSlice||16) ? '…' : '');
+    const langCls = r.lang && r.lang.startsWith('ar') ? 'ar' : (r.lang_short === 'en' ? 'en' : '');
+    const peakCls = isPeak ? ' peak-item' : '';
+    const tooltip = `📌 ${time}${isPeak ? ' 🔥流量变化节点' : ''}\n原文：${orig}${zhText ? '\n中文：'+zhText : ''}`;
+    // 显示原文小标注（非中文时）
+    const origEl = zhText ? `<div class="stl-chip-orig">${escHtml(orig.slice(0,16))}${orig.length>16?'…':''}</div>` : '';
+    return { time, label, langCls, peakCls, origEl, tooltip };
+  }
+
+  // 先渲染峰值摘要卡
+  const peakCardsHtml = buildPeakCards();
+
+  if (timeRange > 0) {
+    // 绝对定位模式（与趋势图X轴对齐）
+    const trackHtml = [];
+    records.forEach((r, idx) => {
       const rTs = r.timestamp ? new Date(r.timestamp.replace(' ','T')).getTime() : 0;
       const pct = rTs ? Math.max(0, Math.min(99, ((rTs - minTs) / timeRange) * 100)) : 0;
-      const label = (r.text||'').slice(0,16) + (r.text && r.text.length>16 ? '…' : '');
-      const langCls = r.lang && r.lang.startsWith('ar') ? 'ar' : (r.lang==='en' ? 'en' : '');
-      const zhPart = r.text_zh && r.text_zh !== r.text ? `\n中文：${r.text_zh}` : '';
-      const tooltip = `📌 ${time}\n原文：${r.text}${zhPart}`;
-      return `<div class="stl-item" title="${escHtml(tooltip)}" style="left:${pct.toFixed(1)}%;position:absolute;transform:translateX(-50%);">
-        <div class="stl-dot"></div>
+      const isPeak = r.timestamp ? isNearPeak(r.timestamp) : false;
+      const { time, label, langCls, peakCls, origEl, tooltip } = buildItem(r, isPeak, 13);
+      // 奇偶交替 + 峰值节点置顶
+      const rowCls = isPeak ? 'row-bottom' : (idx % 2 === 0 ? 'row-top' : 'row-bottom');
+      trackHtml.push(`<div class="stl-item-abs ${rowCls}${peakCls}" style="left:${pct.toFixed(1)}%;${isPeak?'z-index:10;':''}" title="${escHtml(tooltip)}" onclick="this.classList.toggle('pinned')">
         <div class="stl-chip ${langCls}">${escHtml(label)}</div>
+        ${origEl}
+        <div class="stl-stem"></div>
+        <div class="stl-dot"></div>
         <div class="stl-time">${time}</div>
-      </div>`;
-    }).join('');
+      </div>`);
+    });
+    scrollWrap.innerHTML =
+      peakCardsHtml +
+      `<div class="stl-track-abs" style="height:130px;">${trackHtml.join('')}<div class="stl-baseline"></div></div>`;
   } else {
-    // 无时间范围时退回横向滚动模式
-    track.style.position = '';
-    track.style.minHeight = '';
-    track.style.minWidth = 'max-content';
-    track.style.display = 'flex';
-    track.innerHTML = records.map(r => {
-      const time = (r.timestamp||'').slice(-8).slice(0,5);
-      const label = (r.text||'').slice(0,22) + (r.text && r.text.length>22 ? '…' : '');
-      const langCls = r.lang && r.lang.startsWith('ar') ? 'ar' : (r.lang==='en' ? 'en' : '');
-      const zhPart = r.text_zh && r.text_zh !== r.text ? `\n中文：${r.text_zh}` : '';
-      const tooltip = `📌 ${time}\n原文：${r.text}${zhPart}`;
-      return `<div class="stl-item" title="${escHtml(tooltip)}">
+    // 横向滚动模式
+    track.className = 'stl-track-flow';
+    track.innerHTML = records.map((r, idx) => {
+      const isPeak = r.timestamp ? isNearPeak(r.timestamp) : false;
+      const { time, label, langCls, peakCls, origEl, tooltip } = buildItem(r, isPeak, 18);
+      return `<div class="stl-item${peakCls}" title="${escHtml(tooltip)}" onclick="this.classList.toggle('pinned')">
         <div class="stl-dot"></div>
         <div class="stl-chip ${langCls}">${escHtml(label)}</div>
+        ${origEl}
         <div class="stl-time">${time}</div>
       </div>`;
     }).join('');
+    // 峰值摘要卡放在滚动轨道上方
+    if (peakCardsHtml) {
+      scrollWrap.insertAdjacentHTML('beforebegin', peakCardsHtml);
+    }
   }
 }
 
@@ -888,7 +1145,7 @@ function renderOptimPanel(session, summary) {
   const totalViewers = session.total_viewers || 0;
   const totalComments = session.total_comments || 0;
   const giftValue = session.total_gift_value || 0;
-  const speechCount = (summary && summary.speech && summary.speech.records) ? summary.speech.records.length : 0;
+  const speechCount = (summary && summary.records) ? summary.records.length : 0;
 
   const tips = [];
 

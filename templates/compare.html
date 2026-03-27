@@ -61,26 +61,31 @@
   .strip-label { font-size:12px; color:var(--text2); }
 
   /* 对比大表 */
-  .compare-table { width:100%; border-collapse:collapse; font-size:13px; }
-  .compare-table th { background:#f8f9fc; border-bottom:2px solid var(--border); padding:10px 14px; text-align:left; font-weight:700; color:var(--text2); white-space:nowrap; }
+  .compare-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:auto; }
+  .compare-table th { background:#f8f9fc; border-bottom:2px solid var(--border); padding:10px 8px; text-align:left; font-weight:700; color:var(--text2); white-space:nowrap; }
   .compare-table th.metric-col { text-align:right; }
-  .compare-table td { padding:10px 14px; border-bottom:1px solid var(--border2); vertical-align:middle; }
+  .compare-table td { padding:8px 8px; border-bottom:1px solid var(--border2); vertical-align:middle; }
   .compare-table tr:last-child td { border-bottom:none; }
   .compare-table tr:hover td { background:#fafbfc; }
-  .compare-table td.metric-val { text-align:right; font-weight:600; }
-  .compare-table td.rank-col { font-size:18px; font-weight:800; color:var(--text3); width:40px; text-align:center; }
+  .compare-table td.metric-val { text-align:right; font-weight:600; white-space:nowrap; }
+  .compare-table td.rank-col { font-size:18px; font-weight:800; color:var(--text3); width:32px; text-align:center; }
   .rank-1 { color:#f59e0b !important; }
   .rank-2 { color:#6b7280 !important; }
   .rank-3 { color:#d97706 !important; }
 
   /* 账号名行 */
   .acname { display:flex; align-items:center; gap:7px; font-weight:700; font-size:14px; }
+  .acname-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px; }
   .live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#fe2c55; flex-shrink:0; box-shadow:0 0 0 2px rgba(254,44,85,.3); animation:blink 1.2s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
-  .bar-wrap { display:flex; align-items:center; gap:7px; min-width:80px; }
-  .bar-bg { height:6px; background:var(--border2); border-radius:3px; flex:1; min-width:40px; }
+  .bar-wrap { display:flex; align-items:center; gap:6px; justify-content:flex-end; }
+  .bar-bg { height:6px; background:var(--border2); border-radius:3px; width:60px; flex-shrink:0; overflow:hidden; }
   .bar-fill { height:100%; border-radius:3px; transition:width .5s; }
-  .num-val { font-size:13px; font-weight:700; min-width:44px; text-align:right; }
+  .num-val { font-size:13px; font-weight:700; min-width:36px; text-align:right; white-space:nowrap; }
+  /* 场次/时长专列 */
+  .sess-col { text-align:center; }
+  .sess-val { font-size:14px; font-weight:800; color:var(--text); }
+  .sess-sub { font-size:10px; color:var(--text3); margin-top:1px; }
 
   /* 图表区 */
   .charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
@@ -126,6 +131,30 @@
 
   /* tooltip */
   .tooltip-text { font-size:11px; color:var(--text3); }
+
+  /* ── 响应式 ── */
+  @media(max-width:960px) {
+    .main { padding:16px; }
+    .summary-strip { grid-template-columns:repeat(3,1fr); }
+    .trend-grid { grid-template-columns:1fr 1fr; }
+  }
+  @media(max-width:680px) {
+    .navbar { padding:0 12px; height:auto; min-height:56px; flex-wrap:wrap; gap:6px; padding-top:8px; padding-bottom:8px; }
+    .navbar-nav { flex-wrap:wrap; gap:2px; }
+    .nav-link { font-size:12px; padding:4px 8px; }
+    .main { padding:12px; }
+    .summary-strip { grid-template-columns:repeat(2,1fr); }
+    .page-header { flex-direction:column; align-items:flex-start; }
+    .tab-btn { padding:7px 10px; font-size:12px; }
+    .charts-grid { grid-template-columns:1fr; }
+    .vs-grid { grid-template-columns:1fr; }
+    .trend-grid { grid-template-columns:1fr; }
+    .strip-val { font-size:20px; }
+  }
+  @media(max-width:480px) {
+    .summary-strip { grid-template-columns:1fr 1fr; }
+    .navbar-sub { display:none; }
+  }
 </style>
 </head>
 <body>
@@ -184,9 +213,14 @@
     <!-- Tab: 排名对比 -->
     <div class="tab-pane active" id="tab-ranking">
       <div class="panel">
-        <div class="panel-title">
-          🏆 自营账号排名（近10场均值）
-          <span class="badge badge-own" id="ownCountBadge"></span>
+        <div class="panel-title" style="justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            🏆 自营账号排名（近10场均值）
+            <span class="badge badge-own" id="ownCountBadge"></span>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="showAddAccountModal()" style="padding:5px 12px;background:var(--success);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">+ 新增账号</button>
+          </div>
         </div>
         <div id="rankingTableWrap">
           <div class="empty-state">
@@ -376,6 +410,8 @@ function renderRankingTable(own) {
   const maxGift = Math.max(...sorted.map(a => a.avg_gift || 0)) || 1;
   const maxComments = Math.max(...sorted.map(a => a.avg_comments || 0)) || 1;
   const maxFollowers = Math.max(...sorted.map(a => a.avg_followers || 0)) || 1;
+  const maxSession = Math.max(...sorted.map(a => a.session_count || 0)) || 1;
+  const maxDuration = Math.max(...sorted.map(a => a.avg_duration || 0)) || 1;
 
   const rankEmoji = ['🥇', '🥈', '🥉'];
 
@@ -385,20 +421,25 @@ function renderRankingTable(own) {
     const liveBadge = a.is_live ? `<span class="live-dot"></span>` : '';
     const color = COLORS[i % COLORS.length];
 
-    const peakPct = Math.round((a.avg_peak || 0) / maxPeak * 100);
-    const giftPct = Math.round((a.avg_gift || 0) / maxGift * 100);
-    const commentPct = Math.round((a.avg_comments || 0) / maxComments * 100);
-    const followerPct = Math.round((a.avg_followers || 0) / maxFollowers * 100);
+    const peakPct = Math.min(100, Math.round((a.avg_peak || 0) / maxPeak * 100));
+    const giftPct = Math.min(100, Math.round((a.avg_gift || 0) / maxGift * 100));
+    const commentPct = Math.min(100, Math.round((a.avg_comments || 0) / maxComments * 100));
+    const followerPct = Math.min(100, Math.round((a.avg_followers || 0) / maxFollowers * 100));
+    const sessPct = Math.min(100, Math.round((a.session_count || 0) / maxSession * 100));
+    const durPct = Math.min(100, Math.round((a.avg_duration || 0) / maxDuration * 100));
 
     return `<tr>
       <td class="rank-col ${rankClass}">${rankDisp}</td>
-      <td>
+      <td style="min-width:130px;">
         <div class="acname">
           ${liveBadge}
-          <span style="color:${color}">${esc(a.username)}</span>
-          ${a.is_live ? '<span class="badge badge-live" style="font-size:10px;">直播中</span>' : ''}
+          <span class="acname-text" style="color:${color}" title="@${esc(a.username)}">@${esc(a.username)}</span>
+          ${a.is_live ? '<span class="badge badge-live" style="font-size:10px;flex-shrink:0;">🔴</span>' : ''}
         </div>
-        <div class="tooltip-text" style="margin-top:3px;">近 ${a.session_count} 场 · 均时长 ${fmtMin(a.avg_duration)}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+          <a href="/history?u=${encodeURIComponent(a.username)}" style="font-size:11px;color:var(--info);text-decoration:none;" target="_blank">历史 →</a>
+          <button onclick="removeOwnAccount('${esc(a.username)}')" style="font-size:10px;color:#dc2626;background:#fee2e2;border:1px solid #fecaca;border-radius:4px;padding:1px 5px;cursor:pointer;">移除</button>
+        </div>
       </td>
       <td class="metric-val">
         <div class="bar-wrap">
@@ -424,27 +465,37 @@ function renderRankingTable(own) {
           <span class="num-val">${fmt(a.avg_followers)}</span>
         </div>
       </td>
-      <td class="metric-val">${fmt(a.avg_total)}</td>
-      <td><a href="/history?u=${encodeURIComponent(a.username)}" style="font-size:12px;color:var(--info);text-decoration:none;" target="_blank">查看历史 →</a></td>
+      <td class="sess-col">
+        <div class="sess-val">${a.session_count || 0}</div>
+        <div style="height:3px;background:var(--border2);border-radius:2px;margin-top:3px;width:40px;margin:3px auto 0;"><div style="height:100%;background:#7c3aed;border-radius:2px;width:${sessPct}%;"></div></div>
+        <div class="sess-sub">场次</div>
+      </td>
+      <td class="sess-col">
+        <div class="sess-val">${fmtMin(a.avg_duration)}</div>
+        <div style="height:3px;background:var(--border2);border-radius:2px;margin-top:3px;width:40px;margin:3px auto 0;"><div style="height:100%;background:#0ea5e9;border-radius:2px;width:${durPct}%;"></div></div>
+        <div class="sess-sub">均时长</div>
+      </td>
     </tr>`;
   }).join('');
 
   wrap.innerHTML = `
-    <table class="compare-table">
+    <div style="overflow-x:auto;">
+    <table class="compare-table" style="min-width:680px;">
       <thead>
         <tr>
-          <th style="width:44px;">排名</th>
-          <th>账号</th>
-          <th class="metric-col" style="min-width:160px;">👁️ 峰值在线 <small style="font-weight:400;color:var(--text3)">(主排名)</small></th>
-          <th class="metric-col" style="min-width:140px;">🎁 礼物收入</th>
-          <th class="metric-col" style="min-width:140px;">💬 评论数</th>
-          <th class="metric-col" style="min-width:140px;">➕ 新粉丝</th>
-          <th class="metric-col">总观看</th>
-          <th></th>
+          <th style="width:32px;">名</th>
+          <th style="min-width:130px;">账号</th>
+          <th class="metric-col" style="min-width:130px;">👁️ 峰值在线 <small style="font-weight:400;color:var(--text3)">(主排名)</small></th>
+          <th class="metric-col" style="min-width:120px;">🎁 礼物收入</th>
+          <th class="metric-col" style="min-width:110px;">💬 评论数</th>
+          <th class="metric-col" style="min-width:110px;">➕ 新粉丝</th>
+          <th class="metric-col" style="min-width:80px;">📋 场次</th>
+          <th class="metric-col" style="min-width:80px;">⏱️ 时长</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
+    </div>
     <div style="font-size:11px;color:var(--text3);margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);">
       * 均值数据基于各账号近10场已结束直播计算；进度条为相对最高值的百分比
     </div>
@@ -677,8 +728,71 @@ function renderVs(own, rivals) {
   }
 }
 
+// ── 新增自营账号 ──
+function showAddAccountModal() {
+  document.getElementById('addAccountModal').style.display = 'flex';
+  document.getElementById('addAccountInput').value = '';
+  document.getElementById('addAccountInput').focus();
+}
+function closeAddAccountModal() {
+  document.getElementById('addAccountModal').style.display = 'none';
+}
+async function submitAddAccount() {
+  const input = document.getElementById('addAccountInput').value.trim().replace(/^@/, '');
+  if (!input) { alert('请输入用户名'); return; }
+  const usernames = input.split(/[\n,]+/).map(s => s.trim().replace(/^@/, '')).filter(Boolean);
+  if (!usernames.length) return;
+  const btn = document.getElementById('addAccountBtn');
+  btn.disabled = true; btn.textContent = '添加中...';
+  let ok = 0;
+  for (const un of usernames) {
+    try {
+      const res = await fetch('/api/account/group', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username: un, group: 'own'})
+      });
+      const d = await res.json();
+      if (d.success) ok++;
+    } catch(e) {}
+  }
+  btn.disabled = false; btn.textContent = '确认添加';
+  closeAddAccountModal();
+  if (ok > 0) { alert(`已成功添加 ${ok} 个自营账号`); loadAll(); }
+  else alert('添加失败，请检查账号名是否正确');
+}
+
+// ── 移除自营账号（从 own 分组删除） ──
+async function removeOwnAccount(username) {
+  if (!confirm(`确定将 @${username} 从自营账号列表移除吗？\n（不会删除历史直播记录）`)) return;
+  try {
+    // 将该账号的分组改为 watch（不删除历史数据）
+    const res = await fetch('/api/account/group', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, group: 'watch'})
+    });
+    const d = await res.json();
+    if (d.success) { alert(`@${username} 已从自营列表移除`); loadAll(); }
+    else alert('操作失败，请重试');
+  } catch(e) { alert('网络错误，请重试'); }
+}
+
 // ── 初始加载 ──
 loadAll();
 </script>
+
+<!-- 新增账号弹窗 -->
+<div id="addAccountModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;" onclick="if(event.target===this)closeAddAccountModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px;width:420px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="font-size:17px;font-weight:700;margin-bottom:6px;">➕ 新增自营账号</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">输入 TikTok 用户名（可多行输入批量添加，不需要 @ 符号）</div>
+    <textarea id="addAccountInput" placeholder="每行一个，例如：&#10;tiktokuser1&#10;tiktokuser2" style="width:100%;height:100px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;resize:vertical;outline:none;font-family:inherit;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+      <button onclick="closeAddAccountModal()" style="padding:8px 16px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;">取消</button>
+      <button id="addAccountBtn" onclick="submitAddAccount()" style="padding:8px 18px;background:var(--success);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">确认添加</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

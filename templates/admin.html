@@ -274,7 +274,13 @@ async function loadUsers() {
   tb.innerHTML = activeUsers.map(u => `
     <tr>
       <td>${u.id}</td>
-      <td><strong>${u.username}</strong></td>
+      <td>
+        <strong>${u.username}</strong>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+          📊 ${u.session_count || 0} 场监控 · 🎯 ${u.account_count || 0} 个账号
+          ${u.last_active ? `· 最后活跃：${(u.last_active||'').slice(0,16)}` : '· 尚未使用'}
+        </div>
+      </td>
       <td style="color:var(--text2);">${u.real_name || '-'}</td>
       <td><span class="badge ${u.is_admin ? 'badge-admin' : 'badge-user'}">${u.is_admin ? '管理员' : '普通用户'}</span></td>
       <td>${statusBadge(u.status || 'active')}</td>

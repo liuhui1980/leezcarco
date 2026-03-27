@@ -354,11 +354,15 @@ def get_session_by_id(session_id):
 
 
 def get_session_summary(session_id):
-    """获取会话汇总数据"""
+    """获取会话汇总数据，session不存在时返回None"""
     conn = get_conn()
     c = conn.cursor()
     c.execute('SELECT * FROM live_sessions WHERE id=?', (session_id,))
-    session = dict(c.fetchone() or {})
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return None
+    session = dict(row)
 
     # 获取评论列表（含语言检测）
     c.execute('SELECT * FROM comments WHERE session_id=? ORDER BY timestamp DESC LIMIT 100', (session_id,))
@@ -472,9 +476,10 @@ def delete_session(session_id):
     for table in ('speech_records', 'comments', 'gifts', 'follows', 'metrics_snapshots'):
         c.execute(f'DELETE FROM {table} WHERE session_id=?', (session_id,))
     c.execute('DELETE FROM live_sessions WHERE id=?', (session_id,))
+    affected = c.rowcount
     conn.commit()
     conn.close()
-    return True
+    return affected > 0
 
 
 def delete_account_sessions(username, owner_user_id=None):
@@ -584,7 +589,7 @@ def get_speech_summary(session_id):
                     zh = translated.strip()
             except Exception:
                 pass
-        keywords.append({'word': kw, 'zh': zh})
+        keywords.append({'word': kw, 'zh': zh, 'count': word_freq.get(kw, 1)})
 
     # 关键句：含高频词的句子，且长度 > 10 字符，去重取 Top10
     def score_sentence(s):
