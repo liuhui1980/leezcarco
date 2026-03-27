@@ -200,7 +200,9 @@
   <nav style="display:flex;gap:4px;align-items:center;">
     <a href="/" class="nav-link">实时看板</a>
     <a href="/history" class="nav-link">历史记录</a>
+    <a href="/automonitor" class="nav-link">📋 自动监控</a>
     <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
     <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
     <button onclick="authLogout()" style="font-size:13px;background:#f5f6fa;border:1px solid #e8eaef;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:2px">退出</button>
@@ -251,7 +253,15 @@
 
   <!-- 话术分析 -->
   <div class="panel" id="speechPanel" style="display:none;">
-    <div class="panel-title">🎤 话术分析 <span class="badge badge-new" id="speechCount"></span></div>
+    <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+      <span>🎤 话术分析 <span class="badge badge-new" id="speechCount"></span></span>
+      <div style="display:flex;gap:6px;">
+        <a id="downloadSpeechBtn" href="#" onclick="downloadDoc('speech');return false;" style="font-size:12px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:6px;padding:5px 12px;text-decoration:none;font-weight:600;">📥 下载 Word</a>
+        <button onclick="requestAiSummary('speech')" style="font-size:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600;">✨ AI 智能总结</button>
+      </div>
+    </div>
+    <!-- AI 总结区域 -->
+    <div id="speechAiSummary" style="display:none;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#3730a3;line-height:1.7;"></div>
     <div class="speech-section">
       <!-- 内容总结 + 热词 -->
       <div>
@@ -270,7 +280,7 @@
 
   <!-- ★ 话术方言分析（整场主播说话的语言/方言分布） -->
   <div class="dialect-analysis" id="speechDialectPanel" style="display:none;">
-    <div class="panel-title">🎙️ 主播话术方言分析 <span class="badge badge-new" id="speechDialectBadge"></span></div>
+    <div class="panel-title">🎙️ 主播话术语言分析 <span class="badge badge-new" id="speechDialectBadge"></span></div>
     <div id="speechDialectSummary" class="dialect-summary"></div>
     <div id="speechDialectBarList" class="dialect-bar-list"></div>
   </div>
@@ -304,7 +314,14 @@
       </table>
     </div>
     <div class="panel">
-      <div class="panel-title">💬 评论记录（最新 100 条）</div>
+      <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+        <span>💬 评论记录（最新 100 条）</span>
+        <div style="display:flex;gap:6px;">
+          <a href="#" onclick="downloadDoc('comment');return false;" style="font-size:12px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:6px;padding:5px 12px;text-decoration:none;font-weight:600;">📥 下载 Word</a>
+          <button onclick="requestAiSummary('comment')" style="font-size:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600;">✨ AI 总结评论</button>
+        </div>
+      </div>
+      <div id="commentAiSummary" style="display:none;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;color:#3730a3;line-height:1.7;"></div>
       <div style="max-height:400px;overflow-y:auto;">
         <table class="data-table" id="commentTable">
           <thead><tr><th>时间</th><th>用户</th><th>内容</th></tr></thead>
@@ -340,6 +357,79 @@ async function authLogout() {
 function fmt(n) { if(n>=10000) return (n/10000).toFixed(1)+'w'; if(n>=1000) return (n/1000).toFixed(1)+'k'; return (n||0).toLocaleString(); }
 function fmtMin(m) { if(!m) return '-'; m=Math.round(m); return m>=60?`${Math.floor(m/60)}h${m%60}m`:`${m}m`; }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── AI 智能总结 ──
+const _sessionIdForAi = window.location.pathname.split('/').pop();
+async function requestAiSummary(type) {
+  const btn = event.currentTarget;
+  const summaryEl = document.getElementById(type === 'speech' ? 'speechAiSummary' : 'commentAiSummary');
+  if (!summaryEl) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ AI 分析中...';
+  summaryEl.style.display = '';
+  summaryEl.textContent = '正在调用 Gemini AI 分析，请稍候（约5-10秒）...';
+
+  try {
+    const resp = await fetch(`/api/session/${_sessionIdForAi}/ai_summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type })
+    });
+    const data = await resp.json();
+    if (data.success && data.summary) {
+      summaryEl.innerHTML = `<b>✨ AI 总结</b><br><br>${escHtml(data.summary).replace(/\n/g,'<br>')}`;
+    } else {
+      summaryEl.innerHTML = `<span style="color:#dc2626;">${escHtml(data.msg || '总结失败，请检查 Gemini API Key 配置')}</span>`;
+    }
+  } catch(e) {
+    summaryEl.innerHTML = `<span style="color:#dc2626;">请求失败：${e.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = type === 'speech' ? '✨ AI 智能总结' : '✨ AI 总结评论';
+  }
+}
+
+// ── Word 文档下载 ──
+function downloadDoc(type) {
+  const sid = window.location.pathname.split('/').pop();
+  const url = type === 'speech'
+    ? `/api/session/${sid}/download_speech`
+    : `/api/session/${sid}/download_comments`;
+
+  // 显示下载中状态
+  const btn = event.currentTarget;
+  const originalText = btn.textContent || btn.innerHTML;
+  btn.style.pointerEvents = 'none';
+  btn.textContent = '⏳ 生成中...';
+
+  // 用 fetch 下载，避免跳转
+  fetch(url)
+    .then(resp => {
+      if (!resp.ok) return resp.json().then(d => { throw new Error(d.error || '下载失败'); });
+      // 从 Content-Disposition 读文件名
+      const cd = resp.headers.get('Content-Disposition') || '';
+      let filename = type === 'speech' ? '话术.docx' : '评论.docx';
+      const m = cd.match(/filename\*?=['"]?(?:UTF-8'')?([^'";\n]+)/i);
+      if (m) filename = decodeURIComponent(m[1]);
+      return resp.blob().then(blob => ({ blob, filename }));
+    })
+    .then(({ blob, filename }) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    })
+    .catch(err => {
+      alert('下载失败：' + err.message);
+    })
+    .finally(() => {
+      btn.style.pointerEvents = '';
+      btn.textContent = originalText;
+    });
+}
 
 function changeBadge(cur, ref, higherIsBetter=true) {
   if (ref === undefined || ref === null || ref === 0) return '';
@@ -401,7 +491,11 @@ fetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
 
   // 趋势图
   const snaps = data.snapshots || [];
+  let chartMinTime = 0, chartMaxTime = 0;
   if (snaps.length > 1) {
+    // 存储趋势图时间范围（毫秒时间戳，用于时间轴对齐）
+    chartMinTime = snaps[0].timestamp ? new Date(snaps[0].timestamp.replace(' ','T')).getTime() : 0;
+    chartMaxTime = snaps[snaps.length-1].timestamp ? new Date(snaps[snaps.length-1].timestamp.replace(' ','T')).getTime() : 0;
     new Chart(document.getElementById('trendChart'), {
       type:'line',
       data:{
@@ -584,10 +678,15 @@ fetch(`/api/session/${sessionId}/speech`).then(r=>r.json()).then(sp => {
     ? summary.map((s,i) => `<li class="summary-item"><span class="summary-num">${i+1}</span><span>${escHtml(s)}</span></li>`).join('')
     : '<li class="summary-item" style="color:var(--text3);">暂无摘要</li>';
 
-  // 关键词
+  // 关键词（新格式 [{word, zh}] 或旧格式 [string]）
   const kws = sp.keywords || [];
-  document.getElementById('keywordsWrap').innerHTML = kws.map(k =>
-    `<span class="keyword-chip">${escHtml(k)}</span>`).join('');
+  document.getElementById('keywordsWrap').innerHTML = kws.map(k => {
+    if (typeof k === 'object') {
+      const zhPart = k.zh ? `<span style="color:var(--text3);font-size:10px;margin-left:3px;">· ${escHtml(k.zh)}</span>` : '';
+      return `<span class="keyword-chip">${escHtml(k.word)}${zhPart}</span>`;
+    }
+    return `<span class="keyword-chip">${escHtml(k)}</span>`;
+  }).join('');
 
   // 全量话术
   document.getElementById('speechList').innerHTML = sp.records.map(r => {
@@ -605,32 +704,60 @@ fetch(`/api/session/${sessionId}/speech`).then(r=>r.json()).then(sp => {
   }).join('');
 
   // ── 渲染趋势图下方话术时间轴 ──
-  renderSpeechTimeline(sp.records);
+  renderSpeechTimeline(sp.records, chartMinTime, chartMaxTime);
 
   // ── 渲染话术方言分析面板 ──
   renderSpeechDialectAnalysis(sp.records);
 });
 
-function renderSpeechTimeline(records) {
+function renderSpeechTimeline(records, minTs, maxTs) {
   const tl = document.getElementById('speechTimeline');
   const track = document.getElementById('stlTrack');
   if (!tl || !track || !records.length) return;
   tl.style.display = '';
 
-  track.innerHTML = records.map(r => {
-    const time = (r.timestamp||'').slice(-8).slice(0,5); // HH:MM
-    // 截取前20字符作为标签
-    const label = (r.text||'').slice(0,22) + (r.text && r.text.length>22 ? '…' : '');
-    const langCls = r.lang && r.lang.startsWith('ar') ? 'ar' : (r.lang==='en' ? 'en' : '');
-    const tooltip = r.text_zh && r.text_zh !== r.text
-      ? `📌 ${time}\n原文：${r.text}\n中文：${r.text_zh}`
-      : `📌 ${time}\n${r.text}`;
-    return `<div class="stl-item" title="${escHtml(tooltip)}" onclick="this.querySelector('.stl-chip').style.background=''">
-      <div class="stl-dot"></div>
-      <div class="stl-chip ${langCls}">${escHtml(label)}</div>
-      <div class="stl-time">${time}</div>
-    </div>`;
-  }).join('');
+  const timeRange = (maxTs && minTs && maxTs > minTs) ? (maxTs - minTs) : 0;
+
+  if (timeRange > 0) {
+    // 对齐模式：按时间比例定位，与趋势图X轴对齐
+    track.style.position = 'relative';
+    track.style.minHeight = '64px';
+    track.style.minWidth = '100%';
+    track.style.display = 'block';
+
+    track.innerHTML = records.map(r => {
+      const time = (r.timestamp||'').slice(-8).slice(0,5);
+      const rTs = r.timestamp ? new Date(r.timestamp.replace(' ','T')).getTime() : 0;
+      const pct = rTs ? Math.max(0, Math.min(99, ((rTs - minTs) / timeRange) * 100)) : 0;
+      const label = (r.text||'').slice(0,16) + (r.text && r.text.length>16 ? '…' : '');
+      const langCls = r.lang && r.lang.startsWith('ar') ? 'ar' : (r.lang==='en' ? 'en' : '');
+      const zhPart = r.text_zh && r.text_zh !== r.text ? `\n中文：${r.text_zh}` : '';
+      const tooltip = `📌 ${time}\n原文：${r.text}${zhPart}`;
+      return `<div class="stl-item" title="${escHtml(tooltip)}" style="left:${pct.toFixed(1)}%;position:absolute;transform:translateX(-50%);">
+        <div class="stl-dot"></div>
+        <div class="stl-chip ${langCls}">${escHtml(label)}</div>
+        <div class="stl-time">${time}</div>
+      </div>`;
+    }).join('');
+  } else {
+    // 无时间范围时退回横向滚动模式
+    track.style.position = '';
+    track.style.minHeight = '';
+    track.style.minWidth = 'max-content';
+    track.style.display = 'flex';
+    track.innerHTML = records.map(r => {
+      const time = (r.timestamp||'').slice(-8).slice(0,5);
+      const label = (r.text||'').slice(0,22) + (r.text && r.text.length>22 ? '…' : '');
+      const langCls = r.lang && r.lang.startsWith('ar') ? 'ar' : (r.lang==='en' ? 'en' : '');
+      const zhPart = r.text_zh && r.text_zh !== r.text ? `\n中文：${r.text_zh}` : '';
+      const tooltip = `📌 ${time}\n原文：${r.text}${zhPart}`;
+      return `<div class="stl-item" title="${escHtml(tooltip)}">
+        <div class="stl-dot"></div>
+        <div class="stl-chip ${langCls}">${escHtml(label)}</div>
+        <div class="stl-time">${time}</div>
+      </div>`;
+    }).join('');
+  }
 }
 
 function renderSpeechDialectAnalysis(records) {

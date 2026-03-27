@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>自营对比分析 — TikTok 直播监测</title>
+<script src="/static/js/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary:#fe2c55; --primary-bg:#fff0f3;
+    --bg:#f5f6fa; --surface:#ffffff;
+    --border:#e8eaef; --border2:#f0f1f5;
+    --text:#1a1d2e; --text2:#6b7280; --text3:#9ca3af;
+    --success:#10b981; --success-bg:#d1fae5;
+    --danger:#ef4444; --danger-bg:#fee2e2;
+    --warning:#f59e0b; --info:#3b82f6; --info-bg:#dbeafe;
+    --purple:#7c3aed; --purple-bg:#ede9fe;
+    --shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+    --radius:12px; --radius-sm:8px;
+    --font:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; }
+
+  /* Navbar */
+  .navbar { background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 3px rgba(0,0,0,.06); position:sticky; top:0; z-index:100; }
+  .navbar-brand { text-decoration:none; display:flex; align-items:center; gap:10px; }
+  .navbar-logo { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,#fe2c55 0%,#25f4ee 100%); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(254,44,85,.3); flex-shrink:0; }
+  .navbar-logo svg { width:18px; height:18px; }
+  .navbar-wordmark { display:flex; flex-direction:column; line-height:1; }
+  .navbar-name { font-size:15px; font-weight:800; color:var(--text); letter-spacing:-.3px; }
+  .navbar-name span { color:var(--primary); }
+  .navbar-sub { font-size:10px; color:var(--text3); font-weight:500; margin-top:1px; }
+  .navbar-nav { display:flex; gap:4px; align-items:center; }
+  .nav-link { color:var(--text2); text-decoration:none; font-size:14px; padding:6px 12px; border-radius:6px; transition:all .15s; }
+  .nav-link:hover { color:var(--text); background:var(--bg); }
+  .nav-link.active { color:var(--primary); background:var(--primary-bg); font-weight:600; }
+  .nav-btn { padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text2); font-size:13px; cursor:pointer; }
+  .nav-btn:hover { color:var(--danger); border-color:#fca5a5; }
+
+  /* Layout */
+  .main { padding:24px; max-width:1300px; margin:0 auto; }
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+  .page-title { font-size:22px; font-weight:700; display:flex; align-items:center; gap:10px; }
+  .page-subtitle { font-size:13px; color:var(--text3); margin-top:4px; }
+
+  /* Panel */
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; box-shadow:var(--shadow); }
+  .panel-title { font-size:15px; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:8px; color:var(--text); }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+  .badge-live { background:#fff0f3; color:#fe2c55; }
+  .badge-own { background:#f0fdf4; color:#15803d; }
+  .badge-rival { background:#fef3c7; color:#b45309; }
+
+  /* 概览指标条 */
+  .summary-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+  .strip-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:4px; }
+  .strip-val { font-size:26px; font-weight:800; color:var(--text); line-height:1; }
+  .strip-val.red { color:var(--primary); }
+  .strip-val.green { color:var(--success); }
+  .strip-label { font-size:12px; color:var(--text2); }
+
+  /* 对比大表 */
+  .compare-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .compare-table th { background:#f8f9fc; border-bottom:2px solid var(--border); padding:10px 14px; text-align:left; font-weight:700; color:var(--text2); white-space:nowrap; }
+  .compare-table th.metric-col { text-align:right; }
+  .compare-table td { padding:10px 14px; border-bottom:1px solid var(--border2); vertical-align:middle; }
+  .compare-table tr:last-child td { border-bottom:none; }
+  .compare-table tr:hover td { background:#fafbfc; }
+  .compare-table td.metric-val { text-align:right; font-weight:600; }
+  .compare-table td.rank-col { font-size:18px; font-weight:800; color:var(--text3); width:40px; text-align:center; }
+  .rank-1 { color:#f59e0b !important; }
+  .rank-2 { color:#6b7280 !important; }
+  .rank-3 { color:#d97706 !important; }
+
+  /* 账号名行 */
+  .acname { display:flex; align-items:center; gap:7px; font-weight:700; font-size:14px; }
+  .live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#fe2c55; flex-shrink:0; box-shadow:0 0 0 2px rgba(254,44,85,.3); animation:blink 1.2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .bar-wrap { display:flex; align-items:center; gap:7px; min-width:80px; }
+  .bar-bg { height:6px; background:var(--border2); border-radius:3px; flex:1; min-width:40px; }
+  .bar-fill { height:100%; border-radius:3px; transition:width .5s; }
+  .num-val { font-size:13px; font-weight:700; min-width:44px; text-align:right; }
+
+  /* 图表区 */
+  .charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:880px){ .charts-grid{grid-template-columns:1fr;} }
+  .chart-wrap { position:relative; height:260px; }
+
+  /* 自营 vs 竞品均值 */
+  .vs-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:720px){ .vs-grid{grid-template-columns:1fr;} }
+  .vs-card { border-radius:var(--radius); padding:16px 18px; }
+  .vs-card.own { background:#f0fdf4; border:1.5px solid #86efac; }
+  .vs-card.rival { background:#fef9c3; border:1.5px solid #fde047; }
+  .vs-card-title { font-size:13px; font-weight:700; margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+  .vs-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(0,0,0,.06); }
+  .vs-row:last-child { border-bottom:none; }
+  .vs-metric { font-size:12px; color:var(--text2); }
+  .vs-val { font-size:14px; font-weight:700; color:var(--text); }
+  .vs-badge { font-size:11px; padding:2px 7px; border-radius:8px; font-weight:600; }
+  .vs-badge.better { background:#d1fae5; color:#065f46; }
+  .vs-badge.worse { background:#fee2e2; color:#991b1b; }
+
+  /* 趋势图 */
+  .trend-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
+  .trend-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow); }
+  .trend-card-name { font-size:13px; font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:7px; }
+  .trend-chart-wrap { position:relative; height:140px; }
+
+  /* 空状态 */
+  .empty-state { text-align:center; padding:60px 20px; color:var(--text3); }
+  .empty-state .icon { font-size:48px; margin-bottom:12px; }
+  .empty-state p { font-size:14px; }
+
+  /* 加载 */
+  .loading-spinner { display:inline-block; width:20px; height:20px; border:2px solid var(--border); border-top:2px solid var(--primary); border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Tabs */
+  .tab-bar { display:flex; gap:4px; border-bottom:2px solid var(--border); margin-bottom:20px; }
+  .tab-btn { padding:8px 16px; font-size:13px; font-weight:600; color:var(--text2); cursor:pointer; border:none; background:none; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; }
+  .tab-btn.active { color:var(--primary); border-bottom-color:var(--primary); }
+  .tab-pane { display:none; }
+  .tab-pane.active { display:block; }
+
+  /* tooltip */
+  .tooltip-text { font-size:11px; color:var(--text3); }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a class="navbar-brand" href="/">
+    <div class="navbar-logo">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.51a8.16 8.16 0 004.77 1.52V7.58a4.85 4.85 0 01-1-.89z"/></svg>
+    </div>
+    <div class="navbar-wordmark">
+      <div class="navbar-name">Tuke<span>carco</span></div>
+      <div class="navbar-sub">TikTok 直播监测系统</div>
+    </div>
+  </a>
+  <nav class="navbar-nav">
+    <a href="/" class="nav-link">实时看板</a>
+    <a href="/history" class="nav-link">历史记录</a>
+    <a href="/automonitor" class="nav-link">📋 自动监控</a>
+    <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/compare" class="nav-link active">📊 自营对比</a>
+    <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
+    <button class="nav-btn" onclick="authLogout()">退出</button>
+  </nav>
+</nav>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">📊 自营账号对比分析</div>
+      <div class="page-subtitle">基于近10场直播数据，以同时在线峰值为核心排名指标</div>
+    </div>
+    <button onclick="loadAll()" style="padding:8px 18px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">
+      <span id="refreshIcon">🔄</span> 刷新数据
+    </button>
+  </div>
+
+  <!-- 加载状态 -->
+  <div id="loadingState" style="text-align:center;padding:60px 20px;">
+    <div class="loading-spinner" style="margin:0 auto 12px;"></div>
+    <div style="color:var(--text3);font-size:14px;">正在加载数据...</div>
+  </div>
+
+  <!-- 主内容（加载后显示） -->
+  <div id="mainContent" style="display:none;">
+
+    <!-- 概览指标条 -->
+    <div class="summary-strip" id="summaryStrip"></div>
+
+    <!-- Tab 导航 -->
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('ranking')">🏆 排名对比</button>
+      <button class="tab-btn" onclick="switchTab('charts')">📈 趋势图表</button>
+      <button class="tab-btn" onclick="switchTab('vs')">⚔️ 自营 vs 竞品</button>
+    </div>
+
+    <!-- Tab: 排名对比 -->
+    <div class="tab-pane active" id="tab-ranking">
+      <div class="panel">
+        <div class="panel-title">
+          🏆 自营账号排名（近10场均值）
+          <span class="badge badge-own" id="ownCountBadge"></span>
+        </div>
+        <div id="rankingTableWrap">
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <p>暂无自营账号数据，请先在账号管理中将账号标记为「自营」分组</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: 趋势图表 -->
+    <div class="tab-pane" id="tab-charts">
+      <div class="panel">
+        <div class="panel-title">📈 各账号近期峰值在线趋势</div>
+        <div class="trend-grid" id="trendGrid"></div>
+      </div>
+      <div class="charts-grid">
+        <div class="panel">
+          <div class="panel-title">🎁 礼物收入对比（近10场均值）</div>
+          <div class="chart-wrap"><canvas id="giftChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">👁️ 峰值在线对比（近10场均值）</div>
+          <div class="chart-wrap"><canvas id="peakChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: 自营 vs 竞品 -->
+    <div class="tab-pane" id="tab-vs">
+      <div class="panel">
+        <div class="panel-title">⚔️ 自营均值 vs 竞品均值对比</div>
+        <div id="vsContent">
+          <div class="empty-state">
+            <div class="icon">📊</div>
+            <p>需要同时有自营账号和竞品账号的历史数据才能显示对比</p>
+          </div>
+        </div>
+      </div>
+      <div class="panel" id="vsChartPanel" style="display:none;">
+        <div class="panel-title">📊 关键指标雷达图（自营 vs 竞品）</div>
+        <div style="max-width:480px;margin:0 auto;position:relative;height:360px;">
+          <canvas id="radarChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /mainContent -->
+</div>
+
+<script>
+// ── Auth ──
+(async () => {
+  try {
+    const r = await fetch('/api/auth/me');
+    if (!r.ok) { location.href = '/login'; return; }
+    const d = await r.json();
+    if (d.is_admin) {
+      document.getElementById('adminNavLink').style.display = '';
+      document.getElementById('navUserBadge').textContent = '👑 ' + d.username;
+    } else {
+      document.getElementById('navUserBadge').textContent = d.username;
+    }
+  } catch(e) { location.href = '/login'; }
+})();
+async function authLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.href = '/login';
+}
+
+// ── 工具 ──
+function fmt(n) {
+  if (n === null || n === undefined) return '-';
+  n = Number(n);
+  if (n >= 10000) return (n / 10000).toFixed(1) + 'w';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return n.toLocaleString();
+}
+function fmtMin(m) {
+  if (!m) return '-';
+  m = Math.round(m);
+  return m >= 60 ? `${Math.floor(m / 60)}h${m % 60}m` : `${m}m`;
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Tab 切换
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    const tabs = ['ranking', 'charts', 'vs'];
+    b.classList.toggle('active', tabs[i] === name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ── 颜色池（给多账号分配颜色）──
+const COLORS = [
+  '#fe2c55','#3b82f6','#10b981','#f59e0b','#7c3aed',
+  '#0ea5e9','#ec4899','#14b8a6','#f97316','#84cc16'
+];
+
+let _ownData = [];
+let _rivalData = [];
+let _giftChartInst = null;
+let _peakChartInst = null;
+let _radarChartInst = null;
+let _trendCharts = {};
+
+async function loadAll() {
+  const icon = document.getElementById('refreshIcon');
+  icon.textContent = '⏳';
+  document.getElementById('loadingState').style.display = '';
+  document.getElementById('mainContent').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/compare');
+    if (!resp.ok) throw new Error('请求失败 ' + resp.status);
+    const data = await resp.json();
+
+    _ownData = data.own || [];
+    _rivalData = data.rivals || [];
+
+    renderSummaryStrip(_ownData);
+    renderRankingTable(_ownData);
+    renderTrendGrid(_ownData);
+    renderBarCharts(_ownData);
+    renderVs(_ownData, _rivalData);
+
+    document.getElementById('ownCountBadge').textContent = `共 ${_ownData.length} 个账号`;
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('mainContent').style.display = '';
+  } catch(e) {
+    document.getElementById('loadingState').innerHTML = `<div style="color:#ef4444;font-size:14px;">加载失败：${e.message}</div>`;
+  }
+  icon.textContent = '🔄';
+}
+
+// ── 概览指标条 ──
+function renderSummaryStrip(own) {
+  if (!own.length) { document.getElementById('summaryStrip').innerHTML = ''; return; }
+
+  const totalSess = own.reduce((s, a) => s + a.session_count, 0);
+  const maxPeak = Math.max(...own.map(a => a.avg_peak));
+  const topAcc = own.find(a => a.avg_peak === maxPeak);
+  const liveNow = own.filter(a => a.is_live).length;
+  const avgGift = own.length ? (own.reduce((s, a) => s + (a.avg_gift||0), 0) / own.length).toFixed(2) : 0;
+
+  document.getElementById('summaryStrip').innerHTML = `
+    <div class="strip-card">
+      <div class="strip-val red">${own.length}</div>
+      <div class="strip-label">自营账号总数</div>
+    </div>
+    <div class="strip-card">
+      <div class="strip-val">${totalSess}</div>
+      <div class="strip-label">纳入分析的场次</div>
+    </div>
+    <div class="strip-card">
+      <div class="strip-val red">${liveNow}</div>
+      <div class="strip-label">当前直播中</div>
+    </div>
+    <div class="strip-card">
+      <div class="strip-val green">${topAcc ? esc(topAcc.username) : '-'}</div>
+      <div class="strip-label">峰值在线 No.1</div>
+    </div>
+    <div class="strip-card">
+      <div class="strip-val">${fmt(maxPeak)}</div>
+      <div class="strip-label">最高场均峰值在线</div>
+    </div>
+    <div class="strip-card">
+      <div class="strip-val">${fmt(avgGift)}</div>
+      <div class="strip-label">自营场均礼物收入均值</div>
+    </div>
+  `;
+}
+
+// ── 排名对比表 ──
+function renderRankingTable(own) {
+  const wrap = document.getElementById('rankingTableWrap');
+  if (!own.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>暂无自营账号数据，请先在账号管理中将账号标记为「自营」分组</p></div>`;
+    return;
+  }
+
+  // 按峰值在线排序
+  const sorted = [...own].sort((a, b) => (b.avg_peak || 0) - (a.avg_peak || 0));
+  const maxPeak = sorted[0]?.avg_peak || 1;
+  const maxGift = Math.max(...sorted.map(a => a.avg_gift || 0)) || 1;
+  const maxComments = Math.max(...sorted.map(a => a.avg_comments || 0)) || 1;
+  const maxFollowers = Math.max(...sorted.map(a => a.avg_followers || 0)) || 1;
+
+  const rankEmoji = ['🥇', '🥈', '🥉'];
+
+  const rows = sorted.map((a, i) => {
+    const rankClass = i < 3 ? `rank-${i+1}` : '';
+    const rankDisp = i < 3 ? rankEmoji[i] : `${i+1}`;
+    const liveBadge = a.is_live ? `<span class="live-dot"></span>` : '';
+    const color = COLORS[i % COLORS.length];
+
+    const peakPct = Math.round((a.avg_peak || 0) / maxPeak * 100);
+    const giftPct = Math.round((a.avg_gift || 0) / maxGift * 100);
+    const commentPct = Math.round((a.avg_comments || 0) / maxComments * 100);
+    const followerPct = Math.round((a.avg_followers || 0) / maxFollowers * 100);
+
+    return `<tr>
+      <td class="rank-col ${rankClass}">${rankDisp}</td>
+      <td>
+        <div class="acname">
+          ${liveBadge}
+          <span style="color:${color}">${esc(a.username)}</span>
+          ${a.is_live ? '<span class="badge badge-live" style="font-size:10px;">直播中</span>' : ''}
+        </div>
+        <div class="tooltip-text" style="margin-top:3px;">近 ${a.session_count} 场 · 均时长 ${fmtMin(a.avg_duration)}</div>
+      </td>
+      <td class="metric-val">
+        <div class="bar-wrap">
+          <div class="bar-bg"><div class="bar-fill" style="width:${peakPct}%;background:${color};"></div></div>
+          <span class="num-val">${fmt(a.avg_peak)}</span>
+        </div>
+      </td>
+      <td class="metric-val">
+        <div class="bar-wrap">
+          <div class="bar-bg"><div class="bar-fill" style="width:${giftPct}%;background:#f59e0b;"></div></div>
+          <span class="num-val">${fmt(a.avg_gift)}</span>
+        </div>
+      </td>
+      <td class="metric-val">
+        <div class="bar-wrap">
+          <div class="bar-bg"><div class="bar-fill" style="width:${commentPct}%;background:#3b82f6;"></div></div>
+          <span class="num-val">${fmt(a.avg_comments)}</span>
+        </div>
+      </td>
+      <td class="metric-val">
+        <div class="bar-wrap">
+          <div class="bar-bg"><div class="bar-fill" style="width:${followerPct}%;background:#10b981;"></div></div>
+          <span class="num-val">${fmt(a.avg_followers)}</span>
+        </div>
+      </td>
+      <td class="metric-val">${fmt(a.avg_total)}</td>
+      <td><a href="/history?u=${encodeURIComponent(a.username)}" style="font-size:12px;color:var(--info);text-decoration:none;" target="_blank">查看历史 →</a></td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th style="width:44px;">排名</th>
+          <th>账号</th>
+          <th class="metric-col" style="min-width:160px;">👁️ 峰值在线 <small style="font-weight:400;color:var(--text3)">(主排名)</small></th>
+          <th class="metric-col" style="min-width:140px;">🎁 礼物收入</th>
+          <th class="metric-col" style="min-width:140px;">💬 评论数</th>
+          <th class="metric-col" style="min-width:140px;">➕ 新粉丝</th>
+          <th class="metric-col">总观看</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="font-size:11px;color:var(--text3);margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);">
+      * 均值数据基于各账号近10场已结束直播计算；进度条为相对最高值的百分比
+    </div>
+  `;
+}
+
+// ── 趋势图：每账号近期峰值折线 ──
+function renderTrendGrid(own) {
+  const grid = document.getElementById('trendGrid');
+  // 销毁旧图
+  Object.values(_trendCharts).forEach(c => c.destroy());
+  _trendCharts = {};
+
+  if (!own.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">📈</div><p>暂无数据</p></div>';
+    return;
+  }
+
+  grid.innerHTML = own.map((a, i) => `
+    <div class="trend-card">
+      <div class="trend-card-name" style="color:${COLORS[i%COLORS.length]}">
+        ${a.is_live ? '<span class="live-dot"></span>' : ''}
+        ${esc(a.username)}
+        <span style="font-size:11px;color:var(--text3);font-weight:400;">近${a.recent_sessions?.length||0}场</span>
+      </div>
+      <div class="trend-chart-wrap"><canvas id="trend_${i}"></canvas></div>
+    </div>
+  `).join('');
+
+  own.forEach((a, i) => {
+    const sessions = (a.recent_sessions || []).slice().reverse(); // 旧→新
+    const labels = sessions.map((s, j) => `第${j+1}场`);
+    const peaks = sessions.map(s => s.peak || 0);
+    const ctx = document.getElementById(`trend_${i}`);
+    if (!ctx) return;
+    const color = COLORS[i % COLORS.length];
+    _trendCharts[i] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '峰值在线',
+          data: peaks,
+          borderColor: color,
+          backgroundColor: color + '18',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: color,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '峰值：' + fmt(ctx.raw) } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => fmt(v) } }
+        }
+      }
+    });
+  });
+}
+
+// ── 柱状图：礼物 & 峰值对比 ──
+function renderBarCharts(own) {
+  if (_giftChartInst) { _giftChartInst.destroy(); _giftChartInst = null; }
+  if (_peakChartInst) { _peakChartInst.destroy(); _peakChartInst = null; }
+
+  if (!own.length) return;
+
+  const sorted = [...own].sort((a, b) => (b.avg_peak || 0) - (a.avg_peak || 0));
+  const labels = sorted.map(a => a.username);
+  const giftData = sorted.map(a => a.avg_gift || 0);
+  const peakData = sorted.map(a => a.avg_peak || 0);
+  const bgColors = sorted.map((_, i) => COLORS[i % COLORS.length] + 'cc');
+  const borderColors = sorted.map((_, i) => COLORS[i % COLORS.length]);
+
+  const commonOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+      y: { beginAtZero: true, ticks: { callback: v => fmt(v), font: { size: 11 } } }
+    }
+  };
+
+  const giftCtx = document.getElementById('giftChart');
+  if (giftCtx) {
+    _giftChartInst = new Chart(giftCtx, {
+      type: 'bar',
+      data: { labels, datasets: [{ data: giftData, backgroundColor: bgColors, borderColor: borderColors, borderWidth: 1.5, borderRadius: 5 }] },
+      options: { ...commonOpts, plugins: { ...commonOpts.plugins, tooltip: { callbacks: { label: c => '礼物收入：' + fmt(c.raw) } } } }
+    });
+  }
+
+  const peakCtx = document.getElementById('peakChart');
+  if (peakCtx) {
+    _peakChartInst = new Chart(peakCtx, {
+      type: 'bar',
+      data: { labels, datasets: [{ data: peakData, backgroundColor: bgColors, borderColor: borderColors, borderWidth: 1.5, borderRadius: 5 }] },
+      options: { ...commonOpts, plugins: { ...commonOpts.plugins, tooltip: { callbacks: { label: c => '峰值在线：' + fmt(c.raw) } } } }
+    });
+  }
+}
+
+// ── 自营 vs 竞品对比 ──
+function renderVs(own, rivals) {
+  const container = document.getElementById('vsContent');
+  const radarPanel = document.getElementById('vsChartPanel');
+
+  if (!own.length && !rivals.length) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">📊</div><p>需要同时有自营账号和竞品账号的历史数据才能显示对比</p></div>`;
+    radarPanel.style.display = 'none';
+    return;
+  }
+
+  function avgOf(arr, key) {
+    if (!arr.length) return 0;
+    return arr.reduce((s, a) => s + (a[key] || 0), 0) / arr.length;
+  }
+
+  const metrics = [
+    { key: 'avg_peak', label: '峰值在线', higherBetter: true },
+    { key: 'avg_total', label: '总观看', higherBetter: true },
+    { key: 'avg_gift', label: '礼物收入', higherBetter: true },
+    { key: 'avg_comments', label: '评论数', higherBetter: true },
+    { key: 'avg_followers', label: '新增粉丝', higherBetter: true },
+    { key: 'avg_duration', label: '场均时长(分)', higherBetter: true },
+  ];
+
+  const ownAvg = {};
+  const rivalAvg = {};
+  metrics.forEach(m => {
+    ownAvg[m.key] = avgOf(own, m.key);
+    rivalAvg[m.key] = avgOf(rivals, m.key);
+  });
+
+  const ownRows = metrics.map(m => {
+    const ov = ownAvg[m.key], rv = rivalAvg[m.key];
+    let badge = '';
+    if (rv > 0) {
+      const better = m.higherBetter ? ov >= rv : ov <= rv;
+      const pct = Math.round(Math.abs(ov - rv) / rv * 100);
+      badge = `<span class="vs-badge ${better ? 'better' : 'worse'}">${better ? '↑' : '↓'}${pct}%</span>`;
+    }
+    return `<div class="vs-row"><span class="vs-metric">${m.label}</span><div style="display:flex;align-items:center;gap:8px;"><span class="vs-val">${m.key==='avg_duration'?fmtMin(ov):fmt(ov)}</span>${badge}</div></div>`;
+  }).join('');
+
+  const rivalRows = metrics.map(m => {
+    const rv = rivalAvg[m.key];
+    return `<div class="vs-row"><span class="vs-metric">${m.label}</span><span class="vs-val">${m.key==='avg_duration'?fmtMin(rv):fmt(rv)}</span></div>`;
+  }).join('');
+
+  const ownCount = own.length ? `${own.length} 个账号` : '暂无数据';
+  const rivalCount = rivals.length ? `${rivals.length} 个账号` : '暂无数据';
+
+  container.innerHTML = `
+    <div class="vs-grid">
+      <div class="vs-card own">
+        <div class="vs-card-title">🏠 自营账号均值 <span class="badge badge-own">${ownCount}</span></div>
+        ${own.length ? ownRows : '<div style="color:var(--text3);font-size:13px;padding:12px 0;">暂无自营账号历史数据</div>'}
+      </div>
+      <div class="vs-card rival">
+        <div class="vs-card-title">⚔️ 竞品账号均值 <span class="badge badge-rival">${rivalCount}</span></div>
+        ${rivals.length ? rivalRows : '<div style="color:var(--text3);font-size:13px;padding:12px 0;">暂无竞品账号历史数据</div>'}
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:12px;">
+      * 徽章显示的涨跌百分比为自营均值相对竞品均值的差异；绿色表示优于竞品，红色表示落后
+    </div>
+  `;
+
+  // 雷达图（仅当两边都有数据）
+  if (_radarChartInst) { _radarChartInst.destroy(); _radarChartInst = null; }
+  if (own.length && rivals.length) {
+    radarPanel.style.display = '';
+    // 归一化：取两组中各指标最大值为基准
+    const radarLabels = metrics.map(m => m.label);
+    const normalize = (val, key) => {
+      const maxV = Math.max(ownAvg[key], rivalAvg[key]);
+      return maxV > 0 ? Math.round(val / maxV * 100) : 0;
+    };
+    const ownNorm = metrics.map(m => normalize(ownAvg[m.key], m.key));
+    const rivalNorm = metrics.map(m => normalize(rivalAvg[m.key], m.key));
+
+    const radarCtx = document.getElementById('radarChart');
+    if (radarCtx) {
+      _radarChartInst = new Chart(radarCtx, {
+        type: 'radar',
+        data: {
+          labels: radarLabels,
+          datasets: [
+            {
+              label: '自营',
+              data: ownNorm,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16,185,129,0.15)',
+              pointBackgroundColor: '#10b981',
+            },
+            {
+              label: '竞品',
+              data: rivalNorm,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245,158,11,0.15)',
+              pointBackgroundColor: '#f59e0b',
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 12 } } },
+            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw}分` } }
+          },
+          scales: {
+            r: {
+              min: 0, max: 100,
+              ticks: { stepSize: 25, font: { size: 10 }, callback: v => v + '%' },
+              pointLabels: { font: { size: 12 } }
+            }
+          }
+        }
+      });
+    }
+  } else {
+    radarPanel.style.display = 'none';
+  }
+}
+
+// ── 初始加载 ──
+loadAll();
+</script>
+</body>
+</html>

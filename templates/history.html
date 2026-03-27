@@ -184,9 +184,10 @@
     <a href="/history" class="nav-link active">历史记录</a>
     <a href="/automonitor" class="nav-link">📋 自动监控</a>
     <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
     <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
-    <button onclick="authLogout()" style="font-size:13px;background:#f5f6fa;border:1px solid #e8eaef;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:2px">退出</button>
+    <button class="nav-btn" onclick="authLogout()" style="margin-left:2px">退出</button>
   </nav>
 </nav>
 
@@ -479,6 +480,13 @@ async function authLogout() {
 }
 
 // ── 初始化 ──
+// 支持从 URL 参数 ?u= 预填搜索框（来自自营对比页面）
+const _urlU = new URLSearchParams(location.search).get('u');
+if (_urlU) {
+  const el = document.getElementById('filterUser');
+  if (el) el.value = _urlU;
+}
+
 fetch('/api/sessions').then(r => r.json()).then(sessions => {
   try {
     const groups = JSON.parse(localStorage.getItem('accountGroups') || '{}');

@@ -369,6 +369,7 @@ class LiveMonitor:
                     'flag': lang_info.get('flag', ''),
                     'css_class': lang_info.get('css_class', 'lang-other'),
                     'dialect': lang_info.get('dialect'),
+                    'dialect_country': lang_info.get('dialect_country', ''),
                 })
 
             if lang and lang != 'zh' and lang != 'other':

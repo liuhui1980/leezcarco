@@ -7,7 +7,7 @@ import subprocess
 import threading
 import re
 from functools import wraps
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for, send_file
 
 # ── 版本管理 ──
 def _read_version():
@@ -372,6 +372,13 @@ def history():
     return render_template('history.html')
 
 
+@app.route('/compare')
+@login_required
+def compare_page():
+    """自营号比较分析页面"""
+    return render_template('compare.html')
+
+
 @app.route('/session/<int:session_id>')
 @login_required
 def session_detail(session_id):
@@ -518,7 +525,92 @@ def api_session_speech(session_id):
     return jsonify(data)
 
 
-@app.route('/api/session/<int:session_id>/review')
+@app.route('/api/session/<int:session_id>/ai_summary', methods=['POST'])
+@login_required
+def api_session_ai_summary(session_id):
+    """AI 智能总结（话术或评论），使用 Gemini Flash 模型"""
+    req = request.get_json(force=True) or {}
+    summary_type = req.get('type', 'speech')  # 'speech' 或 'comment'
+
+    try:
+        from src.gemini_api import summarize_speech, summarize_comments
+        from src.database import get_speech_summary as db_speech, get_session_summary
+        import config as cfg
+
+        if not getattr(cfg, 'GEMINI_API_KEY', ''):
+            return jsonify({'success': False, 'summary': '', 'msg': '未配置 Gemini API Key，请在 config.py 中填写 GEMINI_API_KEY'})
+
+        if summary_type == 'speech':
+            sp = db_speech(session_id)
+            summary = summarize_speech(sp.get('records', []))
+        else:
+            sess_data = get_session_summary(session_id)
+            comments = sess_data.get('comments', [])
+            summary = summarize_comments(comments)
+
+        return jsonify({'success': True, 'summary': summary})
+    except Exception as e:
+        logger.error(f'AI 总结失败: {e}')
+        return jsonify({'success': False, 'summary': '', 'msg': str(e)})
+
+
+@app.route('/api/session/<int:session_id>/download_speech')
+@login_required
+def api_download_speech(session_id):
+    """下载话术 Word 文档"""
+    try:
+        import io
+        from src.word_export import export_speech_docx
+        from src.database import get_speech_summary as db_speech, get_session_by_id
+
+        sp = db_speech(session_id)
+        sess = get_session_by_id(session_id) or {}
+        docx_bytes = export_speech_docx(sp.get('records', []), session_info=sess)
+
+        username = sess.get('username', 'session')
+        start = (sess.get('start_time', '') or '')[:10].replace('-', '')
+        filename = f'话术_{username}_{start or session_id}.docx'
+
+        return send_file(
+            io.BytesIO(docx_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.error(f'Word 下载失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/session/<int:session_id>/download_comments')
+@login_required
+def api_download_comments(session_id):
+    """下载评论 Word 文档"""
+    try:
+        import io
+        from src.word_export import export_comments_docx
+        from src.database import get_session_summary, get_session_by_id
+
+        sess_data = get_session_summary(session_id)
+        sess = get_session_by_id(session_id) or {}
+        comments = sess_data.get('comments', [])
+        docx_bytes = export_comments_docx(comments, session_info=sess)
+
+        username = sess.get('username', 'session')
+        start = (sess.get('start_time', '') or '')[:10].replace('-', '')
+        filename = f'评论_{username}_{start or session_id}.docx'
+
+        return send_file(
+            io.BytesIO(docx_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.error(f'Word 下载失败: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
 @login_required
 def api_session_review(session_id):
     """主播复盘对比数据（本场 vs 上场 vs 近7场均值 vs 历史最佳）"""
@@ -627,9 +719,11 @@ def api_compare():
     conn = get_conn()
     c = conn.cursor()
 
+    active_now = set(get_active_usernames())
+
     def get_stats(username, limit=10):
         c.execute(
-            "SELECT peak_viewers, total_viewers, total_gift_value, total_comments, new_followers, start_time, end_time FROM live_sessions WHERE username=? AND status='ended' ORDER BY start_time DESC LIMIT ?",
+            "SELECT id, peak_viewers, total_viewers, total_gift_value, total_comments, new_followers, start_time, end_time FROM live_sessions WHERE username=? AND status='ended' ORDER BY start_time DESC LIMIT ?",
             (username, limit)
         )
         sessions = [dict(r) for r in c.fetchall()]
@@ -642,8 +736,19 @@ def api_compare():
                 from datetime import datetime as dt
                 return round((dt.fromisoformat(s['end_time']) - dt.fromisoformat(s['start_time'])).total_seconds() / 60)
             except: return 0
+        # 近期场次（旧→新，最多10条，含 peak/gift/start_time）
+        recent = [
+            {
+                'id': s['id'],
+                'peak': s['peak_viewers'] or 0,
+                'gift': s['total_gift_value'] or 0,
+                'start': (s['start_time'] or '')[:10],
+            }
+            for s in reversed(sessions)
+        ]
         return {
             'username': username,
+            'is_live': username in active_now,
             'session_count': n,
             'avg_peak': avg('peak_viewers'),
             'avg_total': avg('total_viewers'),
@@ -651,6 +756,7 @@ def api_compare():
             'avg_comments': avg('total_comments'),
             'avg_followers': avg('new_followers'),
             'avg_duration': round(sum(dur(s) for s in sessions) / n),
+            'recent_sessions': recent,
         }
 
     # 自营账号

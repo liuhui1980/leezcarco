@@ -343,6 +343,16 @@ def update_viewers(session_id, viewer_count, like_count, comment_count, total_us
     conn.close()
 
 
+def get_session_by_id(session_id):
+    """获取单场直播的基本信息"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute('SELECT * FROM live_sessions WHERE id=?', (session_id,))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_session_summary(session_id):
     """获取会话汇总数据"""
     conn = get_conn()
@@ -527,6 +537,7 @@ def get_speech_summary(session_id):
     """
     生成话术摘要：规则提取关键句
     - 去重、按长度和关键词权重排序，取 Top10 作为"内容总结"
+    - 关键词返回 [{word, zh}] 格式，非中文词附带中文翻译
     """
     records = get_session_speech(session_id)
     if not records:
@@ -551,7 +562,29 @@ def get_speech_summary(session_id):
     for t in all_texts:
         all_words.extend([w.lower() for w in word_pat.findall(t) if len(w) > 1 and w.lower() not in stopwords])
     word_freq = Counter(all_words)
-    keywords = [w for w, _ in word_freq.most_common(15)]
+    raw_keywords = [w for w, _ in word_freq.most_common(15)]
+
+    # 关键词翻译：非中文词尝试翻译为中文
+    keywords = []
+    try:
+        from src.translator import translate_to_zh
+    except Exception:
+        try:
+            from translator import translate_to_zh
+        except Exception:
+            translate_to_zh = None
+
+    for kw in raw_keywords:
+        zh = ''
+        is_chinese = all('\u4e00' <= c <= '\u9fff' for c in kw if c.isalpha())
+        if not is_chinese and translate_to_zh:
+            try:
+                translated = translate_to_zh(kw)
+                if translated and translated.strip() and translated.strip().lower() != kw.lower():
+                    zh = translated.strip()
+            except Exception:
+                pass
+        keywords.append({'word': kw, 'zh': zh})
 
     # 关键句：含高频词的句子，且长度 > 10 字符，去重取 Top10
     def score_sentence(s):

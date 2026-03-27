@@ -135,7 +135,26 @@
   .stat-val { font-size: 20px; font-weight: 700; color: var(--text); }
   .stat-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
 
-  /* ── Global Dialect Panel ── */
+  /* ── Language Analysis Panel (per-account chips) ── */
+  .lang-analysis-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .lang-analysis-title { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .lang-analysis-title .la-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: pulse 1.5s infinite; }
+  .lang-chips-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  /* per-account chip */
+  .lang-chip { background: #f8fafc; border: 1.5px solid var(--border); border-radius: 10px; padding: 7px 10px; min-width: 120px; max-width: 200px; flex: 1; }
+  .lang-chip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+  .lang-chip-name { font-size: 11px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
+  .lang-chip-status { width: 7px; height: 7px; border-radius: 50%; background: #d1d5db; flex-shrink: 0; }
+  .lang-chip-status.live { background: #22c55e; animation: pulse 1.5s infinite; }
+  .lang-chip-langs { display: flex; flex-wrap: wrap; gap: 3px; }
+  .lc-lang-pill { font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600; background: #e5e7eb; color: #374151; }
+  .lc-lang-pill.lp-ar { background: #fef3c7; color: #b45309; }
+  .lc-lang-pill.lp-en { background: #dbeafe; color: #1d4ed8; }
+  .lc-lang-pill.lp-zh { background: #dcfce7; color: #15803d; }
+  .lc-lang-pill.lp-dominant { font-weight: 700; }
+  .lang-chip-dialect { margin-top: 4px; font-size: 10px; color: var(--text3); line-height: 1.4; border-top: 1px solid var(--border); padding-top: 4px; }
+  .lang-chip-empty { font-size: 10px; color: var(--text3); text-align: center; padding: 4px 0; }
+  /* 旧样式保留（方言雷达卡片内用） */
   .dialect-panel { background: linear-gradient(135deg, #fffbeb 0%, #fef9e7 100%); border: 2px solid #fde68a; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
   .dialect-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .dialect-panel-title { font-size: 14px; font-weight: 800; color: #92400e; display: flex; align-items: center; gap: 8px; }
@@ -150,6 +169,11 @@
   .dialect-bar { height: 4px; border-radius: 2px; background: #fde68a; overflow: hidden; }
   .dialect-bar-fill { height: 100%; border-radius: 2px; background: #f59e0b; transition: width .5s ease; }
   .dialect-pct-big { font-size: 18px; font-weight: 800; color: #b45309; flex-shrink: 0; }
+
+  /* ── Card Mini Summary ── */
+  .mini-summary { background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 6px; padding: 5px 8px; margin-top: 5px; font-size: 10.5px; color: var(--text2); line-height: 1.5; min-height: 24px; }
+  .mini-summary .ms-label { font-weight: 700; color: var(--text3); font-size: 10px; margin-right: 4px; }
+  .mini-summary.has-content { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
 
   /* ── Lang Bar ── */
   .lang-bar-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
@@ -332,6 +356,7 @@
     <a href="/history" class="nav-link">历史记录</a>
     <a href="/automonitor" class="nav-link">📋 自动监控</a>
     <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
     <button class="nav-btn" onclick="openRemoteModal()" title="如何在其他设备访问">
       📱 远程访问
@@ -456,16 +481,10 @@
     <div class="stat-card"><div class="stat-icon">❤️</div><div class="stat-val" id="statFollowers">0</div><div class="stat-label">今日新增关注</div></div>
   </div>
 
-  <!-- ★ 全局方言雷达（核心重点区域） ── -->
-  <div class="dialect-panel" id="dialectPanel" style="display:none;">
-    <div class="dialect-panel-header">
-      <div class="dialect-panel-title">
-        <span class="dp-dot"></span>
-        阿拉伯语方言分布 · 实时监测
-      </div>
-      <span style="font-size:12px;color:#b45309;" id="dialectTotal"></span>
-    </div>
-    <div class="dialect-grid" id="dialectGrid"></div>
+  <!-- ★ 语言分析面板（按账号小方块） -->
+  <div class="lang-analysis-panel" id="langAnalysisPanel" style="display:none;">
+    <div class="lang-analysis-title"><span class="la-dot"></span>语言 · 方言分析（按账号）</div>
+    <div class="lang-chips-row" id="langChipsRow"></div>
   </div>
 
   <!-- 语言分布（折叠式，次要信息） -->
@@ -617,6 +636,8 @@ socket.on('new_comment', (data) => {
   const u = data.username; if (!monitors[u]) return;
   monitors[u].comments = (monitors[u].comments || 0) + 1;
   updateCardMetrics(u); addCommentToCard(u, data);
+  // 每5条更新一次评论摘要
+  if (monitors[u].comments % 5 === 0) updateCommentSummary(u);
 });
 
 socket.on('new_gift', (data) => {
@@ -655,13 +676,15 @@ socket.on('lang_stats_update', (data) => {
   const sStats = data.speech_stats || {};
 
   if (u) {
-    // 更新卡片内两个独立 Tab
+    // 更新卡片内两个独立 Tab（方言雷达）
     cardDialectStats[u] = { comment: cStats, speech: sStats };
     updateCardDialectRadar(u, 'comment', cStats);
     updateCardDialectRadar(u, 'speech', sStats);
+    // 更新语言分析小方块
+    updateLangChip(u, cStats, sStats);
   }
 
-  // 重新合并全局（评论+话术加总，供全局面板用）
+  // 重新合并全局语言分布条
   const merged = {};
   Object.values(cardDialectStats).forEach(s => {
     [s.comment || {}, s.speech || {}].forEach(part => {
@@ -669,13 +692,14 @@ socket.on('lang_stats_update', (data) => {
     });
   });
   renderLangBar(merged);
-  renderGlobalDialectPanel(merged);
 });
 
 socket.on('new_speech', (data) => {
   const u = data.username; if (!monitors[u]) return;
   addSpeechToCard(u, data);
   monitors[u].speechCount = (monitors[u].speechCount || 0) + 1;
+  // 每3条更新一次话术摘要
+  if (monitors[u].speechCount % 3 === 0) updateSpeechSummary(u);
 });
 
 socket.on('live_ended', (data) => {
@@ -705,7 +729,7 @@ function createAccountCard(username, group = 'own') {
         <button class="btn btn-danger btn-sm" onclick="stopMonitor('${username}')">✕</button>
       </div>
     </div>
-    <div id="live-time-row-${username}" style="display:none;font-size:11px;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div id="live-time-row-${username}" style="display:none;font-size:11px;color:var(--text2);margin-bottom:8px;align-items:center;gap:10px;flex-wrap:wrap;">
       <span>🕐 开播：<b id="start-time-${username}" style="color:var(--text);">—</b></span>
       <span>⏱ 已播：<b id="duration-${username}" style="color:var(--primary);">0m</b></span>
     </div>
@@ -736,6 +760,7 @@ function createAccountCard(username, group = 'own') {
     </div>
     <div class="section-label">最新评论</div>
     <div class="comments-box" id="comments-box-${username}"></div>
+    <div class="mini-summary" id="comment-summary-${username}"><span class="ms-label">💬 评论摘要</span><span id="comment-summary-text-${username}">等待数据...</span></div>
     <div class="speech-label">
       <span class="speech-dot"></span>主播话术（语音转文字）
       <span style="font-size:10px;color:var(--text3);" id="speech-status-${username}">等待连接...</span>
@@ -743,6 +768,7 @@ function createAccountCard(username, group = 'own') {
     <div class="speech-box" id="speech-box-${username}">
       <div style="color:var(--text3);font-size:11px;text-align:center;padding-top:28px;">连接直播间后自动开始采集</div>
     </div>
+    <div class="mini-summary" id="speech-summary-${username}"><span class="ms-label">🎙️ 话术摘要</span><span id="speech-summary-text-${username}">等待数据...</span></div>
   `;
   grid.appendChild(card);
   applyGroupFilter();
@@ -797,41 +823,162 @@ function switchDialectTab(username, type, btn) {
   if (content) content.classList.add('active');
 }
 
-// ── 全局方言面板 ──
-function renderGlobalDialectPanel(stats) {
-  const panel = document.getElementById('dialectPanel');
-  const grid = document.getElementById('dialectGrid');
-  const totalEl = document.getElementById('dialectTotal');
-  if (!panel || !grid) return;
+// ── 语言分析小方块（按账号，放在全局统计与卡片之间） ──
+const LANG_META = {
+  'zh':         { name: '中文',     cls: 'lp-zh',    short: 'ZH' },
+  'en':         { name: '英语',     cls: 'lp-en',    short: 'EN' },
+  'ar':         { name: '阿语(标)', cls: 'lp-ar',    short: 'AR' },
+  'ar-gulf':    { name: '阿语·海湾',cls: 'lp-ar',    short: '海湾' },
+  'ar-egypt':   { name: '阿语·埃及',cls: 'lp-ar',    short: '埃及' },
+  'ar-levant':  { name: '阿语·黎凡',cls: 'lp-ar',    short: '黎凡特' },
+  'ar-maghreb': { name: '阿语·北非',cls: 'lp-ar',    short: '北非' },
+};
 
-  const arTotal = (stats['ar'] || 0) + (stats['ar-gulf'] || 0) + (stats['ar-egypt'] || 0) + (stats['ar-levant'] || 0) + (stats['ar-maghreb'] || 0);
-  if (arTotal === 0) return;
+function updateLangChip(username, cStats, sStats) {
+  const panel = document.getElementById('langAnalysisPanel');
+  const row = document.getElementById('langChipsRow');
+  if (!panel || !row) return;
+
   panel.style.display = '';
-  totalEl.textContent = `共 ${arTotal} 条阿语评论`;
+  let chip = document.getElementById(`lang-chip-${username}`);
+  if (!chip) {
+    chip = document.createElement('div');
+    chip.className = 'lang-chip';
+    chip.id = `lang-chip-${username}`;
+    row.appendChild(chip);
+  }
 
-  const DIALECTS = [
-    { key: 'ar-gulf',    name: '海湾阿拉伯语',  flag: '🇸🇦', desc: '沙特/阿联酋/卡塔尔/科威特' },
-    { key: 'ar-egypt',   name: '埃及阿拉伯语',  flag: '🇪🇬', desc: '埃及' },
-    { key: 'ar-levant',  name: '黎凡特阿拉伯语',flag: '🇱🇧', desc: '黎巴嫩/叙利亚/约旦/巴勒斯坦' },
-    { key: 'ar-maghreb', name: '北非阿拉伯语',  flag: '🇲🇦', desc: '摩洛哥/阿尔及利亚/突尼斯' },
-    { key: 'ar',         name: '标准阿拉伯语',  flag: '🌍', desc: '现代标准阿语(MSA)' },
-  ];
+  // 合并评论+话术统计
+  const merged = {};
+  [cStats, sStats].forEach(s => {
+    Object.entries(s || {}).forEach(([k, v]) => { merged[k] = (merged[k] || 0) + v; });
+  });
 
-  grid.innerHTML = DIALECTS.filter(d => (stats[d.key]||0) > 0).map(d => {
-    const cnt = stats[d.key] || 0;
-    const pct = Math.round(cnt / arTotal * 100);
-    return `<div class="dialect-item">
-      <div class="dialect-flag">${d.flag}</div>
-      <div class="dialect-info">
-        <div class="dialect-name">${d.name}</div>
-        <div class="dialect-count">${d.desc}</div>
-        <div class="dialect-bar-wrap">
-          <div class="dialect-bar"><div class="dialect-bar-fill" style="width:${pct}%"></div></div>
-        </div>
-      </div>
-      <div class="dialect-pct-big">${pct}%</div>
-    </div>`;
-  }).join('');
+  const total = Object.values(merged).reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    chip.innerHTML = `<div class="lang-chip-header"><span class="lang-chip-name">@${username}</span><span class="lang-chip-status ${monitors[username]?.isLive ? 'live' : ''}"></span></div><div class="lang-chip-empty">等待数据...</div>`;
+    return;
+  }
+
+  // 聚合阿拉伯语方言
+  const arDialects = ['ar-gulf','ar-egypt','ar-levant','ar-maghreb'];
+  const arDialectTotal = arDialects.reduce((a, k) => a + (merged[k] || 0), 0);
+  const arStd = merged['ar'] || 0;
+  const arTotal = arDialectTotal + arStd;
+  const enTotal = merged['en'] || 0;
+  const zhTotal = merged['zh'] || 0;
+
+  // 生成语言胶囊（按数量排序）
+  const langItems = [];
+  if (arTotal > 0) langItems.push({ name: '阿语', cls: 'lp-ar', count: arTotal, pct: Math.round(arTotal/total*100) });
+  if (enTotal > 0) langItems.push({ name: '英语', cls: 'lp-en', count: enTotal, pct: Math.round(enTotal/total*100) });
+  if (zhTotal > 0) langItems.push({ name: '中文', cls: 'lp-zh', count: zhTotal, pct: Math.round(zhTotal/total*100) });
+  const otherTotal = total - arTotal - enTotal - zhTotal;
+  if (otherTotal > 0) langItems.push({ name: '其他', cls: '', count: otherTotal, pct: Math.round(otherTotal/total*100) });
+  langItems.sort((a, b) => b.count - a.count);
+
+  const langPills = langItems.map((l, i) =>
+    `<span class="lc-lang-pill ${l.cls}${i===0?' lp-dominant':''}">${l.name} ${l.pct}%</span>`
+  ).join('');
+
+  // 方言详情行
+  let dialectLine = '';
+  if (arTotal > 0 && arDialectTotal > 0) {
+    const top = arDialects.map(k => ({ key: k, cnt: merged[k] || 0 })).filter(x => x.cnt > 0).sort((a,b) => b.cnt-a.cnt);
+    const DNAME = { 'ar-gulf':'海湾', 'ar-egypt':'埃及', 'ar-levant':'黎凡特', 'ar-maghreb':'北非' };
+    dialectLine = `<div class="lang-chip-dialect">阿语方言：${top.map(x => `${DNAME[x.key]} ${Math.round(x.cnt/arTotal*100)}%`).join(' · ')}</div>`;
+  }
+
+  const isLive = monitors[username]?.isLive || false;
+  chip.innerHTML = `
+    <div class="lang-chip-header">
+      <span class="lang-chip-name" title="@${username}">@${username}</span>
+      <span class="lang-chip-status ${isLive ? 'live' : ''}"></span>
+    </div>
+    <div class="lang-chip-langs">${langPills}</div>
+    ${dialectLine}
+  `;
+}
+
+// 移除账号时同步删除小方块
+function removeLangChip(username) {
+  const chip = document.getElementById(`lang-chip-${username}`);
+  if (chip) chip.remove();
+  const row = document.getElementById('langChipsRow');
+  const panel = document.getElementById('langAnalysisPanel');
+  if (panel && row && row.children.length === 0) panel.style.display = 'none';
+}
+
+// ── 卡片小总结（规则提取，不调用大模型） ──
+// 评论摘要：从DOM中读取最近评论，统计高频词，生成摘要
+function updateCommentSummary(username) {
+  const box = document.getElementById(`comments-box-${username}`);
+  const summaryEl = document.getElementById(`comment-summary-text-${username}`);
+  const wrapEl = document.getElementById(`comment-summary-${username}`);
+  if (!box || !summaryEl || !wrapEl) return;
+
+  const items = box.querySelectorAll('.comment-text, .cmt-text');
+  if (items.length < 3) return;
+
+  const texts = Array.from(items).slice(-30).map(el => el.textContent.trim()).filter(t => t.length > 1);
+  const total = texts.length;
+
+  // 统计高频词（排除停用词）
+  const stopwords = new Set(['的','了','是','在','有','我','你','他','这','那','和','也','都','很','不','吗','啊','哦','哈','哈哈','哈哈哈','666','cool','nice','wow','ok','yes','no','lol','😊','😍','🔥','❤️','👏']);
+  const freq = {};
+  texts.forEach(t => {
+    const words = t.replace(/[^\w\u4e00-\u9fa5\u0600-\u06FF]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !stopwords.has(w.toLowerCase()));
+    words.forEach(w => { freq[w.toLowerCase()] = (freq[w.toLowerCase()] || 0) + 1; });
+  });
+  const topWords = Object.entries(freq).filter(([,c]) => c >= 2).sort(([,a],[,b]) => b-a).slice(0,4).map(([w]) => w);
+
+  // 检测主要语言
+  const arCount = texts.filter(t => /[\u0600-\u06FF]/.test(t)).length;
+  const enCount = texts.filter(t => /^[a-zA-Z\s\d!?.,]+$/.test(t)).length;
+  const zhCount = texts.filter(t => /[\u4e00-\u9fa5]/.test(t)).length;
+
+  let langDesc = '';
+  const dominant = Math.max(arCount, enCount, zhCount);
+  if (dominant === arCount && arCount > total * 0.3) langDesc = '主要为阿语';
+  else if (dominant === enCount && enCount > total * 0.3) langDesc = '主要为英语';
+  else if (dominant === zhCount && zhCount > total * 0.3) langDesc = '主要为中文';
+  else langDesc = '多语混合';
+
+  const summary = topWords.length > 0
+    ? `${total}条 · ${langDesc} · 热词：${topWords.join('、')}`
+    : `${total}条 · ${langDesc}`;
+
+  summaryEl.textContent = summary;
+  wrapEl.classList.add('has-content');
+}
+
+// 话术摘要：从DOM中读取最近话术，提取关键句
+function updateSpeechSummary(username) {
+  const box = document.getElementById(`speech-box-${username}`);
+  const summaryEl = document.getElementById(`speech-summary-text-${username}`);
+  const wrapEl = document.getElementById(`speech-summary-${username}`);
+  if (!box || !summaryEl || !wrapEl) return;
+
+  const items = box.querySelectorAll('.speech-text, .sp-text');
+  if (items.length < 2) return;
+
+  const texts = Array.from(items).slice(-20).map(el => el.textContent.trim()).filter(t => t.length > 3);
+  const total = texts.length;
+
+  // 提取关键句（优先选含产品词/促销词/数字的句子）
+  const keywords = ['offer','price','discount','free','gift','buy','sale','limited','只有','限时','优惠','价格','免费','赠品','购买','特价','折扣','现在','立即'];
+  const scored = texts.map(t => {
+    let score = t.length > 20 ? 2 : 1;
+    keywords.forEach(k => { if (t.toLowerCase().includes(k)) score += 3; });
+    if (/\d+/.test(t)) score += 1;
+    return { t, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const topSentence = scored[0]?.t || '';
+  const preview = topSentence.length > 40 ? topSentence.slice(0, 40) + '…' : topSentence;
+
+  summaryEl.textContent = total > 0 ? `${total}段 · ${preview}` : '等待数据...';
+  if (total > 0) wrapEl.classList.add('has-content');
 }
 
 function filterGroup(group, el) {
@@ -887,6 +1034,7 @@ function removeAccountCard(username) {
   if (card) card.remove();
   delete monitors[username];
   delete cardDialectStats[username];
+  removeLangChip(username);
   saveMonitorList();
   if (Object.keys(monitors).length === 0) {
     document.getElementById('accountsGrid').innerHTML = `<div class="empty-state" id="emptyState"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><p>还没有监控中的直播间</p></div>`;

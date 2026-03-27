@@ -120,18 +120,21 @@
     <div class="navbar-logo">
       <svg viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.51a8.16 8.16 0 004.77 1.52V7.58a4.85 4.85 0 01-1-.89z"/></svg>
     </div>
-    <div>
-      <div class="navbar-name">Tike<span>Carco</span></div>
+    <div class="navbar-wordmark">
+      <div class="navbar-name">Tuke<span>carco</span></div>
+      <div class="navbar-sub">TikTok 直播监测系统</div>
     </div>
   </a>
   <span class="version-badge" onclick="openChangelog()" title="点击查看版本日志">v{{ app_version }}</span>
-  <nav style="display:flex;gap:4px;align-items:center;">
+  <nav class="navbar-nav">
     <a href="/" class="nav-link">实时看板</a>
     <a href="/history" class="nav-link">历史记录</a>
-    <a href="/automonitor" class="nav-link" style="color:var(--primary);font-weight:600;">自动监控</a>
-    <a href="/rivals" class="nav-link">竞品分析</a>
+    <a href="/automonitor" class="nav-link active">📋 自动监控</a>
+    <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/compare" class="nav-link">📊 自营对比</a>
+    <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
     <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
-    <button onclick="authLogout()" style="font-size:13px;background:#f5f6fa;border:1px solid #e8eaef;padding:5px 10px;border-radius:6px;cursor:pointer;">退出</button>
+    <button class="nav-btn" onclick="authLogout()" style="margin-left:2px">退出</button>
   </nav>
 </nav>
 
