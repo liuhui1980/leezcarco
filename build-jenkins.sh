@@ -69,3 +69,39 @@ log "全部完成 ✓"
 log "镜像：${FULL_IMAGE}"
 log "最新：${LATEST_IMAGE}"
 log "========================================"
+
+# ==================== 自动部署到线上服务器 ====================
+# 线上服务器 IP（按实际修改）
+DEPLOY_SERVER="192.168.100.62"
+DEPLOY_USER="root"
+# docker-compose.yml 在线上服务器的路径（按实际修改）
+DEPLOY_PATH="/opt/leezcarco"
+
+log "========================================"
+log "开始部署到线上服务器 ${DEPLOY_SERVER} ..."
+log "========================================"
+
+ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} bash <<EOF
+  set -e
+  echo "--- 登录私有仓库 ---"
+  echo "${REGISTRY_PASS}" | docker login "${REGISTRY}" -u "${REGISTRY_USER}" --password-stdin
+
+  echo "--- 拉取最新镜像 ${LATEST_IMAGE} ---"
+  docker pull ${LATEST_IMAGE}
+
+  echo "--- 进入部署目录 ${DEPLOY_PATH} ---"
+  cd ${DEPLOY_PATH}
+
+  echo "--- 重启容器（docker compose up -d） ---"
+  docker compose up -d --no-build
+
+  echo "--- 清理旧镜像 ---"
+  docker image prune -f
+
+  echo "--- 部署完成 ---"
+  docker ps | grep tiktok-monitor
+EOF
+
+log "========================================"
+log "线上部署完成 ✓"
+log "========================================"
