@@ -152,10 +152,15 @@ def get_current_user():
 
 
 def login_required(f):
-    """装饰器：未登录重定向到登录页"""
+    """装饰器：未登录时，API 请求返回 401 JSON，页面请求重定向到登录页"""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not get_current_user():
+            # /api/ 路径或 XHR 请求返回 JSON 401，让前端处理
+            if request.path.startswith('/api/') or \
+               request.headers.get('Accept', '').find('application/json') >= 0 or \
+               request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'msg': '未登录', 'redirect': '/login'}), 401
             return redirect(url_for('login_page'))
         return f(*args, **kwargs)
     return decorated
@@ -167,6 +172,8 @@ def admin_required(f):
     def decorated(*args, **kwargs):
         u = get_current_user()
         if not u:
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'msg': '未登录', 'redirect': '/login'}), 401
             return redirect(url_for('login_page'))
         if not u['is_admin']:
             return jsonify({'success': False, 'msg': '无权限，需要管理员账号'}), 403

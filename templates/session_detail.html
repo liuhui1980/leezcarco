@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>直播复盘 — TikTok 直播监测</title>
+<script src="/static/js/auth-interceptor.js"></script>
 <script src="/static/js/chart.umd.min.js"></script>
 <style>
   :root {
@@ -520,6 +521,13 @@ async function authLogout() {
 }
 
 function fmt(n) { if(n>=10000) return (n/10000).toFixed(1)+'w'; if(n>=1000) return (n/1000).toFixed(1)+'k'; return (n||0).toLocaleString(); }
+
+// 全局 fetch 包装：自动处理 401 未登录（跳转登录页）
+async function apiFetch(url, opts) {
+  const r = await fetch(url, opts);
+  if (r.status === 401) { location.href = '/login'; throw new Error('未登录'); }
+  return r;
+}
 function fmtMin(m) { if(!m) return '-'; m=Math.round(m); return m>=60?`${Math.floor(m/60)}h${m%60}m`:`${m}m`; }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -623,7 +631,7 @@ let _sessionData = null;
 // _viewerSnaps 提升为模块级，供时间轴流量节点检测
 let _viewerSnaps = [];
 
-fetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
+apiFetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
   const s = data.session || {};
   _sessionData = s;
   document.getElementById('pageTitle').textContent = `直播复盘 — @${s.username}`;
@@ -817,7 +825,7 @@ function renderDialectAnalysis(comments) {
 }
 
 // ── 加载复盘对比数据 ──
-fetch(`/api/session/${sessionId}/review`).then(r=>r.json()).then(rv => {
+fetch(`/api/session/${sessionId}/review`).then(r=>{ if(r.status===401){location.href='/login';throw new Error();} return r.json();}).then(rv => {
   if (!rv || !rv.current) return;
   const panel = document.getElementById('reviewPanel');
   panel.style.display = '';
@@ -845,7 +853,7 @@ fetch(`/api/session/${sessionId}/review`).then(r=>r.json()).then(rv => {
 });
 
 // ── 加载话术分析 ──
-fetch(`/api/session/${sessionId}/speech`).then(r=>r.json()).then(sp => {
+fetch(`/api/session/${sessionId}/speech`).then(r=>{ if(r.status===401){location.href='/login';throw new Error();} return r.json();}).then(sp => {
   if (!sp || !sp.records || !sp.records.length) return;
   document.getElementById('speechPanel').style.display = '';
   document.getElementById('speechCount').textContent = `${sp.records.length} 条话术`;
