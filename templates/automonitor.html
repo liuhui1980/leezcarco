@@ -24,6 +24,8 @@
   .navbar-name span { color:var(--primary); }
   .nav-link { color:var(--text2); text-decoration:none; font-size:14px; padding:6px 12px; border-radius:6px; }
   .nav-link:hover { background:var(--bg); }
+  .nav-btn { background:none; border:1px solid var(--border); color:var(--text2); font-size:13px; padding:5px 12px; border-radius:6px; cursor:pointer; }
+  .nav-btn:hover { background:var(--bg); }
   .main { max-width:1000px; margin:0 auto; padding:24px; }
   .page-title { font-size:20px; font-weight:700; margin-bottom:6px; }
   .page-sub { font-size:13px; color:var(--text2); margin-bottom:24px; }
@@ -31,30 +33,43 @@
   .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; box-shadow:var(--shadow); }
   .panel-title { font-size:15px; font-weight:700; margin-bottom:16px; }
 
-  /* 导入区 */
-  .import-area { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:flex-start; }
-  textarea.import-input {
-    width:100%; min-height:120px; padding:10px 12px;
-    border:1.5px solid var(--border); border-radius:8px; font-size:13px;
-    font-family:var(--font); resize:vertical; outline:none;
-    color:var(--text); background:var(--bg);
+  /* ── 添加账号表单 ── */
+  .add-form {
+    display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;
   }
-  textarea.import-input:focus { border-color:var(--primary); background:#fff; }
-  .import-hint { font-size:12px; color:var(--text3); margin-top:6px; line-height:1.6; }
-  .import-actions { display:flex; flex-direction:column; gap:8px; min-width:120px; }
+  .form-group { display:flex; flex-direction:column; gap:5px; }
+  .form-group label { font-size:12px; color:var(--text2); font-weight:600; }
+  .form-input {
+    padding:9px 12px; border:1.5px solid var(--border); border-radius:8px;
+    font-size:14px; font-family:var(--font); outline:none; color:var(--text);
+    background:#fff; transition:border-color .15s;
+  }
+  .form-input:focus { border-color:var(--primary); }
+  .form-input.username-input { width:200px; }
+  .form-select {
+    padding:9px 12px; border:1.5px solid var(--border); border-radius:8px;
+    font-size:14px; font-family:var(--font); outline:none; color:var(--text);
+    background:#fff; cursor:pointer; transition:border-color .15s; min-width:120px;
+  }
+  .form-select:focus { border-color:var(--primary); }
 
-  /* 按钮 */
-  .btn { padding:9px 16px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition:opacity .15s; }
+  /* ── 按钮 ── */
+  .btn { padding:9px 18px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition:opacity .15s; white-space:nowrap; }
   .btn:hover { opacity:.85; }
   .btn:disabled { opacity:.5; cursor:not-allowed; }
   .btn-primary { background:var(--primary); color:#fff; }
   .btn-success { background:var(--success); color:#fff; }
-  .btn-danger { background:var(--danger); color:#fff; font-size:12px; padding:5px 10px; }
+  .btn-danger { background:var(--danger); color:#fff; font-size:12px; padding:5px 10px; border-radius:6px; }
   .btn-sm { font-size:12px; padding:5px 12px; border-radius:6px; }
   .btn-outline { background:transparent; border:1px solid var(--border); color:var(--text2); }
   .btn-outline:hover { background:var(--bg); }
 
-  /* 账号列表 */
+  /* ── 账号列表 ── */
+  .list-header {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:14px; flex-wrap:wrap; gap:8px;
+  }
+  .list-actions { display:flex; gap:8px; align-items:center; }
   .account-list { display:flex; flex-direction:column; gap:8px; }
   .account-row {
     display:grid; grid-template-columns:auto 1fr auto auto auto auto;
@@ -88,13 +103,13 @@
 
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
 
-  /* 统计栏 */
-  .stats-bar { display:flex; gap:20px; padding:12px 16px; background:var(--bg); border-radius:8px; margin-bottom:16px; }
-  .stat-item { text-align:center; }
+  /* ── 统计栏 ── */
+  .stats-bar { display:flex; gap:20px; padding:12px 16px; background:var(--bg); border-radius:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .stat-item { text-align:center; min-width:60px; }
   .stat-val { font-size:20px; font-weight:700; color:var(--text); }
   .stat-label { font-size:11px; color:var(--text3); margin-top:2px; }
 
-  /* toast */
+  /* ── toast ── */
   #toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:10px; font-size:14px; font-weight:600; color:#fff; background:#333; transform:translateY(80px); opacity:0; transition:all .3s; z-index:9999; pointer-events:none; }
   #toast.show { transform:translateY(0); opacity:1; }
   #toast.success { background:var(--success); }
@@ -103,15 +118,17 @@
   /* ── 响应式 ── */
   @media(max-width:768px) {
     .main { padding:16px; max-width:100%; }
-    .import-area { grid-template-columns:1fr; }
-    .import-actions { flex-direction:row; flex-wrap:wrap; min-width:unset; }
+    .add-form { flex-direction:column; align-items:stretch; }
+    .form-input.username-input { width:100%; }
+    .form-select { width:100%; }
   }
   @media(max-width:640px) {
     .navbar { padding:0 12px; height:auto; min-height:56px; flex-wrap:wrap; padding-top:8px; padding-bottom:8px; }
     .nav-link { font-size:12px; padding:4px 8px; }
     .main { padding:10px; }
     .panel { padding:14px; }
-    .am-header { flex-wrap:wrap; gap:6px; }
+    .account-row { grid-template-columns:auto 1fr auto auto; }
+    .account-row .toggle-switch { display:none; }
   }
   @media(max-width:480px) {
     .navbar-sub, .version-badge { display:none; }
@@ -141,63 +158,82 @@
     </div>
     <div class="navbar-wordmark">
       <div class="navbar-name">Tuke<span>carco</span></div>
-      <div class="navbar-sub">TikTok 直播监测系统</div>
+      <div class="navbar-sub" style="font-size:11px;color:var(--text3);">TikTok 直播监测系统</div>
     </div>
     <span class="version-badge" onclick="openChangelog(event)" title="点击查看版本日志">v{{ app_version }}</span>
   </a>
-  <nav class="navbar-nav">
+  <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
     <a href="/" class="nav-link">实时看板</a>
     <a href="/history" class="nav-link">历史记录</a>
-    <a href="/automonitor" class="nav-link active">📋 自动监控</a>
+    <a href="/automonitor" class="nav-link" style="color:var(--primary);font-weight:700;">📋 自动监控</a>
     <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
     <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
     <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
-    <button class="nav-btn" onclick="authLogout()" style="margin-left:2px">退出</button>
+    <button class="nav-btn" onclick="authLogout()">退出</button>
   </nav>
 </nav>
 
 <div class="main">
   <div class="page-title">📋 自动监控列表</div>
-  <div class="page-sub">添加你的自营账号，系统会在启动后自动开始监控。只要账号开播，立即开始采集数据。</div>
+  <div class="page-sub">添加账号后，系统会持续等待开播——一旦开播自动采集，并推送微信通知。</div>
 
-  <!-- 批量导入 -->
+  <!-- ── 添加账号 ── -->
   <div class="panel">
-    <div class="panel-title">📥 批量导入账号</div>
-    <div class="import-area">
-      <div>
-        <textarea class="import-input" id="importText" placeholder="每行一个账号，支持以下格式：
-username
-@username
-username,备注名
-username,备注名,own
-username,备注名,rival
-
-分组选项：own（自营）/ rival（竞品）/ watch（关注）
-默认分组：own（自营）"></textarea>
-        <div class="import-hint">
-          💡 提示：粘贴账号列表后点击「解析导入」，系统会自动去重并添加到监控列表。<br>
-          添加后如需立即开始监控，点击右侧「一键启动全部」按钮。
-        </div>
+    <div class="panel-title">➕ 添加监控账号</div>
+    <div class="add-form">
+      <div class="form-group">
+        <label>TikTok 账号名</label>
+        <input class="form-input username-input" id="addUsername" placeholder="输入账号名（不需要@）"
+               onkeydown="if(event.key==='Enter')addAccount()">
       </div>
-      <div class="import-actions">
-        <button class="btn btn-primary" onclick="parseAndImport()">✅ 解析导入</button>
-        <button class="btn btn-success" onclick="startAll()">▶ 一键启动全部</button>
-        <button class="btn btn-outline" onclick="loadList()">🔄 刷新列表</button>
+      <div class="form-group">
+        <label>备注名称（选填）</label>
+        <input class="form-input" id="addDisplayName" placeholder="备注名" style="width:140px;"
+               onkeydown="if(event.key==='Enter')addAccount()">
       </div>
+      <div class="form-group">
+        <label>账号分组</label>
+        <select class="form-select" id="addGroup">
+          <option value="own">🏠 自营账号</option>
+          <option value="rival">⚔️ 竞品账号</option>
+          <option value="watch">👁️ 关注账号</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="addAccount()" id="addBtn">➕ 添加</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-top:10px;">
+      💡 自营账号：全量采集（评论/礼物/话术/语言分析）&nbsp;·&nbsp;
+         竞品账号：轻量采集（仅在线人数）&nbsp;·&nbsp;
+         关注账号：仅开播推送通知
     </div>
   </div>
 
-  <!-- 当前列表 -->
+  <!-- ── 监控列表 ── -->
   <div class="panel">
-    <div class="panel-title">📊 监控列表 <span style="font-size:12px;color:var(--text3);font-weight:400;" id="listSummary"></span></div>
+    <div class="list-header">
+      <div class="panel-title" style="margin-bottom:0;">
+        📊 监控列表
+        <span style="font-size:12px;color:var(--text3);font-weight:400;" id="listSummary"></span>
+      </div>
+      <div class="list-actions">
+        <button class="btn btn-outline btn-sm" onclick="loadList()">🔄 刷新</button>
+        <button class="btn btn-success" onclick="startAll()" id="startAllBtn">▶ 一键启动全部</button>
+      </div>
+    </div>
+
     <div class="stats-bar" id="statsBar" style="display:none;">
       <div class="stat-item"><div class="stat-val" id="statTotal">0</div><div class="stat-label">总账号数</div></div>
       <div class="stat-item"><div class="stat-val" id="statEnabled">0</div><div class="stat-label">已启用</div></div>
       <div class="stat-item"><div class="stat-val" id="statLive" style="color:var(--primary);">0</div><div class="stat-label">直播中</div></div>
-      <div class="stat-item"><div class="stat-val" id="statOwn">0</div><div class="stat-label">自营账号</div></div>
-      <div class="stat-item"><div class="stat-val" id="statRival">0</div><div class="stat-label">竞品账号</div></div>
+      <div class="stat-item"><div class="stat-val" id="statOwn">0</div><div class="stat-label">自营</div></div>
+      <div class="stat-item"><div class="stat-val" id="statRival">0</div><div class="stat-label">竞品</div></div>
+      <div class="stat-item"><div class="stat-val" id="statWatch">0</div><div class="stat-label">关注</div></div>
     </div>
+
     <div class="account-list" id="accountList">
       <div style="text-align:center;padding:40px;color:var(--text3);font-size:13px;">加载中...</div>
     </div>
@@ -213,7 +249,13 @@ username,备注名,rival
     const res = await fetch('/api/auth/me');
     if (res.status === 401) { location.href = '/login'; return; }
     const me = await res.json();
-    if (me.logged_in) document.getElementById('navUserBadge').textContent = me.username;
+    if (me.logged_in) {
+      document.getElementById('navUserBadge').textContent = me.username;
+      if (me.is_admin) {
+        const el = document.getElementById('adminNavLink');
+        if (el) el.style.display = '';
+      }
+    }
   } catch(e) {}
 })();
 async function authLogout() {
@@ -233,8 +275,7 @@ function showToast(msg, type='success') {
 async function loadList() {
   const res = await fetch('/api/automonitor/list');
   const data = await res.json();
-  const list = data.list || [];
-  renderList(list);
+  renderList(data.list || []);
 }
 
 function renderList(list) {
@@ -242,8 +283,9 @@ function renderList(list) {
   const statsBar = document.getElementById('statsBar');
 
   if (!list.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px;">暂无账号，请在上方导入</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px;">暂无账号，在上方填写账号名后点「添加」</div>';
     statsBar.style.display = 'none';
+    document.getElementById('listSummary').textContent = '';
     return;
   }
 
@@ -253,19 +295,27 @@ function renderList(list) {
   document.getElementById('statLive').textContent = list.filter(r=>r.is_live).length;
   document.getElementById('statOwn').textContent = list.filter(r=>r.group_name==='own').length;
   document.getElementById('statRival').textContent = list.filter(r=>r.group_name==='rival').length;
+  document.getElementById('statWatch').textContent = list.filter(r=>r.group_name==='watch').length;
+
+  const liveCount = list.filter(r=>r.is_live).length;
+  document.getElementById('listSummary').textContent = liveCount ? `· ${liveCount} 个正在直播` : '';
 
   const groupMap = { own:'自营', rival:'竞品', watch:'关注' };
   el.innerHTML = list.map(r => {
     const grpCls = `tag-${r.group_name||'own'}`;
     const grpLabel = groupMap[r.group_name] || r.group_name;
+    const displayName = r.display_name && r.display_name !== r.username
+      ? `<span style="font-size:12px;color:var(--text3);margin-left:4px;">(${r.display_name})</span>` : '';
     return `<div class="account-row${r.is_live?' live':''}${!r.enabled?' disabled':''}" id="row-${r.username}">
       <span class="ac-status${r.is_live?' live':''}"></span>
       <div>
-        <div class="ac-name">@${r.username}${r.display_name && r.display_name!==r.username ? ` <span style="font-size:12px;color:var(--text3);">(${r.display_name})</span>` : ''}</div>
+        <div class="ac-name">@${r.username}${displayName}</div>
         ${r.note ? `<div class="ac-note">${r.note}</div>` : ''}
       </div>
       <span class="ac-group ${grpCls}">${grpLabel}</span>
-      ${r.is_live ? '<span style="font-size:11px;background:#fff0f3;color:#fe2c55;border-radius:10px;padding:2px 8px;font-weight:600;">直播中</span>' : '<span style="font-size:11px;color:var(--text3);">未开播</span>'}
+      ${r.is_live
+        ? '<span style="font-size:11px;background:#fff0f3;color:#fe2c55;border-radius:10px;padding:2px 8px;font-weight:600;">直播中</span>'
+        : '<span style="font-size:11px;color:var(--text3);">未开播</span>'}
       <label class="toggle-switch" title="${r.enabled?'点击禁用':'点击启用'}">
         <input type="checkbox" ${r.enabled?'checked':''} onchange="toggleAccount('${r.username}', this.checked)">
         <span class="toggle-slider"></span>
@@ -275,41 +325,50 @@ function renderList(list) {
   }).join('');
 }
 
-// ── 解析并导入 ──
-async function parseAndImport() {
-  const raw = document.getElementById('importText').value.trim();
-  if (!raw) { showToast('请输入账号列表', 'error'); return; }
-  const lines = raw.split('\n').filter(l => l.trim());
-  const accounts = [];
-  for (const line of lines) {
-    const parts = line.trim().split(',').map(s => s.trim());
-    let username = (parts[0] || '').replace(/^@/, '');
-    if (!username) continue;
-    const display_name = parts[1] || '';
-    const group_name = ['own','rival','watch'].includes(parts[2]) ? parts[2] : 'own';
-    accounts.push({ username, display_name, group_name });
-  }
-  if (!accounts.length) { showToast('未解析到有效账号', 'error'); return; }
+// ── 添加单个账号 ──
+async function addAccount() {
+  const username = document.getElementById('addUsername').value.trim().replace(/^@/, '');
+  const displayName = document.getElementById('addDisplayName').value.trim();
+  const groupName = document.getElementById('addGroup').value;
+
+  if (!username) { showToast('请输入账号名', 'error'); return; }
+
+  const btn = document.getElementById('addBtn');
+  btn.disabled = true; btn.textContent = '添加中...';
+
   const res = await fetch('/api/automonitor/import', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ accounts })
+    body: JSON.stringify({ accounts: [{ username, display_name: displayName, group_name: groupName }] })
   });
   const data = await res.json();
+
+  btn.disabled = false; btn.textContent = '➕ 添加';
+
   if (data.success) {
-    showToast(`✅ 成功导入 ${data.count} 个账号`, 'success');
-    document.getElementById('importText').value = '';
+    const groupLabelMap = {'own':'自营','rival':'竞品','watch':'关注'};
+    showToast(`✅ @${username} 已添加到${groupLabelMap[groupName]}列表`, 'success');
+    document.getElementById('addUsername').value = '';
+    document.getElementById('addDisplayName').value = '';
     loadList();
   } else {
-    showToast('导入失败', 'error');
+    showToast('添加失败，请重试', 'error');
   }
 }
 
-// ── 一键启动全部 ──
+// ── 一键启动全部（已启用账号全部进入等待） ──
 async function startAll() {
+  const btn = document.getElementById('startAllBtn');
+  btn.disabled = true; btn.textContent = '启动中...';
   const res = await fetch('/api/automonitor/start_all', {method:'POST'});
   const data = await res.json();
+  btn.disabled = false; btn.textContent = '▶ 一键启动全部';
   const started = (data.results||[]).filter(r=>r.started).length;
-  showToast(`▶ 已启动 ${started} 个监控任务`, 'success');
+  const skipped = (data.results||[]).filter(r=>!r.started).length;
+  if (started > 0) {
+    showToast(`▶ 已启动 ${started} 个监控任务${skipped?`，${skipped} 个已在运行`:''}`, 'success');
+  } else {
+    showToast(`所有账号已在监控中`, 'success');
+  }
   setTimeout(loadList, 1500);
 }
 
@@ -319,12 +378,12 @@ async function toggleAccount(username, enabled) {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({username, enabled})
   });
-  showToast(enabled ? `已启用 @${username}` : `已禁用 @${username}`, 'success');
+  showToast(enabled ? `✅ 已启用 @${username}` : `⏸ 已禁用 @${username}`, 'success');
 }
 
-// ── 移除 ──
+// ── 移除账号 ──
 async function deleteAccount(username) {
-  if (!confirm(`确定从监控列表移除 @${username}？（不会删除历史数据）`)) return;
+  if (!confirm(`确定从监控列表移除 @${username}？\n（不会删除历史直播数据）`)) return;
   await fetch('/api/automonitor/delete', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({username})
@@ -333,9 +392,8 @@ async function deleteAccount(username) {
   loadList();
 }
 
-// 初始加载
+// ── 初始加载 + 30s 轮询 ──
 loadList();
-// 每30秒刷新直播状态
 setInterval(loadList, 30000);
 </script>
 

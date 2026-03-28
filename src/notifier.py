@@ -5,6 +5,7 @@
 import requests
 import logging
 import os
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,47 @@ except ImportError:
     WXPUSHER_UID = os.environ.get('WXPUSHER_UID', '')
 
 WXPUSHER_API = 'https://wxpusher.zjiecode.com/api/send/message'
+
+
+def send_live_start_notify(username: str, group_name: str = 'own'):
+    """
+    发送开播提醒微信通知
+    :param username: 主播用户名
+    :param group_name: 账号分组（own/rival/watch）
+    """
+    if not WXPUSHER_APP_TOKEN or not WXPUSHER_UID:
+        logger.warning("⚠️ WxPusher 未配置，跳过开播通知")
+        return
+
+    group_label = {'own': '🏠 自营账号', 'rival': '⚔️ 竞品账号', 'watch': '👁️ 关注账号'}.get(group_name, '账号')
+    now = datetime.now().strftime('%H:%M')
+
+    content = f"""
+<h3>🔴 直播开始提醒</h3>
+<p><b>@{username}</b> 正在直播！</p>
+<table border="1" cellpadding="5" style="border-collapse:collapse;">
+  <tr><td><b>账号</b></td><td>@{username}</td></tr>
+  <tr><td><b>分类</b></td><td>{group_label}</td></tr>
+  <tr><td><b>开播时间</b></td><td>{now}</td></tr>
+</table>
+<p>🔗 <a href="https://www.tiktok.com/@{username}/live">点击前往直播间</a></p>
+"""
+    payload = {
+        'appToken': WXPUSHER_APP_TOKEN,
+        'content': content,
+        'summary': f'🔴 @{username} 开播了！{group_label} · {now}',
+        'contentType': 2,
+        'uids': [WXPUSHER_UID],
+    }
+    try:
+        resp = requests.post(WXPUSHER_API, json=payload, timeout=10)
+        result = resp.json()
+        if result.get('success'):
+            logger.info(f"✅ 开播通知推送成功: @{username}")
+        else:
+            logger.warning(f"⚠️ 开播通知推送失败: {result.get('msg')}")
+    except Exception as e:
+        logger.error(f"❌ 开播通知推送异常: {e}")
 
 
 def send_wechat_notify(summary: dict, username: str, report_path: str = None):

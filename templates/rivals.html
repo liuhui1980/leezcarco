@@ -319,21 +319,24 @@ function renderRivals(rivals) {
   empty.style.display = 'none';
   list.innerHTML = rivals.map(r => {
     const initial = r.username.charAt(0).toUpperCase();
-    const liveDot = r.is_live ? `<span class="rival-live-dot"></span>直播中` : '';
+    const liveDot = r.is_live ? `<span class="rival-live-dot"></span>` : '';
+    const followerText = r.follower_count > 0
+      ? `粉丝 ${formatNum(r.follower_count)}${r.follower_growth_7d ? ` <span style="color:${r.follower_growth_7d>0?'#10b981':'#ef4444'};font-size:10px;">${r.follower_growth_7d>0?'↑':'↓'}${formatNum(Math.abs(r.follower_growth_7d))}/7天</span>` : ''} · `
+      : '';
     const statsText = r.session_count > 0
-      ? `${r.session_count}场记录 · 场均在线 ${formatNum(r.avg_peak_viewers)} · 场均礼物 $${(r.avg_gift_value||0).toFixed(1)}`
-      : '暂无历史记录，监控后自动采集';
+      ? `${followerText}${r.session_count}场记录 · 场均在线 ${formatNum(r.avg_peak_viewers)} · 场均礼物 $${(r.avg_gift_value||0).toFixed(1)}`
+      : `${followerText}暂无历史记录，监控后自动采集`;
     const monBtnClass = r.is_live ? 'btn-monitor monitoring' : 'btn-monitor';
-    const monBtnText = r.is_live ? '⏹ 停止监控' : '▶ 开始监控';
+    const monBtnText = r.is_live ? '⏹ 停止' : '▶ 监控';
     return `<div class="rival-item" id="rival-${r.username}">
       <div class="rival-avatar">${initial}</div>
       <div class="rival-info">
-        <div class="rival-name">${liveDot ? `<span class="rival-live-dot"></span>` : ''}@${r.username}${r.display_name !== r.username ? ` <span style="font-size:11px;color:var(--text3);font-weight:400;">(${r.display_name})</span>` : ''}</div>
-        <div class="rival-stats">${liveDot}${statsText}</div>
+        <div class="rival-name">${liveDot}@${r.username}${r.display_name !== r.username ? ` <span style="font-size:11px;color:var(--text3);font-weight:400;">(${r.display_name})</span>` : ''}</div>
+        <div class="rival-stats">${statsText}</div>
       </div>
       <div class="rival-actions">
         <button class="${monBtnClass}" onclick="toggleMonitor('${r.username}', ${r.is_live})">${monBtnText}</button>
-        <a href="/history" style="text-decoration:none;"><button class="btn btn-ghost btn-sm">历史</button></a>
+        <a href="/rival/${r.username}" style="text-decoration:none;"><button class="btn btn-ghost btn-sm">📊 详情</button></a>
         <button class="btn-danger-sm" onclick="removeRival('${r.username}')">移除</button>
       </div>
     </div>`;
@@ -364,19 +367,21 @@ async function addRival() {
   } catch(e) { showToast('网络错误', 'error'); }
 }
 
-// ── 移除竞品 ──
+// ── 移除竞品（真正删除，而不是改分组）──
 async function removeRival(username) {
-  if (!confirm(`确定将 @${username} 从竞品列表移除吗？（历史数据保留，只是取消竞品标记）`)) return;
+  if (!confirm(`确定将 @${username} 从竞品列表移除吗？\n（历史监控数据保留，只是取消竞品标记）`)) return;
   try {
-    const res = await fetch('/api/account/group', {
+    const res = await fetch('/api/rivals/remove', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ username, group: 'own' })  // 改回 own 或 watch
+      body: JSON.stringify({ username })
     });
     const data = await res.json();
     if (data.success) {
       showToast(`@${username} 已从竞品列表移除`, 'info');
       await loadRivals();
       await loadCompare();
+    } else {
+      showToast(data.msg || '移除失败', 'error');
     }
   } catch(e) { showToast('操作失败', 'error'); }
 }

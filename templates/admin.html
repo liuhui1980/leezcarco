@@ -75,6 +75,13 @@
   }
   .form-input:focus { border-color: var(--primary); }
 
+  /* 在线状态点 */
+  .online-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; animation: pulse-dot 1.5s infinite; margin-right:4px; }
+  .offline-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#d1d5db; margin-right:4px; }
+  @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(1.3)} }
+  .badge-admin { background:#fef3c7; color:#92400e; }
+  .badge-user { background:#eff6ff; color:#1d4ed8; }
+
   /* 改密码 */
   .pw-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
   .pw-form .form-group { flex: 1; min-width: 140px; }
@@ -143,11 +150,11 @@
       <table class="user-table">
         <thead>
           <tr>
-            <th>ID</th><th>用户名</th><th>真实姓名</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th>
+            <th>ID</th><th>用户名 / 使用情况</th><th>真实姓名</th><th>在线</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th>
           </tr>
         </thead>
         <tbody id="userList">
-          <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">加载中…</td></tr>
+          <tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">加载中…</td></tr>
         </tbody>
       </table>
     </div>
@@ -235,7 +242,7 @@ async function loadUsers() {
   const pendingCountEl = document.getElementById('pendingCount');
 
   if (!data.users || !data.users.length) {
-    tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">暂无用户</td></tr>';
+    tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">暂无用户</td></tr>';
     pendingCard.style.display = 'none';
     return;
   }
@@ -271,20 +278,38 @@ async function loadUsers() {
     return `<span class="badge">${s}</span>`;
   };
 
-  tb.innerHTML = activeUsers.map(u => `
+  tb.innerHTML = activeUsers.map(u => {
+    // 在线状态
+    const onlineDot = u.is_online
+      ? `<span class="online-dot" title="当前有活跃监控"></span><span style="font-size:11px;color:#10b981;font-weight:700;">在线</span>${u.online_accounts?.length ? `<div style="font-size:10px;color:#10b981;margin-top:2px;">监控中：${u.online_accounts.slice(0,3).map(a=>'@'+a).join('  ')}</div>` : ''}`
+      : `<span class="offline-dot"></span><span style="font-size:11px;color:#9ca3af;">离线</span>`;
+
+    // 使用详情
+    const todayBadge = u.today_session_count > 0
+      ? `<span style="background:#dcfce7;color:#16a34a;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:4px;">今日 ${u.today_session_count} 场</span>`
+      : '';
+
+    const usageInfo = `
+      <div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+        <span title="总场次">🎬 累计 ${u.session_count || 0} 场</span>
+        ${todayBadge}
+        <span title="监控账号数">👤 ${u.account_count || 0} 个账号</span>
+        <span title="账号组数">📋 ${u.group_account_count || 0} 个分组</span>
+        ${u.last_active ? `<span title="最后活跃时间" style="color:var(--text3);">最近：${(u.last_active||'').slice(0,16)}</span>` : '<span style="color:#d1d5db;">尚未监控</span>'}
+      </div>`;
+
+    return `
     <tr>
-      <td>${u.id}</td>
+      <td style="color:var(--text3);font-size:12px;">${u.id}</td>
       <td>
-        <strong>${u.username}</strong>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px;">
-          📊 ${u.session_count || 0} 场监控 · 🎯 ${u.account_count || 0} 个账号
-          ${u.last_active ? `· 最后活跃：${(u.last_active||'').slice(0,16)}` : '· 尚未使用'}
-        </div>
+        <strong style="font-size:14px;">${u.username}</strong>
+        ${usageInfo}
       </td>
       <td style="color:var(--text2);">${u.real_name || '-'}</td>
-      <td><span class="badge ${u.is_admin ? 'badge-admin' : 'badge-user'}">${u.is_admin ? '管理员' : '普通用户'}</span></td>
+      <td style="min-width:80px;">${onlineDot}</td>
+      <td><span class="badge ${u.is_admin ? 'badge-admin' : 'badge-user'}">${u.is_admin ? '👑 管理员' : '用户'}</span></td>
       <td>${statusBadge(u.status || 'active')}</td>
-      <td style="color:var(--text2);font-size:12px">${u.created_at || '-'}</td>
+      <td style="color:var(--text2);font-size:12px;">${(u.created_at||'').slice(0,10) || '-'}</td>
       <td>
         ${!u.is_admin ? `
           <button class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;margin-right:4px" onclick="openReset(${u.id},'${u.username}')">重置密码</button>
@@ -293,10 +318,10 @@ async function loadUsers() {
             : `<button class="btn btn-sm" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;margin-right:4px" onclick="disableUser(${u.id},'${u.username}')">禁用</button>`
           }
           <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${u.username}')">删除</button>
-        ` : '<span style="color:var(--text3);font-size:12px">—</span>'}
+        ` : '<span style="color:var(--text3);font-size:12px;">—</span>'}
       </td>
     </tr>
-  `).join('');
+  `}).join('');
 }
 
 async function createUser() {

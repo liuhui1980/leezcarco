@@ -6,6 +6,7 @@ import os
 import subprocess
 import threading
 import re
+from datetime import datetime
 from functools import wraps
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, send_file
 
@@ -45,9 +46,11 @@ from src.database import (
     verify_user, create_user, get_all_users, update_user_password, delete_user,
     set_user_status,
     get_auto_monitor_list, upsert_auto_monitor, delete_auto_monitor,
-    toggle_auto_monitor, get_enabled_auto_monitors
+    toggle_auto_monitor, get_enabled_auto_monitors,
+    get_follower_snapshots, get_latest_follower_snapshot, get_all_rival_usernames
 )
-from src.monitor import start_monitor, stop_monitor, get_active_usernames, get_monitors_snapshot
+from src.monitor import start_monitor, stop_monitor, get_active_usernames, get_live_usernames, get_monitors_snapshot
+from src.rival_tracker import start_rival_tracker, trigger_snapshot_now
 
 # ── Cloudflare Tunnel 状态 ──
 _tunnel_url = None
@@ -277,12 +280,18 @@ def admin_page():
 @app.route('/api/admin/users')
 @admin_required
 def api_admin_users():
-    """获取所有系统用户（含使用摘要统计）"""
+    """获取所有系统用户（含使用摘要统计 + 在线状态）"""
     users = get_all_users()
     # 补充每位用户的使用统计
     try:
         from src.database import get_conn
+        from src.monitor import get_active_usernames
         conn = get_conn()
+        today_str = datetime.now().strftime('%Y-%m-%d')
+
+        # 获取当前在监控的账号 → 反查用户
+        active_unames = set(get_active_usernames())
+
         for u in users:
             uid = u['id']
             # 监控场次总数
@@ -290,16 +299,36 @@ def api_admin_users():
                 'SELECT COUNT(*) as cnt FROM live_sessions WHERE owner_user_id=?', (uid,)
             ).fetchone()
             u['session_count'] = row['cnt'] if row else 0
+            # 今日场次
+            row_today = conn.execute(
+                "SELECT COUNT(*) as cnt FROM live_sessions WHERE owner_user_id=? AND start_time >= ?",
+                (uid, today_str)
+            ).fetchone()
+            u['today_session_count'] = row_today['cnt'] if row_today else 0
             # 最近一次监控时间
             row2 = conn.execute(
                 'SELECT start_time FROM live_sessions WHERE owner_user_id=? ORDER BY id DESC LIMIT 1', (uid,)
             ).fetchone()
             u['last_active'] = row2['start_time'] if row2 else None
-            # 监控账号数（distinct）
+            # 监控账号数（distinct username）
             row3 = conn.execute(
-                'SELECT COUNT(DISTINCT anchor) as cnt FROM live_sessions WHERE owner_user_id=?', (uid,)
+                'SELECT COUNT(DISTINCT username) as cnt FROM live_sessions WHERE owner_user_id=?', (uid,)
             ).fetchone()
             u['account_count'] = row3['cnt'] if row3 else 0
+            # 该用户管理的账号组数量
+            row4 = conn.execute(
+                'SELECT COUNT(*) as cnt FROM account_groups WHERE owner_user_id=?', (uid,)
+            ).fetchone()
+            u['group_account_count'] = row4['cnt'] if row4 else 0
+            # 该用户当前在监控的账号（is_online）
+            c2 = conn.execute(
+                'SELECT username FROM account_groups WHERE owner_user_id=?', (uid,)
+            ).fetchall()
+            owned_unames = {r['username'] for r in c2}
+            online_unames = owned_unames & active_unames
+            u['is_online'] = len(online_unames) > 0
+            u['online_accounts'] = list(online_unames)
+            u['online_count'] = len(online_unames)
         conn.close()
     except Exception as e:
         logger.warning(f'获取用户统计失败: {e}')
@@ -695,7 +724,7 @@ def api_accounts():
         un = s.get('username', '')
         if un and un not in seen:
             seen[un] = s.get('status') == 'live'
-    active_now = set(get_active_usernames())
+    active_now = set(get_live_usernames())
     result = [
         {'username': un, 'is_live': (un in active_now)}
         for un, _is_live in seen.items()
@@ -735,7 +764,7 @@ def api_rivals():
         else:
             c.execute("SELECT username, display_name FROM account_groups WHERE group_name='rival'")
         rival_rows = [(r['username'], r['display_name']) for r in c.fetchall()]
-        active_now = set(get_active_usernames())
+        active_now = set(get_live_usernames())
         result = []
         for username, display_name in rival_rows:
             c.execute(
@@ -755,11 +784,22 @@ def api_rivals():
                     return round((b - a).total_seconds() / 60)
                 except: return 0
             avg_dur = round(sum(dur(s) for s in sessions) / n) if n else 0
+            # 粉丝快照数据
+            from src.database import get_latest_follower_snapshot, get_follower_snapshots
+            latest_snap = get_latest_follower_snapshot(username)
+            follower_count = latest_snap['follower_count'] if latest_snap else 0
+            # 7天涨粉
+            snaps_7d = get_follower_snapshots(username, days=8)
+            follower_growth_7d = 0
+            if len(snaps_7d) >= 2:
+                follower_growth_7d = snaps_7d[0]['follower_count'] - snaps_7d[-1]['follower_count']
             result.append({
                 'username': username,
                 'display_name': display_name or username,
                 'is_live': username in active_now,
                 'session_count': n,
+                'follower_count': follower_count,
+                'follower_growth_7d': follower_growth_7d,
                 'avg_peak_viewers': avg('peak_viewers'),
                 'avg_total_viewers': avg('total_viewers'),
                 'avg_gift_value': avg('total_gift_value'),
@@ -787,7 +827,7 @@ def api_compare():
     try:
         c = conn.cursor()
 
-        active_now = set(get_active_usernames())
+        active_now = set(get_live_usernames())
 
         def get_stats(username, limit=10):
             c.execute(
@@ -866,11 +906,144 @@ def api_save_rivals():
     usernames = data.get('usernames', [])
     saved = []
     for un in usernames:
-        un = un.strip().lstrip('@')
+        un = un.strip().lstrip('@').lower()
         if un:
             set_account_group(un, 'rival', owner_user_id=u['id'])
             saved.append(un)
     return jsonify({'success': True, 'saved': saved})
+
+
+@app.route('/api/rivals/remove', methods=['POST'])
+@login_required
+def api_remove_rival():
+    """真正移除竞品（从 account_groups 删除，历史数据保留）"""
+    u = get_current_user()
+    data = request.get_json() or {}
+    username = (data.get('username') or '').strip().lstrip('@').lower()
+    if not username:
+        return jsonify({'success': False, 'msg': '用户名不能为空'}), 400
+    from src.database import get_conn
+    conn = get_conn()
+    conn.execute(
+        "DELETE FROM account_groups WHERE username=? AND owner_user_id=? AND group_name='rival'",
+        (username, u['id'])
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'msg': f'@{username} 已从竞品列表移除（历史数据保留）'})
+
+
+@app.route('/rival/<username>')
+@login_required
+def rival_detail_page(username):
+    """竞品详情页"""
+    return render_template('rival_detail.html', rival_username=username)
+
+
+@app.route('/api/rival/<username>/detail')
+@login_required
+def api_rival_detail(username):
+    """竞品详情：历史场次 + 粉丝趋势 + 开播规律"""
+    username = username.strip().lstrip('@').lower()
+    from src.database import get_conn, get_follower_snapshots, get_latest_follower_snapshot
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        # 历史场次（最近30场）
+        c.execute('''
+            SELECT id, start_time, end_time, peak_viewers, total_viewers,
+                   total_gift_value, total_comments, new_followers
+            FROM live_sessions
+            WHERE username=? AND status='ended'
+            ORDER BY start_time DESC LIMIT 30
+        ''', (username,))
+        sessions = []
+        for r in c.fetchall():
+            s = dict(r)
+            # 计算时长
+            try:
+                from datetime import datetime as dt
+                st = dt.fromisoformat(s['start_time'])
+                et = dt.fromisoformat(s['end_time'])
+                s['duration_min'] = round((et - st).total_seconds() / 60)
+                s['hour'] = st.hour  # 开播时段
+                s['weekday'] = st.weekday()  # 星期几 0=周一
+            except Exception:
+                s['duration_min'] = 0
+                s['hour'] = 0
+                s['weekday'] = 0
+            sessions.append(s)
+
+        # 开播规律分析
+        from collections import Counter
+        hour_dist = Counter(s['hour'] for s in sessions)
+        weekday_dist = Counter(s['weekday'] for s in sessions)
+        weekday_names = ['周一','周二','周三','周四','周五','周六','周日']
+
+        # 粉丝快照趋势
+        snapshots = get_follower_snapshots(username, days=30)
+        snapshots.reverse()  # 旧→新
+        latest_snapshot = get_latest_follower_snapshot(username)
+
+        # 7天涨粉计算
+        follower_growth_7d = 0
+        if len(snapshots) >= 2:
+            recent = [s for s in snapshots if s['snapshot_date'] >= (datetime.now().strftime('%Y-%m-%d')[:8] + '01')]
+            if len(recent) >= 2:
+                follower_growth_7d = recent[-1]['follower_count'] - recent[0]['follower_count']
+
+        n = len(sessions)
+        def avg(key): return round(sum(s.get(key, 0) or 0 for s in sessions) / n) if n else 0
+
+        avg_duration = round(sum(s['duration_min'] for s in sessions) / n) if n else 0
+
+        return jsonify({
+            'username': username,
+            'session_count': n,
+            'avg_peak_viewers': avg('peak_viewers'),
+            'avg_total_viewers': avg('total_viewers'),
+            'avg_gift_value': avg('total_gift_value'),
+            'avg_comments': avg('total_comments'),
+            'avg_followers': avg('new_followers'),
+            'avg_duration_min': avg_duration,
+            'best_peak_viewers': max((s.get('peak_viewers', 0) or 0 for s in sessions), default=0),
+            'sessions': sessions,
+            'hour_dist': [{'hour': h, 'count': hour_dist.get(h, 0)} for h in range(24)],
+            'weekday_dist': [{'day': weekday_names[i], 'count': weekday_dist.get(i, 0)} for i in range(7)],
+            'follower_snapshots': snapshots,
+            'latest_snapshot': latest_snapshot,
+            'follower_growth_7d': follower_growth_7d,
+        })
+    finally:
+        conn.close()
+
+
+@app.route('/api/rival/<username>/fetch_profile', methods=['POST'])
+@login_required
+def api_rival_fetch_profile(username):
+    """立即抓取某竞品账号的最新粉丝数"""
+    username = username.strip().lstrip('@').lower()
+    from src.rival_tracker import fetch_tiktok_profile
+    from src.database import save_follower_snapshot
+    profile = fetch_tiktok_profile(username)
+    if profile['success']:
+        save_follower_snapshot(
+            username=username,
+            follower_count=profile['follower_count'],
+            following_count=profile['following_count'],
+            video_count=profile['video_count'],
+            bio=profile['bio'],
+            avatar_url=profile['avatar_url'],
+        )
+    return jsonify(profile)
+
+
+@app.route('/api/rivals/refresh_all_profiles', methods=['POST'])
+@login_required
+def api_rivals_refresh_profiles():
+    """触发所有竞品账号粉丝数快照"""
+    result = trigger_snapshot_now()
+    return jsonify(result)
 
 
 # ==================== 自动监控列表 ====================
@@ -889,7 +1062,7 @@ def api_automonitor_list():
     u = get_current_user()
     uid = None if u['is_admin'] else u['id']
     rows = get_auto_monitor_list(owner_user_id=uid)
-    active_now = set(get_active_usernames())
+    active_now = set(get_live_usernames())
     for r in rows:
         r['is_live'] = r['username'] in active_now
     return jsonify({'list': rows})
@@ -904,7 +1077,7 @@ def api_automonitor_import():
     accounts = data.get('accounts', [])  # [{username, display_name, group_name, note}]
     saved = []
     for a in accounts:
-        un = (a.get('username') or '').strip().lstrip('@')
+        un = (a.get('username') or '').strip().lstrip('@').lower()  # 统一小写，防止大小写重复
         if not un:
             continue
         upsert_auto_monitor(
@@ -953,7 +1126,8 @@ def api_automonitor_start_all():
     results = []
     for r in rows:
         un = r['username']
-        ok = start_monitor(un, socketio=socketio)
+        group = r.get('group_name', 'own')
+        ok = start_monitor(un, socketio=socketio, is_auto=True, group_name=group)
         results.append({'username': un, 'started': ok})
     return jsonify({'success': True, 'results': results})
 
@@ -1110,15 +1284,18 @@ if __name__ == '__main__':
     # 后台启动 Cloudflare Tunnel
     t = threading.Thread(target=_start_cloudflare_tunnel, args=(5001,), daemon=True)
     t.start()
-    # 自动恢复自动监控列表
+    # 启动竞品追踪后台服务（每日粉丝快照）
+    start_rival_tracker()
+    # 自动恢复自动监控列表（按用户分组，携带 is_auto 和 group_name）
     def _auto_restore_monitors():
         import time
         time.sleep(3)  # 等服务启动稳定
-        rows = get_enabled_auto_monitors()
+        rows = get_enabled_auto_monitors()  # 不过滤用户，全部恢复
         if rows:
             print(f"🔄 自动恢复 {len(rows)} 个监控任务...")
             for r in rows:
-                start_monitor(r['username'], socketio=socketio)
+                group = r.get('group_name', 'own')
+                start_monitor(r['username'], socketio=socketio, is_auto=True, group_name=group)
                 time.sleep(0.5)
     threading.Thread(target=_auto_restore_monitors, daemon=True).start()
     socketio.run(app, host='0.0.0.0', port=5001, debug=False, allow_unsafe_werkzeug=True)

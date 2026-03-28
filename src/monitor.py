@@ -31,15 +31,20 @@ active_monitors = {}  # username -> MonitorTask
 class LiveMonitor:
     """单个 TikTok 账号的直播监控器"""
 
-    def __init__(self, username: str, anchor_username: str = None, socketio=None):
+    def __init__(self, username: str, anchor_username: str = None, socketio=None,
+                 is_auto: bool = False, group_name: str = 'own'):
         """
         :param username: TikTok 用户名（@后面的部分）
         :param anchor_username: 主播的显示名称（用于识别主播话术）
         :param socketio: Flask-SocketIO 实例，用于实时推送到前端
+        :param is_auto: 是否为自动监控账号（影响看板展示和采集深度）
+        :param group_name: 账号分组 'own'|'rival'|'watch'
         """
         self.username = username
         self.anchor_username = anchor_username or username
         self.socketio = socketio
+        self.is_auto = is_auto          # 自动监控标记
+        self.group_name = group_name    # 分组：own/rival/watch
         self.session_id = None
         self.start_time = None
         self.client = None
@@ -85,7 +90,12 @@ class LiveMonitor:
 
             if wait_secs == 0:
                 logger.info(f"⏳ @{self.username} 当前未开播，等待开播中...")
-                self._emit('waiting_live', {'msg': f'@{self.username} 未开播，等待中...'})
+                # 自动监控静默等待，不在看板创建卡片（is_auto=True 时前端忽略此事件）
+                self._emit('waiting_live', {
+                    'msg': f'@{self.username} 未开播，等待中...',
+                    'is_auto': self.is_auto,
+                    'group_name': self.group_name,
+                })
 
             if wait_secs >= max_wait:
                 logger.warning(f"⏰ @{self.username} 等待超时，停止监控")
@@ -100,6 +110,15 @@ class LiveMonitor:
         if not self.running:
             return
 
+        # 关注分组：只推开播通知，不做任何采集
+        if self.group_name == 'watch':
+            logger.info(f"👁️ @{self.username}（关注账号）开播，推送通知后退出")
+            from src.notifier import send_live_start_notify
+            send_live_start_notify(self.username, group_name='watch')
+            active_monitors.pop(self.username, None)
+            self.running = False
+            return
+
         # 开播了，建立会话开始采集
         self.session_id = create_session(self.username)
         self.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -108,7 +127,17 @@ class LiveMonitor:
             'msg': f'@{self.username} 开播了，开始监控！',
             'session_id': self.session_id,
             'start_time': self.start_time,
+            'is_auto': self.is_auto,
+            'group_name': self.group_name,
         })
+
+        # 自动监控账号开播 → 推微信通知
+        if self.is_auto:
+            try:
+                from src.notifier import send_live_start_notify
+                send_live_start_notify(self.username, group_name=self.group_name)
+            except Exception as _ne:
+                logger.warning(f"[{self.username}] 开播通知发送失败: {_ne}")
 
         try:
             import httpx
@@ -274,6 +303,8 @@ class LiveMonitor:
 
     def _register_events(self):
         """注册所有监听事件"""
+        # 竞品账号只采 viewer 数据，跳过评论/礼物/话术（轻量模式）
+        is_rival = self.group_name == 'rival'
 
         @self.client.on(ConnectEvent)
         async def on_connect(event: ConnectEvent):
@@ -302,23 +333,24 @@ class LiveMonitor:
             live_url = f'https://www.tiktok.com/@{self.username}/live'
             self._emit('connected', {'room_id': room_id, 'live_url': live_url})
 
-            # 连接成功后，尝试启动语音监控
-            try:
-                stream_url = await get_stream_url_from_client(self.client)
-                if stream_url:
-                    self.speech_monitor = SpeechMonitor(
-                        username=self.username,
-                        stream_url=stream_url,
-                        on_transcript=self._on_transcript,
-                        socketio=self.socketio
-                    )
-                    self.speech_monitor.start()
-                    logger.info(f"[{self.username}] 语音转文字已启动")
-                else:
-                    logger.warning(f"[{self.username}] 无法获取直播流地址，跳过语音监控")
-                    self._emit('speech_no_stream', {'msg': '未能获取直播流，关键词将为空'})
-            except Exception as e:
-                logger.warning(f"[{self.username}] 语音监控启动失败（不影响其他功能）: {e}")
+            # 连接成功后，尝试启动语音监控（竞品轻量模式跳过）
+            if not is_rival:
+                try:
+                    stream_url = await get_stream_url_from_client(self.client)
+                    if stream_url:
+                        self.speech_monitor = SpeechMonitor(
+                            username=self.username,
+                            stream_url=stream_url,
+                            on_transcript=self._on_transcript,
+                            socketio=self.socketio
+                        )
+                        self.speech_monitor.start()
+                        logger.info(f"[{self.username}] 语音转文字已启动")
+                    else:
+                        logger.warning(f"[{self.username}] 无法获取直播流地址，跳过语音监控")
+                        self._emit('speech_no_stream', {'msg': '未能获取直播流，关键词将为空'})
+                except Exception as e:
+                    logger.warning(f"[{self.username}] 语音监控启动失败（不影响其他功能）: {e}")
 
         @self.client.on(DisconnectEvent)
         async def on_disconnect(event: DisconnectEvent):
@@ -335,6 +367,8 @@ class LiveMonitor:
 
         @self.client.on(CommentEvent)
         async def on_comment(event: CommentEvent):
+            if is_rival:  # 竞品轻量模式：跳过评论采集
+                return
             # v6.x API: user_info 字段
             user = getattr(event, 'user_info', None)
             username = getattr(user, 'nickname', None) or getattr(user, 'display_id', 'unknown')
@@ -399,6 +433,8 @@ class LiveMonitor:
 
         @self.client.on(GiftEvent)
         async def on_gift(event: GiftEvent):
+            if is_rival:  # 竞品轻量模式：跳过礼物采集
+                return
             # v6.x: from_user, m_gift
             user = getattr(event, 'from_user', None)
             username = getattr(user, 'nickname', None) or getattr(user, 'display_id', 'unknown')
@@ -422,6 +458,8 @@ class LiveMonitor:
 
         @self.client.on(FollowEvent)
         async def on_follow(event: FollowEvent):
+            if is_rival:  # 竞品轻量模式：跳过关注采集
+                return
             # v6.x: user 字段
             user = getattr(event, 'user', None)
             username = getattr(user, 'nickname', None) or getattr(user, 'display_id', 'unknown')
@@ -470,15 +508,18 @@ class LiveMonitor:
             })
 
 
-def start_monitor(username: str, socketio=None):
-    """在新线程中启动对某账号的监控"""
+def start_monitor(username: str, socketio=None, is_auto: bool = False, group_name: str = 'own'):
+    """在新线程中启动对某账号的监控
+    :param is_auto: 是否为自动监控账号
+    :param group_name: 账号分组 'own'|'rival'|'watch'
+    """
     import threading
 
     if username in active_monitors:
         logger.warning(f"@{username} 已在监控中，跳过")
         return False
 
-    monitor = LiveMonitor(username, socketio=socketio)
+    monitor = LiveMonitor(username, socketio=socketio, is_auto=is_auto, group_name=group_name)
     active_monitors[username] = monitor
 
     def run():
@@ -521,8 +562,13 @@ def stop_monitor(username: str):
 
 
 def get_active_usernames():
-    """获取当前正在监控的账号列表"""
+    """获取当前正在监控的账号列表（包含等待开播的）"""
     return list(active_monitors.keys())
+
+
+def get_live_usernames():
+    """获取当前真正在直播的账号列表（已有 session_id，排除等待开播状态）"""
+    return [u for u, m in list(active_monitors.items()) if m.session_id is not None]
 
 
 def get_monitors_snapshot():

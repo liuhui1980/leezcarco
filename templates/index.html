@@ -135,63 +135,10 @@
   .stat-val { font-size: 20px; font-weight: 700; color: var(--text); }
   .stat-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
 
-  /* ── Language Analysis Panel (per-account chips) ── */
-  .lang-analysis-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
-  .lang-analysis-title { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
-  .lang-analysis-title .la-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: pulse 1.5s infinite; }
-  .lang-chips-row { display: flex; flex-wrap: wrap; gap: 8px; }
-  /* per-account chip */
-  .lang-chip { background: #f8fafc; border: 1.5px solid var(--border); border-radius: 10px; padding: 7px 10px; min-width: 120px; max-width: 200px; flex: 1; }
-  .lang-chip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
-  .lang-chip-name { font-size: 11px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
-  .lang-chip-status { width: 7px; height: 7px; border-radius: 50%; background: #d1d5db; flex-shrink: 0; }
-  .lang-chip-status.live { background: #22c55e; animation: pulse 1.5s infinite; }
-  .lang-chip-langs { display: flex; flex-wrap: wrap; gap: 3px; }
-  .lc-lang-pill { font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600; background: #e5e7eb; color: #374151; }
-  .lc-lang-pill.lp-ar { background: #fef3c7; color: #b45309; }
-  .lc-lang-pill.lp-en { background: #dbeafe; color: #1d4ed8; }
-  .lc-lang-pill.lp-zh { background: #dcfce7; color: #15803d; }
-  .lc-lang-pill.lp-dominant { font-weight: 700; }
-  .lang-chip-dialect { margin-top: 4px; font-size: 10px; color: var(--text3); line-height: 1.4; border-top: 1px solid var(--border); padding-top: 4px; }
-  .lang-chip-empty { font-size: 10px; color: var(--text3); text-align: center; padding: 4px 0; }
-  /* 旧样式保留（方言雷达卡片内用） */
-  .dialect-panel { background: linear-gradient(135deg, #fffbeb 0%, #fef9e7 100%); border: 2px solid #fde68a; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
-  .dialect-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .dialect-panel-title { font-size: 14px; font-weight: 800; color: #92400e; display: flex; align-items: center; gap: 8px; }
-  .dialect-panel-title .dp-dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; animation: pulse 1.5s infinite; }
-  .dialect-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
-  .dialect-item { background: #fff; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
-  .dialect-flag { font-size: 22px; line-height: 1; flex-shrink: 0; }
-  .dialect-info { flex: 1; min-width: 0; }
-  .dialect-name { font-size: 12px; font-weight: 700; color: #92400e; }
-  .dialect-count { font-size: 11px; color: var(--text3); margin-top: 1px; }
-  .dialect-bar-wrap { margin-top: 4px; }
-  .dialect-bar { height: 4px; border-radius: 2px; background: #fde68a; overflow: hidden; }
-  .dialect-bar-fill { height: 100%; border-radius: 2px; background: #f59e0b; transition: width .5s ease; }
-  .dialect-pct-big { font-size: 18px; font-weight: 800; color: #b45309; flex-shrink: 0; }
-
   /* ── Card Mini Summary ── */
   .mini-summary { background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 6px; padding: 5px 8px; margin-top: 5px; font-size: 10.5px; color: var(--text2); line-height: 1.5; min-height: 24px; }
   .mini-summary .ms-label { font-weight: 700; color: var(--text3); font-size: 10px; margin-right: 4px; }
   .mini-summary.has-content { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
-
-  /* ── Lang Bar ── */
-  .lang-bar-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
-  .lang-bar-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
-  .lang-bar-title { font-size: 13px; color: var(--text2); font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .lang-bar-toggle { color: var(--text3); font-size: 12px; transition: transform .2s; }
-  .lang-bar-toggle.open { transform: rotate(180deg); }
-  .lang-bar-body { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
-  .lang-bar-row { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
-  .lang-bar-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; }
-  .lang-bar-name { color: var(--text); display: flex; align-items: center; gap: 5px; font-weight: 600; }
-  .lang-bar-pct { color: var(--text2); font-size: 11px; }
-  .lang-progress { height: 5px; border-radius: 3px; background: var(--border2); overflow: hidden; }
-  .lang-progress-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
-  .fill-zh { background: #10b981; } .fill-en { background: #3b82f6; }
-  .fill-ar { background: #f59e0b; } .fill-other { background: #8b5cf6; }
-  .lang-sub { margin-top: 6px; padding-left: 6px; border-left: 2px solid #fde68a; display: none; }
-  .lang-sub.open { display: block; }
   .lang-sub-row { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; font-size: 11px; color: var(--text2); }
   .lang-sub-bar { width: 60px; height: 3px; background: var(--bg); border-radius: 2px; overflow: hidden; }
   .lang-sub-fill { height: 100%; border-radius: 2px; background: #f59e0b; opacity: .7; transition: width .5s ease; }
@@ -459,19 +406,13 @@
     <div class="stat-card"><div class="stat-icon">❤️</div><div class="stat-val" id="statFollowers">0</div><div class="stat-label">今日新增关注</div></div>
   </div>
 
-  <!-- ★ 语言分析面板（按账号小方块） -->
-  <div class="lang-analysis-panel" id="langAnalysisPanel" style="display:none;">
-    <div class="lang-analysis-title"><span class="la-dot"></span>语言 · 方言分析（按账号）</div>
-    <div class="lang-chips-row" id="langChipsRow"></div>
-  </div>
-
-  <!-- 语言分布（折叠式，次要信息） -->
-  <div class="lang-bar-section" id="langBarSection" style="display:none;">
-    <div class="lang-bar-header" onclick="toggleLangBar()">
-      <div class="lang-bar-title"><span>🌐</span> 全部语言分布（实时）</div>
-      <span class="lang-bar-toggle" id="langBarToggle">▼</span>
+  <!-- ★ 语言分析卡片区（按账号展示，大卡片） -->
+  <div id="langCardsSection" style="display:none;margin-bottom:16px;">
+    <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--primary);display:inline-block;"></span>
+      语言分析（实时）
     </div>
-    <div class="lang-bar-body" id="langBarBody" style="display:none;"></div>
+    <div id="langCardsRow" style="display:flex;flex-wrap:wrap;gap:12px;"></div>
   </div>
 
   <!-- 分组过滤器 -->
@@ -546,27 +487,22 @@ socket.on('status_update', (data) => {
         // 恢复开播时间显示
       if (snap.start_time) {
         const stEl = document.getElementById(`start-time-${u}`);
+        // 显示北京时间（服务器存的就是北京时间字符串，直接取 HH:MM 即可）
         if (stEl) stEl.textContent = snap.start_time.slice(11, 16);
         const rowEl = document.getElementById(`live-time-row-${u}`);
         if (rowEl) rowEl.style.display = 'flex';
-        // 恢复已播时长计时器
-        const startTs = new Date(snap.start_time).getTime();
-        if (!isNaN(startTs)) {
+        // 恢复已播时长计时器（服务器时间是北京时间，解析时需加8小时偏移）
+        const startTs = parseBJTime(snap.start_time);
+        if (startTs && !isNaN(startTs)) {
           monitors[u].startTs = startTs;
           if (!monitors[u]._durationTimer) {
             monitors[u]._durationTimer = setInterval(() => {
               const durEl = document.getElementById(`duration-${u}`);
-              if (durEl) {
-                const m = Math.floor((Date.now() - startTs) / 60000);
-                durEl.textContent = m >= 60 ? `${Math.floor(m/60)}h${m%60}m` : `${m}m`;
-              }
+              if (durEl) durEl.textContent = formatDuration(Date.now() - startTs);
             }, 30000);
             // 立即刷新一次
             const durEl = document.getElementById(`duration-${u}`);
-            if (durEl) {
-              const m = Math.floor((Date.now() - startTs) / 60000);
-              durEl.textContent = m >= 60 ? `${Math.floor(m/60)}h${m%60}m` : `${m}m`;
-            }
+            if (durEl) durEl.textContent = formatDuration(Date.now() - startTs);
           }
         }
       }
@@ -615,27 +551,50 @@ socket.on('speech_no_stream', (data) => {
 
 socket.on('waiting_live', (data) => {
   const u = data.username;
-  if (!monitors[u]) createAccountCard(u, 'own');
+  if (data.is_auto) {
+    // 自动监控账号静默等待，不在看板创建卡片，只在控制台记录
+    console.log(`[自动监控] @${u} 等待开播中...`);
+    return;
+  }
+  if (!monitors[u]) createAccountCard(u, data.group_name || 'own');
   setBadge(u, '等待开播', 'waiting');
   showToast(`⏳ @${u} 未开播，系统等待中...`, 'info');
 });
 socket.on('live_detected', (data) => {
   const u = data.username;
+  const isAuto = !!data.is_auto;
+  const groupName = data.group_name || 'own';
+  // 自动监控账号：开播时才创建卡片，并靠前排列
+  if (isAuto && !monitors[u]) {
+    createAccountCard(u, groupName, true /* prependToFront */);
+    // 标注「自动」徽章
+    const card = document.getElementById(`card-${u}`);
+    if (card) {
+      const titleEl = card.querySelector('.card-title');
+      if (titleEl && !titleEl.querySelector('.auto-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'auto-badge';
+        badge.textContent = '自动';
+        badge.style.cssText = 'margin-left:6px;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:#fe2c55;color:#fff;vertical-align:middle;';
+        titleEl.appendChild(badge);
+      }
+    }
+  }
   setBadge(u, '连接中...', 'connecting');
   showToast(`🔴 @${u} 开播了！正在连接...`, 'success');
-  // 记录开播信息
+  // 记录开播信息（startTs 基于监测到的本地时间，即"从你监测到开播起计算"）
   if (monitors[u]) {
-    monitors[u].startTime = data.start_time || new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
+    monitors[u].startTime = data.start_time ? data.start_time.slice(11,16) : new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
     monitors[u].sessionId = data.session_id || null;
-    monitors[u].startTs = Date.now();
+    monitors[u].startTs = Date.now();  // 从监测到开播时刻开始计时
   }
-  // 显示开播时间行
+  // 显示开播时间行（北京时间 HH:MM，直接取服务器字符串）
   const row = document.getElementById(`live-time-row-${u}`);
   const startEl = document.getElementById(`start-time-${u}`);
   if (row) row.style.display = 'flex';
   if (startEl) {
-    const t = data.start_time ? data.start_time.slice(11,16) : new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
-    startEl.textContent = t;
+    // data.start_time 是 'YYYY-MM-DD HH:MM:SS' 北京时间，直接显示 HH:MM
+    startEl.textContent = data.start_time ? data.start_time.slice(11,16) : new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
   }
 });
 socket.on('monitor_error', (data) => {
@@ -694,26 +653,17 @@ socket.on('lang_stats_update', (data) => {
     cardDialectStats[u] = { comment: cStats, speech: sStats };
     updateCardDialectRadar(u, 'comment', cStats);
     updateCardDialectRadar(u, 'speech', sStats);
-    // 更新语言分析小方块
+    // 更新语言分析卡片
     updateLangChip(u, cStats, sStats);
   }
-
-  // 重新合并全局语言分布条
-  const merged = {};
-  Object.values(cardDialectStats).forEach(s => {
-    [s.comment || {}, s.speech || {}].forEach(part => {
-      Object.entries(part).forEach(([lang, cnt]) => { merged[lang] = (merged[lang] || 0) + cnt; });
-    });
-  });
-  renderLangBar(merged);
 });
 
 socket.on('new_speech', (data) => {
   const u = data.username; if (!monitors[u]) return;
   addSpeechToCard(u, data);
   monitors[u].speechCount = (monitors[u].speechCount || 0) + 1;
-  // 每3条更新一次话术摘要
-  if (monitors[u].speechCount % 3 === 0) updateSpeechSummary(u);
+  // 第1条就更新摘要，之后每2条更新一次（原来是每3条）
+  if (monitors[u].speechCount === 1 || monitors[u].speechCount % 2 === 0) updateSpeechSummary(u);
 });
 
 socket.on('live_ended', (data) => {
@@ -721,11 +671,10 @@ socket.on('live_ended', (data) => {
   stopCardAiSummaryTimer(data.username);
   showToast(`@${data.username} 直播已结束，报告已生成`, 'info');
   setTimeout(() => removeAccountCard(data.username), 3000);
-  loadRivals(); // 刷新竞品面板
 });
 
 // ── 卡片创建 ──
-function createAccountCard(username, group = 'own') {
+function createAccountCard(username, group = 'own', prependToFront = false) {
   monitors[username] = { viewers: 0, likes: 0, comments: 0, gifts: 0, followers: 0, group, startTime: null, sessionId: null, history: [] };
   const emptyState = document.getElementById('emptyState');
   if (emptyState) emptyState.remove();
@@ -760,7 +709,7 @@ function createAccountCard(username, group = 'own') {
       <div class="metric"><div class="metric-val" id="viewers-${username}">0</div><div class="metric-label">实时在线</div></div>
       <div class="metric"><div class="metric-val" id="totaluser-${username}">0</div><div class="metric-label">累计观看</div></div>
       <div class="metric"><div class="metric-val" id="comments-${username}">0</div><div class="metric-label">评论数</div></div>
-      <div class="metric"><div class="metric-val" id="gifts-${username}">$0</div><div class="metric-label">礼物收入</div></div>
+      <div class="metric"><div class="metric-val" id="likes-${username}">0</div><div class="metric-label">点赞数</div></div>
       <div style="font-size:10px;color:var(--text3);align-self:center;margin-left:auto;padding-right:4px;">📈 点击查看曲线</div>
     </div>
     <!-- ★ 方言雷达 -->
@@ -793,7 +742,12 @@ function createAccountCard(username, group = 'own') {
     </div>
     <div class="mini-summary" id="speech-summary-${username}"><span class="ms-label">🎙️ 话术摘要</span><span id="speech-summary-text-${username}">等待数据...</span></div>
   `;
-  grid.appendChild(card);
+  // 自动监控账号靠前插入，手动添加追加到末尾
+  if (prependToFront && grid.firstChild) {
+    grid.insertBefore(card, grid.firstChild);
+  } else {
+    grid.appendChild(card);
+  }
   applyGroupFilter();
   updateGlobalStats();
   saveMonitorList();
@@ -872,33 +826,92 @@ const LANG_NAME_MAP = {
   'tl':'菲律宾语','pl':'波兰语','uk':'乌克兰语','ro':'罗马尼亚语','cs':'捷克语','hu':'匈牙利语',
 };
 
-function updateLangChip(username, cStats, sStats) {
-  const panel = document.getElementById('langAnalysisPanel');
-  const row = document.getElementById('langChipsRow');
-  if (!panel || !row) return;
+// ── 新版语言分析大卡片 ──────────────────────────────────────
+// 英语 CEFR 水平推断（基于评论简洁度和词汇）
+function inferEnglishLevel(cStats, sStats) {
+  // 综合评论数量做简单推断：>50条说明英语活跃
+  const enCount = (cStats['en'] || 0) + (sStats['en'] || 0);
+  const total = Object.values({...cStats, ...sStats}).reduce((a,b) => a+b, 0);
+  if (total === 0) return null;
+  const enRatio = enCount / total;
+  // 仅在英语占比>20%时显示
+  if (enRatio < 0.15) return null;
+  if (enRatio > 0.7) return { level: 'B2-C1', desc: '流利英语为主', color: '#0369a1' };
+  if (enRatio > 0.4) return { level: 'B1-B2', desc: '英语为重要语种', color: '#0284c7' };
+  return { level: 'A2-B1', desc: '英语少量混合', color: '#38bdf8' };
+}
 
-  panel.style.display = '';
-  let chip = document.getElementById(`lang-chip-${username}`);
-  if (!chip) {
-    chip = document.createElement('div');
-    chip.className = 'lang-chip';
-    chip.id = `lang-chip-${username}`;
-    row.appendChild(chip);
+// 阿语地域推断（基于方言分布）
+function inferArabicRegion(cStats, sStats) {
+  const dialects = {
+    'ar-gulf':    { name: '🇸🇦 海湾地区', countries: '沙特/UAE/卡塔尔', color: '#16a34a' },
+    'ar-egypt':   { name: '🇪🇬 埃及地区', countries: '埃及/苏丹',         color: '#d97706' },
+    'ar-levant':  { name: '🇱🇧 黎凡特地区', countries: '黎巴嫩/叙利亚/约旦', color: '#7c3aed' },
+    'ar-maghreb': { name: '🇲🇦 北非地区', countries: '摩洛哥/阿尔及利亚/突尼斯', color: '#b45309' },
+  };
+  const counts = {};
+  let total = 0;
+  Object.keys(dialects).forEach(k => {
+    const c = (cStats[k] || 0) + (sStats[k] || 0);
+    counts[k] = c;
+    total += c;
+  });
+  const arStd = (cStats['ar'] || 0) + (sStats['ar'] || 0);
+  total += arStd;
+  if (total === 0) return null;
+
+  // 按数量排序，取前2
+  const ranked = Object.entries(counts).filter(([,v]) => v > 0).sort(([,a],[,b]) => b-a);
+  if (ranked.length === 0) {
+    if (arStd > 0) return [{ name: '🌍 标准阿语', countries: '正式场合/书面', pct: 100, color: '#6b7280' }];
+    return null;
+  }
+  return ranked.slice(0, 3).map(([k, v]) => ({
+    ...dialects[k],
+    pct: Math.round(v / total * 100),
+    count: v,
+  }));
+}
+
+function updateLangChip(username, cStats, sStats) {
+  const section = document.getElementById('langCardsSection');
+  const row = document.getElementById('langCardsRow');
+  if (!section || !row) return;
+
+  section.style.display = '';
+
+  let card = document.getElementById(`lang-card-${username}`);
+  if (!card) {
+    card = document.createElement('div');
+    card.id = `lang-card-${username}`;
+    card.style.cssText = `
+      background:#fff; border:1.5px solid #e8eaef; border-radius:14px;
+      padding:16px 18px; min-width:220px; max-width:280px; flex:1;
+      box-shadow:0 2px 8px rgba(0,0,0,.06); transition:border-color .2s;
+    `;
+    row.appendChild(card);
   }
 
   // 合并评论+话术统计
   const merged = {};
-  [cStats, sStats].forEach(s => {
-    Object.entries(s || {}).forEach(([k, v]) => { merged[k] = (merged[k] || 0) + v; });
+  [cStats || {}, sStats || {}].forEach(s => {
+    Object.entries(s).forEach(([k, v]) => { merged[k] = (merged[k] || 0) + v; });
   });
 
   const total = Object.values(merged).reduce((a, b) => a + b, 0);
+  const isLive = !!(monitors[username]?.sessionId);
+
   if (total === 0) {
-    chip.innerHTML = `<div class="lang-chip-header"><span class="lang-chip-name">@${username}</span><span class="lang-chip-status ${monitors[username]?.sessionId ? 'live' : ''}"></span></div><div class="lang-chip-empty">等待数据...</div>`;
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:14px;font-weight:700;color:#1a1d2e;">@${username}</span>
+        <span style="width:8px;height:8px;border-radius:50%;background:${isLive?'#10b981':'#d1d5db'};display:inline-block;"></span>
+      </div>
+      <div style="font-size:12px;color:#9ca3af;text-align:center;padding:8px 0;">等待语言数据...</div>`;
     return;
   }
 
-  // 已知大类
+  // 各大语种统计
   const arDialects = ['ar-gulf','ar-egypt','ar-levant','ar-maghreb'];
   const arDialectTotal = arDialects.reduce((a, k) => a + (merged[k] || 0), 0);
   const arStd = merged['ar'] || 0;
@@ -906,65 +919,107 @@ function updateLangChip(username, cStats, sStats) {
   const enTotal = merged['en'] || 0;
   const zhTotal = merged['zh'] || 0;
 
-  // 其他语言：汇总所有非 zh/en/ar* 的
+  // 其他语言
   const knownKeys = new Set(['zh','en','ar','ar-gulf','ar-egypt','ar-levant','ar-maghreb','other']);
-  const otherByLang = {};
+  const otherMap = {};
   Object.entries(merged).forEach(([k, v]) => {
-    if (!knownKeys.has(k)) { otherByLang[k] = (otherByLang[k] || 0) + v; }
+    if (!knownKeys.has(k) && v > 0) otherMap[k] = v;
   });
-  const otherLegacyTotal = merged['other'] || 0;
+  const otherTotal = (merged['other'] || 0) + Object.values(otherMap).reduce((a,b)=>a+b,0);
 
-  // 生成语言胶囊（按数量排序）
-  const langItems = [];
-  if (arTotal > 0) langItems.push({ name: '阿语', cls: 'lp-ar', count: arTotal, pct: Math.round(arTotal/total*100) });
-  if (enTotal > 0) langItems.push({ name: '英语', cls: 'lp-en', count: enTotal, pct: Math.round(enTotal/total*100) });
-  if (zhTotal > 0) langItems.push({ name: '中文', cls: 'lp-zh', count: zhTotal, pct: Math.round(zhTotal/total*100) });
+  // 主语言占比条
+  const langs = [
+    arTotal > 0 && { key:'ar', name:'阿拉伯语', count:arTotal, color:'#f59e0b', bg:'#fef3c7' },
+    enTotal > 0 && { key:'en', name:'英语',     count:enTotal, color:'#3b82f6', bg:'#eff6ff' },
+    zhTotal > 0 && { key:'zh', name:'中文',     count:zhTotal, color:'#10b981', bg:'#f0fdf4' },
+    otherTotal > 0 && { key:'other', name:'其他', count:otherTotal, color:'#6b7280', bg:'#f9fafb' },
+  ].filter(Boolean).sort((a,b) => b.count - a.count);
 
-  // 具体"其他语言"单独显示
-  Object.entries(otherByLang).sort(([,a],[,b]) => b-a).slice(0,3).forEach(([k, v]) => {
-    const meta = LANG_NAME_MAP[k];
-    if (meta) langItems.push({ name: meta, cls: '', count: v, pct: Math.round(v/total*100), flag: LANG_META[k]?.flag || '🌐' });
-    else langItems.push({ name: k.toUpperCase(), cls: '', count: v, pct: Math.round(v/total*100), flag: '🌐' });
-  });
+  const dominant = langs[0];
+  const dominantPct = dominant ? Math.round(dominant.count / total * 100) : 0;
 
-  const otherCount = Object.values(otherByLang).reduce((a,b)=>a+b,0) + otherLegacyTotal;
-  // 如果有未识别的其他，合并显示
-  const shownOtherCount = Object.entries(otherByLang).sort(([,a],[,b])=>b-a).slice(0,3).reduce((a,[,v])=>a+v, 0);
-  const remainOther = otherCount - shownOtherCount;
-  if (remainOther > 0) langItems.push({ name: '其他', cls: '', count: remainOther, pct: Math.round(remainOther/total*100), flag: '🌐' });
+  let langBarsHtml = langs.map(l => {
+    const pct = Math.round(l.count / total * 100);
+    return `<div style="margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+        <span style="color:#374151;font-weight:600;">${l.name}</span>
+        <span style="color:${l.color};font-weight:700;">${pct}% · ${l.count}条</span>
+      </div>
+      <div style="height:5px;background:#f3f4f6;border-radius:3px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:${l.color};border-radius:3px;transition:width .4s;"></div>
+      </div>
+    </div>`;
+  }).join('');
 
-  langItems.sort((a, b) => b.count - a.count);
-
-  const langPills = langItems.map((l, i) =>
-    `<span class="lc-lang-pill ${l.cls}${i===0?' lp-dominant':''}" title="${l.name}: ${l.count}条">${l.flag ? l.flag+' ' : ''}${l.name} ${l.pct}%</span>`
-  ).join('');
-
-  // 方言详情行（精确到国家大区）
-  let dialectLine = '';
-  if (arTotal > 0 && arDialectTotal > 0) {
-    const top = arDialects.map(k => ({ key: k, cnt: merged[k] || 0 })).filter(x => x.cnt > 0).sort((a,b) => b.cnt-a.cnt);
-    const DNAME = { 'ar-gulf':'🇸🇦海湾', 'ar-egypt':'🇪🇬埃及', 'ar-levant':'🇱🇧黎凡特', 'ar-maghreb':'🇲🇦北非' };
-    dialectLine = `<div class="lang-chip-dialect">阿语：${top.map(x => `${DNAME[x.key]} ${Math.round(x.cnt/arTotal*100)}%`).join(' · ')}</div>`;
+  // 英语 CEFR 分析
+  let englishHtml = '';
+  const enInfo = inferEnglishLevel(cStats || {}, sStats || {});
+  if (enInfo) {
+    englishHtml = `
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 10px;margin-top:8px;">
+        <div style="font-size:11px;color:#0369a1;font-weight:700;margin-bottom:2px;">📚 英语水平评估（CEFR）</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="background:${enInfo.color};color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:800;">${enInfo.level}</span>
+          <span style="font-size:11px;color:#0369a1;">${enInfo.desc}</span>
+        </div>
+      </div>`;
   }
 
-  const isLive = !!(monitors[username]?.sessionId);
-  chip.innerHTML = `
-    <div class="lang-chip-header">
-      <span class="lang-chip-name" title="@${username}">@${username}</span>
-      <span class="lang-chip-status ${isLive ? 'live' : ''}"></span>
+  // 阿语地域分析
+  let arabicHtml = '';
+  const arRegions = inferArabicRegion(cStats || {}, sStats || {});
+  if (arRegions && arRegions.length > 0) {
+    const regionItems = arRegions.map(r =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
+        <span style="font-size:11px;color:#374151;">${r.name}<span style="font-size:10px;color:#9ca3af;margin-left:4px;">${r.countries}</span></span>
+        <span style="font-size:12px;font-weight:700;color:${r.color};">${r.pct}%</span>
+      </div>`
+    ).join('');
+    arabicHtml = `
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-top:8px;">
+        <div style="font-size:11px;color:#92400e;font-weight:700;margin-bottom:2px;">🌍 阿拉伯语地域分布</div>
+        ${regionItems}
+      </div>`;
+  }
+
+  // 其他具体语种
+  let otherLangsHtml = '';
+  const topOthers = Object.entries(otherMap).sort(([,a],[,b])=>b-a).slice(0,3);
+  if (topOthers.length > 0) {
+    otherLangsHtml = `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">` +
+      topOthers.map(([k, v]) => {
+        const meta = LANG_NAME_MAP[k] || k.toUpperCase();
+        const flag = LANG_META[k]?.flag || '🌐';
+        return `<span style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:5px;padding:2px 7px;font-size:11px;color:#374151;">${flag} ${meta} ${Math.round(v/total*100)}%</span>`;
+      }).join('') +
+    `</div>`;
+  }
+
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div>
+        <span style="font-size:14px;font-weight:700;color:#1a1d2e;">@${username}</span>
+        ${dominant ? `<span style="font-size:11px;color:${dominant.color};background:${dominant.bg};border-radius:5px;padding:1px 7px;margin-left:6px;font-weight:600;">${dominant.name} ${dominantPct}%主导</span>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:10px;color:#9ca3af;">${total}条</span>
+        <span style="width:8px;height:8px;border-radius:50%;background:${isLive?'#10b981':'#d1d5db'};display:inline-block;" title="${isLive?'直播中':'已结束'}"></span>
+      </div>
     </div>
-    <div class="lang-chip-langs">${langPills}</div>
-    ${dialectLine}
+    <div>${langBarsHtml}</div>
+    ${englishHtml}
+    ${arabicHtml}
+    ${otherLangsHtml}
   `;
 }
 
-// 移除账号时同步删除小方块
+// 移除账号语言卡片
 function removeLangChip(username) {
-  const chip = document.getElementById(`lang-chip-${username}`);
-  if (chip) chip.remove();
-  const row = document.getElementById('langChipsRow');
-  const panel = document.getElementById('langAnalysisPanel');
-  if (panel && row && row.children.length === 0) panel.style.display = 'none';
+  const card = document.getElementById(`lang-card-${username}`);
+  if (card) card.remove();
+  const row = document.getElementById('langCardsRow');
+  const section = document.getElementById('langCardsSection');
+  if (section && row && row.children.length === 0) section.style.display = 'none';
 }
 
 // ── 卡片小总结（规则提取，不调用大模型） ──
@@ -1010,7 +1065,7 @@ function updateCommentSummary(username) {
   wrapEl.classList.add('has-content');
 }
 
-// 话术摘要：从DOM中读取最近话术，提取关键句
+// 话术摘要：从DOM中读取最近话术，提取关键句（含中文翻译）
 function updateSpeechSummary(username) {
   const box = document.getElementById(`speech-box-${username}`);
   const summaryEl = document.getElementById(`speech-summary-text-${username}`);
@@ -1024,7 +1079,7 @@ function updateSpeechSummary(username) {
   const total = texts.length;
 
   // 提取关键句（优先选含产品词/促销词/数字的句子）
-  const keywords = ['offer','price','discount','free','gift','buy','sale','limited','只有','限时','优惠','价格','免费','赠品','购买','特价','折扣','现在','立即'];
+  const keywords = ['offer','price','discount','free','gift','buy','sale','limited','only','سعر','عرض','مجاني','خصم','فقط','الآن','الان','只有','限时','优惠','价格','免费','赠品','购买','特价','折扣','现在','立即'];
   const scored = texts.map(t => {
     let score = t.length > 20 ? 2 : 1;
     keywords.forEach(k => { if (t.toLowerCase().includes(k)) score += 3; });
@@ -1035,7 +1090,16 @@ function updateSpeechSummary(username) {
   const topSentence = scored[0]?.t || '';
   const preview = topSentence.length > 40 ? topSentence.slice(0, 40) + '…' : topSentence;
 
-  summaryEl.textContent = total > 0 ? `${total}段 · ${preview}` : '等待数据...';
+  // 查找对应的中文翻译（从 .speech-zh 元素）
+  const zhItems = box.querySelectorAll('.speech-zh');
+  const lastZh = zhItems.length > 0 ? zhItems[0].textContent.trim() : '';  // 最新的在最前
+  const zhPreview = lastZh.length > 35 ? lastZh.slice(0, 35) + '…' : lastZh;
+
+  let summaryText = total > 0 ? `${total}段 · ${preview}` : '等待数据...';
+  if (zhPreview && zhPreview !== preview) {
+    summaryText += ` · 译：${zhPreview}`;
+  }
+  summaryEl.textContent = summaryText;
   if (total > 0) wrapEl.classList.add('has-content');
 }
 
@@ -1085,11 +1149,11 @@ async function requestCardAiSummary(username) {
 
 function startCardAiSummaryTimer(username) {
   stopCardAiSummaryTimer(username);
-  // 首次在30秒后执行，之后每2分钟刷新一次
+  // 首次在10秒后执行（原30s），之后每2分钟刷新一次
   _aiSummaryTimers[username] = setTimeout(() => {
     requestCardAiSummary(username);
     _aiSummaryTimers[username] = setInterval(() => requestCardAiSummary(username), 120000);
-  }, 30000);
+  }, 10000);
 }
 
 function stopCardAiSummaryTimer(username) {
@@ -1218,7 +1282,7 @@ function updateCardMetrics(username) {
   if (el('viewers')) el('viewers').textContent = formatNum(m.viewers || 0);
   if (el('totaluser')) el('totaluser').textContent = formatNum(m.totalUser || 0);
   if (el('comments')) el('comments').textContent = formatNum(m.comments || 0);
-  if (el('gifts')) el('gifts').textContent = '$' + (m.gifts || 0).toFixed(2);
+  if (el('likes')) el('likes').textContent = formatNum(m.likes || 0);
   updateGlobalStats();
 }
 
@@ -1300,51 +1364,9 @@ function addCommentToCard(username, data) {
     : '';
   const item = document.createElement('div');
   item.className = 'comment-item';
-  item.innerHTML = `<span class="comment-user${isAnchor?' anchor':''}">${escapeHtml(data.username)}</span>${isAnchor?'<span class="comment-anchor-tag">主播</span>':''}<span class="comment-lang ${cssClass}" title="${lang_display}">${label}</span><span class="comment-time">${data.timestamp}</span><div class="comment-content">${escapeHtml(data.content)}${zhLine}</div>`;
+  item.innerHTML = `<span class="comment-user${isAnchor?' anchor':''}">${escapeHtml(data.username)}</span>${isAnchor?'<span class="comment-anchor-tag">主播</span>':''}<span class="comment-lang ${cssClass}" title="${lang_display}">${label}</span><span class="comment-time">${data.timestamp}</span><div class="comment-content comment-text">${escapeHtml(data.content)}${zhLine}</div>`;
   box.insertBefore(item, box.firstChild);
   while (box.children.length > 50) box.removeChild(box.lastChild);
-}
-
-function renderLangBar(stats) {
-  const section = document.getElementById('langBarSection');
-  const body = document.getElementById('langBarBody');
-  if (!section || !body) return;
-  const topLangs = ['zh','en','ar','other'];
-  const total = topLangs.reduce((s,k) => s+(stats[k]||0), 0);
-  if (total === 0) return;
-  section.style.display = 'block';
-  let html = '';
-  topLangs.forEach(lang => {
-    const cnt = stats[lang] || 0; if (!cnt) return;
-    const pct = Math.round(cnt/total*100);
-    const meta = LANG_META[lang] || { name:lang, fillClass:'fill-other', flag:'🌐' };
-    let subHtml = '';
-    if (meta.hasDialect) {
-      ['ar-gulf','ar-egypt','ar-levant','ar-maghreb'].forEach(d => {
-        const dc = stats[d]||0; if (!dc) return;
-        const dpct = Math.round(dc/cnt*100);
-        const dm = LANG_META[d];
-        subHtml += `<div class="lang-sub-row"><span>${dm.name}</span><div style="display:flex;align-items:center;gap:5px;"><div class="lang-sub-bar"><div class="lang-sub-fill" style="width:${dpct}%"></div></div><span>${dpct}%</span></div></div>`;
-      });
-    }
-    html += `<div class="lang-bar-row">
-      <div class="lang-bar-top">
-        <span class="lang-bar-name">${meta.flag} ${meta.name}${subHtml?`<span style="cursor:pointer;font-size:10px;color:var(--text3);" onclick="toggleDialect('${lang}')">▶方言</span>`:''}  </span>
-        <span class="lang-bar-pct">${cnt}条 · ${pct}%</span>
-      </div>
-      <div class="lang-progress"><div class="lang-progress-fill ${meta.fillClass}" style="width:${pct}%"></div></div>
-      ${subHtml?`<div class="lang-sub" id="sub-${lang}">${subHtml}</div>`:''}
-    </div>`;
-  });
-  body.innerHTML = html;
-}
-
-function toggleDialect(lang) { const el = document.getElementById(`sub-${lang}`); if (el) el.classList.toggle('open'); }
-function toggleLangBar() {
-  const body = document.getElementById('langBarBody'); const toggle = document.getElementById('langBarToggle');
-  const isOpen = body.style.display !== 'none';
-  body.style.display = isOpen ? 'none' : 'block';
-  toggle.classList.toggle('open', !isOpen);
 }
 
 function updateGlobalStats() {
@@ -1480,6 +1502,15 @@ function formatNum(n) { if (n>=10000) return (n/10000).toFixed(1)+'w'; if (n>=10
 function escapeHtml(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ── 直播时长计时器 ──
+// 解析北京时间字符串为本地时间戳（服务端存的是 'YYYY-MM-DD HH:MM:SS' 北京时间）
+function parseBJTime(dtStr) {
+  if (!dtStr) return null;
+  // 替换空格为T，并补上+08:00时区，确保按北京时间解析
+  try {
+    const iso = dtStr.replace(' ', 'T') + '+08:00';
+    return new Date(iso).getTime();
+  } catch(e) { return null; }
+}
 function formatDuration(ms) {
   const totalSec = Math.floor(ms / 1000);
   const h = Math.floor(totalSec / 3600);
@@ -1732,6 +1763,8 @@ async function init() {
           if (startEl) startEl.textContent = s.start_time.slice(11,16);
           const row = document.getElementById(`live-time-row-${u}`);
           if (row) row.style.display = 'flex';
+          // 服务器存的是北京时间字符串，需加8小时偏移正确解析
+          monitors[u].startTs = parseBJTime(s.start_time);
         }
         updateCardMetrics(u);
         setCardLive(u, true);   // 直接显示"直播中"绿色状态
@@ -1753,7 +1786,32 @@ async function init() {
 
   updateGlobalStats();
   await loadAccountList();
-  await loadRivals();
+
+  // ★ 新增：自动打开正在直播的账号卡片
+  _autoOpenLiveCards();
+}
+
+// 自动开卡片：从自动监控列表找正在直播但尚未在看板的账号，自动启动监控
+async function _autoOpenLiveCards() {
+  try {
+    const res = await fetch('/api/automonitor/list');
+    const data = await res.json();
+    const liveAccounts = (data.list || []).filter(r => r.is_live && r.enabled);
+    for (const r of liveAccounts) {
+      const u = r.username;
+      if (!monitors[u]) {
+        // 后端还没监控该账号，自动启动
+        console.log(`[自动看板] @${u} 正在直播，自动开卡片...`);
+        try {
+          await fetch('/api/monitor/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username: u})
+          });
+        } catch(e) {}
+      }
+    }
+  } catch(e) {}
 }
 
 init();

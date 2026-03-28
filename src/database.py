@@ -161,6 +161,22 @@ def init_db():
         )
     ''')
 
+    # 竞品粉丝快照表（每日记录一次，用于计算涨粉趋势）
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS rival_follower_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            follower_count INTEGER DEFAULT 0,
+            following_count INTEGER DEFAULT 0,
+            video_count INTEGER DEFAULT 0,
+            bio TEXT DEFAULT '',
+            avatar_url TEXT DEFAULT '',
+            snapshot_date TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(username, snapshot_date)
+        )
+    ''')
+
     conn.commit()
 
     # ── 兼容旧数据库：添加新列（若不存在） ──
@@ -851,6 +867,70 @@ def get_enabled_auto_monitors(owner_user_id=None):
     else:
         c.execute("SELECT * FROM auto_monitor_list WHERE enabled=1 AND owner_user_id=?", (owner_user_id,))
     rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+# ==================== 竞品粉丝快照 ====================
+
+def save_follower_snapshot(username, follower_count, following_count=0, video_count=0, bio='', avatar_url=''):
+    """保存竞品粉丝快照（每天一条，重复则更新）"""
+    conn = get_conn()
+    c = conn.cursor()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    today = datetime.now().strftime('%Y-%m-%d')
+    c.execute('''
+        INSERT INTO rival_follower_snapshots
+            (username, follower_count, following_count, video_count, bio, avatar_url, snapshot_date, created_at)
+        VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT(username, snapshot_date) DO UPDATE SET
+            follower_count=excluded.follower_count,
+            following_count=excluded.following_count,
+            video_count=excluded.video_count,
+            bio=excluded.bio,
+            avatar_url=excluded.avatar_url,
+            created_at=excluded.created_at
+    ''', (username, follower_count, following_count, video_count, bio, avatar_url, today, now))
+    conn.commit()
+    conn.close()
+
+
+def get_follower_snapshots(username, days=30):
+    """获取某账号近N天的粉丝快照"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute('''
+        SELECT * FROM rival_follower_snapshots
+        WHERE username=?
+        ORDER BY snapshot_date DESC
+        LIMIT ?
+    ''', (username, days))
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_latest_follower_snapshot(username):
+    """获取某账号最新的粉丝快照"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute('''
+        SELECT * FROM rival_follower_snapshots
+        WHERE username=?
+        ORDER BY snapshot_date DESC
+        LIMIT 1
+    ''', (username,))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_all_rival_usernames():
+    """获取所有竞品账号的用户名（跨用户，用于定时任务）"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT username FROM account_groups WHERE group_name='rival'")
+    rows = [r['username'] for r in c.fetchall()]
     conn.close()
     return rows
 

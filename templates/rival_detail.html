@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>竞品详情 — TikTok 直播监测</title>
+<script src="/static/js/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary:#fe2c55; --primary-bg:#fff0f3;
+    --bg:#f5f6fa; --surface:#ffffff;
+    --border:#e8eaef; --border2:#f0f1f5;
+    --text:#1a1d2e; --text2:#6b7280; --text3:#9ca3af;
+    --success:#10b981; --warning:#f59e0b; --info:#3b82f6;
+    --rival:#7c3aed; --rival-bg:#f5f3ff;
+    --shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+    --radius:12px; --radius-sm:8px;
+    --font:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; }
+
+  /* ── Navbar ── */
+  .navbar { background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 3px rgba(0,0,0,.06); position:sticky; top:0; z-index:100; }
+  .navbar-brand { text-decoration:none; display:flex; align-items:center; gap:10px; }
+  .navbar-logo { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,#fe2c55 0%,#25f4ee 100%); display:flex; align-items:center; justify-content:center; }
+  .navbar-logo svg { width:18px; height:18px; }
+  .navbar-wordmark { display:flex; flex-direction:column; line-height:1; }
+  .navbar-name { font-size:15px; font-weight:800; color:var(--text); }
+  .navbar-name span { color:var(--primary); }
+  .navbar-sub { font-size:10px; color:var(--text3); font-weight:500; margin-top:1px; }
+  .navbar-nav { display:flex; gap:4px; align-items:center; }
+  .nav-link { color:var(--text2); text-decoration:none; font-size:14px; padding:6px 12px; border-radius:6px; transition:all .15s; }
+  .nav-link:hover { color:var(--text); background:var(--bg); }
+  .nav-link.active { color:var(--rival); background:var(--rival-bg); font-weight:600; }
+  .nav-btn { background:none; border:1px solid var(--border); border-radius:6px; color:var(--text2); font-size:13px; padding:5px 11px; cursor:pointer; transition:all .15s; }
+  .nav-btn:hover { color:var(--text); background:var(--bg); }
+
+  /* ── Layout ── */
+  .main { padding:24px; max-width:1200px; margin:0 auto; }
+  .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; gap:12px; flex-wrap:wrap; }
+  .page-title { font-size:20px; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .page-desc { font-size:13px; color:var(--text2); margin-top:4px; }
+
+  /* ── Section ── */
+  .section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; box-shadow:var(--shadow); }
+  .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .section-title { font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; }
+
+  /* ── Profile card ── */
+  .profile-card { display:flex; align-items:center; gap:20px; padding:20px; background:var(--rival-bg); border:1px solid #ddd6fe; border-radius:var(--radius); margin-bottom:20px; }
+  .profile-avatar { width:64px; height:64px; border-radius:50%; background:linear-gradient(135deg,var(--rival),#a855f7); display:flex; align-items:center; justify-content:center; color:#fff; font-size:26px; font-weight:700; flex-shrink:0; overflow:hidden; }
+  .profile-avatar img { width:100%; height:100%; object-fit:cover; }
+  .profile-info { flex:1; }
+  .profile-name { font-size:20px; font-weight:800; color:var(--rival); }
+  .profile-bio { font-size:13px; color:var(--text2); margin-top:4px; max-width:500px; }
+  .profile-meta { display:flex; gap:16px; margin-top:10px; flex-wrap:wrap; }
+  .profile-stat { text-align:center; }
+  .profile-stat-val { font-size:18px; font-weight:800; color:var(--rival); }
+  .profile-stat-label { font-size:11px; color:var(--text3); margin-top:2px; }
+  .profile-growth { font-size:12px; font-weight:600; margin-top:2px; }
+  .growth-up { color:#10b981; }
+  .growth-down { color:#ef4444; }
+
+  /* ── Metrics grid ── */
+  .metrics-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin-bottom:20px; }
+  .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 16px; text-align:center; }
+  .metric-val { font-size:22px; font-weight:800; color:var(--rival); line-height:1; }
+  .metric-label { font-size:11px; color:var(--text3); margin-top:5px; }
+  .metric-sub { font-size:11px; color:var(--text2); margin-top:3px; }
+
+  /* ── Btn ── */
+  .btn { padding:8px 16px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-size:13px; font-weight:600; transition:all .15s; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }
+  .btn-rival { background:var(--rival); color:#fff; }
+  .btn-rival:hover { background:#6d28d9; }
+  .btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border); }
+  .btn-ghost:hover { color:var(--rival); border-color:var(--rival); background:var(--rival-bg); }
+  .btn-sm { padding:5px 10px; font-size:12px; }
+
+  /* ── Charts ── */
+  .chart-wrap { position:relative; height:220px; }
+  .chart-wrap-tall { position:relative; height:280px; }
+  .charts-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media(max-width:768px) { .charts-row { grid-template-columns:1fr; } }
+
+  /* ── Sessions table ── */
+  .sessions-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .sessions-table th { text-align:left; padding:8px 10px; color:var(--text3); font-weight:600; border-bottom:2px solid var(--border); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  .sessions-table td { padding:9px 10px; border-bottom:1px solid var(--border2); }
+  .sessions-table tr:hover td { background:var(--bg); }
+  .sessions-table tr:last-child td { border-bottom:none; }
+  .badge { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
+  .badge-rival { background:#ddd6fe; color:#5b21b6; }
+  .badge-live { background:#fee2e2; color:#dc2626; }
+  .live-dot { width:6px; height:6px; border-radius:50%; background:var(--primary); display:inline-block; margin-right:4px; animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+  /* ── Toast ── */
+  .toast { position:fixed; top:20px; right:20px; background:var(--text); color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; z-index:9999; animation:fadeIn .2s; box-shadow:0 4px 20px rgba(0,0,0,.2); }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)} }
+
+  .no-data { text-align:center; padding:30px; color:var(--text3); font-size:13px; }
+  .loading { text-align:center; padding:40px; color:var(--text3); font-size:13px; }
+
+  /* ── 版本徽章 ── */
+  .version-badge { font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;padding:2px 7px;cursor:pointer;transition:all .15s; }
+  .version-badge:hover { background:#e5e7eb; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar-brand" href="/">
+    <div class="navbar-logo">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.51a8.16 8.16 0 004.77 1.52V7.58a4.85 4.85 0 01-1-.89z"/></svg>
+    </div>
+    <div class="navbar-wordmark">
+      <div class="navbar-name">Tuke<span>carco</span></div>
+      <div class="navbar-sub">TikTok 直播监测系统</div>
+    </div>
+    <span class="version-badge">v{{ app_version }}</span>
+  </a>
+  <nav class="navbar-nav">
+    <a href="/" class="nav-link">实时看板</a>
+    <a href="/history" class="nav-link">历史记录</a>
+    <a href="/automonitor" class="nav-link">📋 自动监控</a>
+    <a href="/rivals" class="nav-link active">⚔️ 竞品分析</a>
+    <a href="/compare" class="nav-link">📊 自营对比</a>
+    <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
+    <button class="nav-btn" onclick="authLogout()">退出</button>
+  </nav>
+</nav>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">
+        <a href="/rivals" style="color:var(--text2);text-decoration:none;font-size:14px;font-weight:500;">⚔️ 竞品分析</a>
+        <span style="color:var(--text3);">›</span>
+        <span id="pageUsername" style="color:var(--rival);">@{{ rival_username }}</span>
+      </div>
+      <div class="page-desc">竞品账号历史数据分析 · 开播规律 · 粉丝趋势</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-ghost btn-sm" onclick="fetchProfile()" id="btnFetchProfile">🔄 更新粉丝数</button>
+      <button class="btn btn-rival btn-sm" onclick="toggleMonitor()" id="btnMonitor">▶ 开始监控</button>
+    </div>
+  </div>
+
+  <!-- 账号信息卡 -->
+  <div class="profile-card" id="profileCard">
+    <div class="profile-avatar" id="profileAvatar">?</div>
+    <div class="profile-info">
+      <div class="profile-name" id="profileName">@{{ rival_username }}</div>
+      <div class="profile-bio" id="profileBio" style="display:none;"></div>
+      <div class="profile-meta" id="profileMeta">
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="statFollowers">—</div>
+          <div class="profile-stat-label">粉丝数</div>
+          <div class="profile-growth" id="statGrowth"></div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="statSessions">—</div>
+          <div class="profile-stat-label">监控场次</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="statAvgPeak">—</div>
+          <div class="profile-stat-label">场均在线</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="statAvgDuration">—</div>
+          <div class="profile-stat-label">场均时长</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="statAvgGift">—</div>
+          <div class="profile-stat-label">场均礼物</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="statBestPeak">—</div>
+          <div class="profile-stat-label">历史峰值</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 粉丝趋势 + 开播时段 -->
+  <div class="charts-row">
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">📈 粉丝趋势</div>
+        <span style="font-size:11px;color:var(--text3);">每日快照（每天8:00更新）</span>
+      </div>
+      <div class="chart-wrap" id="followerChartWrap">
+        <div class="no-data" id="followerNoData">暂无粉丝快照数据<br><small>点击右上角「更新粉丝数」获取首次数据</small></div>
+        <canvas id="followerChart" style="display:none;"></canvas>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">⏰ 开播时段分布</div>
+        <span style="font-size:11px;color:var(--text3);">基于历史监控数据</span>
+      </div>
+      <div class="chart-wrap" id="hourChartWrap">
+        <div class="no-data" id="hourNoData">暂无开播记录</div>
+        <canvas id="hourChart" style="display:none;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 周规律 -->
+  <div class="section" id="weekdaySection">
+    <div class="section-header">
+      <div class="section-title">📅 每周开播规律</div>
+    </div>
+    <div id="weekdayBar" style="display:flex;gap:8px;align-items:flex-end;height:80px;"></div>
+  </div>
+
+  <!-- 历史场次 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">📋 历史场次</div>
+      <span style="font-size:11px;color:var(--text3);" id="sessionCountLabel"></span>
+    </div>
+    <div id="sessionsWrap">
+      <div class="loading" id="sessionsLoading">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RIVAL_USERNAME = '{{ rival_username }}';
+let detailData = null;
+let followerChartInst = null;
+let hourChartInst = null;
+
+function showToast(msg, type='info') {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.background = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#374151';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+function formatNum(n) {
+  n = n || 0;
+  if (n >= 10000) return (n/10000).toFixed(1)+'w';
+  if (n >= 1000) return (n/1000).toFixed(1)+'k';
+  return Math.round(n).toString();
+}
+
+function formatDur(min) {
+  if (!min) return '—';
+  if (min >= 60) return `${Math.floor(min/60)}h${min%60}m`;
+  return `${min}m`;
+}
+
+// ── 加载详情数据 ──
+async function loadDetail() {
+  try {
+    const res = await fetch(`/api/rival/${RIVAL_USERNAME}/detail`);
+    const data = await res.json();
+    detailData = data;
+    renderProfile(data);
+    renderFollowerChart(data.follower_snapshots || []);
+    renderHourChart(data.hour_dist || []);
+    renderWeekdayChart(data.weekday_dist || []);
+    renderSessions(data.sessions || []);
+    updateMonitorBtn();
+  } catch(e) {
+    showToast('加载失败，请刷新重试', 'error');
+  }
+}
+
+function renderProfile(data) {
+  document.getElementById('statSessions').textContent = data.session_count || 0;
+  document.getElementById('statAvgPeak').textContent = formatNum(data.avg_peak_viewers);
+  document.getElementById('statAvgDuration').textContent = formatDur(data.avg_duration_min);
+  document.getElementById('statAvgGift').textContent = `$${(data.avg_gift_value||0).toFixed(1)}`;
+  document.getElementById('statBestPeak').textContent = formatNum(data.best_peak_viewers);
+
+  const snap = data.latest_snapshot;
+  if (snap) {
+    document.getElementById('statFollowers').textContent = formatNum(snap.follower_count);
+    if (snap.bio) {
+      const bioEl = document.getElementById('profileBio');
+      bioEl.textContent = snap.bio;
+      bioEl.style.display = '';
+    }
+    if (snap.avatar_url) {
+      const av = document.getElementById('profileAvatar');
+      av.innerHTML = `<img src="${snap.avatar_url}" onerror="this.style.display='none'">`;
+    }
+  }
+  const growth = data.follower_growth_7d;
+  if (growth !== 0) {
+    const el = document.getElementById('statGrowth');
+    el.textContent = `${growth > 0 ? '↑' : '↓'} ${formatNum(Math.abs(growth))}/7天`;
+    el.className = 'profile-growth ' + (growth > 0 ? 'growth-up' : 'growth-down');
+  }
+}
+
+function renderFollowerChart(snapshots) {
+  const wrap = document.getElementById('followerNoData');
+  const canvas = document.getElementById('followerChart');
+  if (!snapshots.length) { wrap.style.display = ''; canvas.style.display = 'none'; return; }
+  wrap.style.display = 'none';
+  canvas.style.display = '';
+  const labels = snapshots.map(s => s.snapshot_date.slice(5)); // MM-DD
+  const values = snapshots.map(s => s.follower_count);
+  if (followerChartInst) followerChartInst.destroy();
+  followerChartInst = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: '粉丝数',
+        data: values,
+        borderColor: '#7c3aed',
+        backgroundColor: 'rgba(124,58,237,.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointBackgroundColor: '#7c3aed',
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { callback: v => formatNum(v) }, grid: { color: '#f0f1f5' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderHourChart(hourDist) {
+  const wrap = document.getElementById('hourNoData');
+  const canvas = document.getElementById('hourChart');
+  const total = hourDist.reduce((s, h) => s + h.count, 0);
+  if (!total) { wrap.style.display = ''; canvas.style.display = 'none'; return; }
+  wrap.style.display = 'none';
+  canvas.style.display = '';
+  const labels = hourDist.map(h => `${h.hour}:00`);
+  const values = hourDist.map(h => h.count);
+  if (hourChartInst) hourChartInst.destroy();
+  hourChartInst = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '开播次数',
+        data: values,
+        backgroundColor: values.map(v => v > 0 ? 'rgba(124,58,237,.7)' : 'rgba(124,58,237,.1)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { stepSize: 1 }, grid: { color: '#f0f1f5' } },
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function renderWeekdayChart(weekdayDist) {
+  const container = document.getElementById('weekdayBar');
+  const max = Math.max(...weekdayDist.map(d => d.count), 1);
+  container.innerHTML = weekdayDist.map(d => {
+    const h = max > 0 ? Math.round(d.count / max * 60) : 0;
+    const color = d.count > 0 ? '#7c3aed' : '#e5e7eb';
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div style="font-size:11px;font-weight:600;color:${d.count>0?'#7c3aed':'var(--text3)'}">${d.count||''}</div>
+      <div style="width:100%;height:${Math.max(h,4)}px;background:${color};border-radius:4px 4px 0 0;transition:height .3s;"></div>
+      <div style="font-size:11px;color:var(--text3)">${d.day}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSessions(sessions) {
+  const wrap = document.getElementById('sessionsWrap');
+  document.getElementById('sessionsLoading').style.display = 'none';
+  document.getElementById('sessionCountLabel').textContent = `共 ${sessions.length} 场`;
+
+  if (!sessions.length) {
+    wrap.innerHTML = '<div class="no-data">暂无历史场次记录<br><small>添加到自动监控后，开播时系统会自动采集数据</small></div>';
+    return;
+  }
+
+  const rows = sessions.map(s => {
+    const startDate = (s.start_time || '').slice(0, 16).replace('T', ' ');
+    const durStr = formatDur(s.duration_min);
+    const gift = `$${(s.total_gift_value||0).toFixed(1)}`;
+    return `<tr>
+      <td style="color:var(--text2);font-size:12px;">${startDate}</td>
+      <td style="font-weight:700;color:var(--rival);">${formatNum(s.peak_viewers)}</td>
+      <td>${formatNum(s.total_viewers)}</td>
+      <td>${durStr}</td>
+      <td style="color:#f59e0b;font-weight:600;">${gift}</td>
+      <td>${s.total_comments||0}</td>
+      <td>${s.new_followers||0}</td>
+      <td><a href="/session/${s.id}" style="color:var(--rival);text-decoration:none;font-size:12px;">复盘 →</a></td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<div style="overflow-x:auto;">
+    <table class="sessions-table">
+      <thead>
+        <tr>
+          <th>开播时间</th>
+          <th>峰值在线</th>
+          <th>累计观看</th>
+          <th>时长</th>
+          <th>礼物收入</th>
+          <th>评论数</th>
+          <th>新增关注</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ── 更新粉丝数 ──
+async function fetchProfile() {
+  const btn = document.getElementById('btnFetchProfile');
+  btn.disabled = true;
+  btn.textContent = '抓取中...';
+  try {
+    const res = await fetch(`/api/rival/${RIVAL_USERNAME}/fetch_profile`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`✅ 粉丝数已更新: ${formatNum(data.follower_count)}`, 'success');
+      await loadDetail();
+    } else {
+      showToast('抓取失败，TikTok 可能限流，稍后重试', 'error');
+    }
+  } catch(e) {
+    showToast('网络错误', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = '🔄 更新粉丝数';
+}
+
+// ── 监控按钮 ──
+function updateMonitorBtn() {
+  fetch('/api/status').then(r => r.json()).then(d => {
+    const active = d.active_accounts || [];
+    const btn = document.getElementById('btnMonitor');
+    if (active.includes(RIVAL_USERNAME)) {
+      btn.textContent = '⏹ 停止监控';
+      btn.className = 'btn btn-sm';
+      btn.style.background = '#fee2e2';
+      btn.style.color = '#dc2626';
+      btn.style.border = '1px solid #fca5a5';
+      btn.onclick = stopMonitor;
+    } else {
+      btn.textContent = '▶ 开始监控';
+      btn.className = 'btn btn-rival btn-sm';
+      btn.style.cssText = '';
+      btn.onclick = startMonitor;
+    }
+  }).catch(() => {});
+}
+
+async function startMonitor() {
+  const res = await fetch('/api/monitor/start', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username: RIVAL_USERNAME })
+  });
+  const d = await res.json();
+  showToast(d.msg || '已启动监控', d.success ? 'success' : 'error');
+  setTimeout(updateMonitorBtn, 1000);
+}
+
+async function stopMonitor() {
+  const res = await fetch('/api/monitor/stop', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username: RIVAL_USERNAME })
+  });
+  const d = await res.json();
+  showToast(d.msg || '已停止监控', 'info');
+  setTimeout(updateMonitorBtn, 1000);
+}
+
+// ── 初始化 ──
+loadDetail();
+
+// ── 用户信息 & 退出 ──
+(async () => {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.status === 401) { location.href = '/login'; return; }
+    const me = await res.json();
+    if (me.logged_in) {
+      const badge = document.getElementById('navUserBadge');
+      if (badge) badge.textContent = me.username;
+      const adminLink = document.getElementById('adminNavLink');
+      if (adminLink && me.is_admin) adminLink.style.display = '';
+    }
+  } catch(e) {}
+})();
+async function authLogout() {
+  await fetch('/api/auth/logout', {method:'POST'});
+  location.href = '/login';
+}
+</script>
+
+</body>
+</html>
