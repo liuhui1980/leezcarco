@@ -242,23 +242,6 @@
   .watch-hint { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 14px; margin-top: 10px; font-size: 12px; color: #065f46; display: flex; align-items: flex-start; gap: 8px; }
   .watch-hint-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
 
-  /* ── 远程访问面板 ── */
-  .remote-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 500; align-items: center; justify-content: center; }
-  .remote-modal.open { display: flex; }
-  .remote-box { background: var(--surface); border-radius: 16px; padding: 28px; max-width: 460px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
-  .remote-title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
-  .remote-subtitle { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
-  .remote-method { background: var(--bg); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
-  .remote-method-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-  .remote-method-desc { font-size: 12px; color: var(--text2); line-height: 1.7; }
-  .remote-method-desc code { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; font-family: monospace; }
-  .remote-method-desc a { color: var(--primary); text-decoration: none; }
-  .remote-close { width: 100%; margin-top: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text2); transition: all .15s; }
-  .remote-close:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
-  .local-ip-display { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; font-family: monospace; color: var(--primary); font-weight: 600; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
-  .copy-btn { font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer; color: var(--text2); transition: all .1s; }
-  .copy-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
-
   /* ── Toast ── */
   .toast-container { position: fixed; top: 66px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
   .toast { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; font-size: 13px; min-width: 220px; box-shadow: 0 4px 16px rgba(0,0,0,.1); animation: slideIn .3s ease; }
@@ -297,9 +280,7 @@
     <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
     <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
-    <button class="nav-btn" onclick="openRemoteModal()" title="如何在其他设备访问">
-      📱 远程访问
-    </button>
+    <button class="nav-btn" onclick="openFeedbackModal()" title="提交需求或BUG">💡 反馈</button>
     <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
     <button class="nav-btn" onclick="authLogout()" style="margin-left:2px">退出</button>
   </nav>
@@ -307,48 +288,31 @@
 
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- ── 远程访问弹窗 ── -->
-<div class="remote-modal" id="remoteModal" onclick="if(event.target===this)closeRemoteModal()">
-  <div class="remote-box">
-    <div class="remote-title">📱 远程访问</div>
-    <div class="remote-subtitle">在手机、iPad 或其他网络的电脑上访问看板</div>
-
-    <!-- Cloudflare 公网链接 -->
-    <div class="remote-method" id="cfBlock">
-      <div class="remote-method-title">
-        🌐 公网链接（任意设备、任意网络）
-        <span id="cfStatus" style="font-size:11px;margin-left:6px;"></span>
-      </div>
-      <div class="remote-method-desc">
-        <div id="cfUrlBlock" style="display:none;">
-          <div class="local-ip-display" style="background:#f0fdf4;border-color:#86efac;">
-            <span id="cfUrlText" style="color:#15803d;font-weight:700;word-break:break-all;"></span>
-            <button class="copy-btn" onclick="copyCfUrl()" style="background:#16a34a;">复制</button>
-          </div>
-          <div style="font-size:11px;color:#6b7280;margin-top:5px;">⚠️ 每次重启 Mac 后链接会更新，来这里重新复制即可</div>
-        </div>
-        <div id="cfLoadingBlock" style="color:#9ca3af;font-size:13px;padding:6px 0;">
-          ⏳ 正在建立 Cloudflare 隧道，请稍候（约 5-10 秒）...
-        </div>
-        <div id="cfErrorBlock" style="display:none;color:#dc2626;font-size:12px;padding:6px 0;">
-          ❌ cloudflared 未安装。请在终端运行：<code style="background:#fee2e2;padding:2px 6px;border-radius:4px;">brew install cloudflared</code> 然后重启系统
-        </div>
+<!-- ── 反馈弹窗 ── -->
+<div id="feedbackModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;" onclick="if(event.target===this)closeFeedbackModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="font-size:18px;font-weight:800;margin-bottom:4px;">💡 提交反馈</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:20px;">需求建议 or BUG 报告，老板收到后会安排开发</div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">类型</div>
+      <div style="display:flex;gap:8px;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="feature" checked> 🚀 新需求</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="bug"> 🐛 BUG</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="other"> 💬 其他</label>
       </div>
     </div>
-
-    <!-- 局域网 -->
-    <div class="remote-method">
-      <div class="remote-method-title">🏠 局域网访问（同 WiFi 下最快）</div>
-      <div class="remote-method-desc">
-        手机/设备与这台电脑连<strong>同一 WiFi</strong>，扫码或输入地址：
-        <div class="local-ip-display" id="localIpDisplay">
-          <span id="localIpText">加载中...</span>
-          <button class="copy-btn" onclick="copyIp()">复制</button>
-        </div>
-      </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">标题 <span style="color:#ef4444;">*</span></div>
+      <input id="fbTitle" type="text" maxlength="100" placeholder="一句话概括，如：看板加个导出按钮" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:14px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#fe2c55'" onblur="this.style.borderColor='#e5e7eb'">
     </div>
-
-    <button class="remote-close" onclick="closeRemoteModal()">关闭</button>
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">详细描述</div>
+      <textarea id="fbDesc" rows="4" maxlength="1000" placeholder="可选：描述具体场景、期望效果、复现步骤等..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:13px;resize:vertical;outline:none;box-sizing:border-box;font-family:inherit;" onfocus="this.style.borderColor='#fe2c55'" onblur="this.style.borderColor='#e5e7eb'"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="submitFeedback()" style="flex:1;background:#fe2c55;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;" id="fbSubmitBtn">提交</button>
+      <button onclick="closeFeedbackModal()" style="flex:1;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;">取消</button>
+    </div>
   </div>
 </div>
 
@@ -1710,56 +1674,40 @@ function loadMonitorList() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; }
 }
 
-// ── 远程访问 ──
-let _cfUrl = null;
-
-function openRemoteModal() {
-  document.getElementById('remoteModal').classList.add('open');
-  // 局域网地址
-  const host = window.location.hostname;
-  const port = window.location.port || '5001';
-  document.getElementById('localIpText').textContent =
-    (host !== 'localhost' && host !== '127.0.0.1')
-      ? `http://${host}:${port}`
-      : `http://[局域网IP]:${port}  (如: 192.168.x.x:${port})`;
-  // 刷新一次 tunnel URL
-  _refreshTunnelUrl();
+// ── 反馈弹窗 ──
+function openFeedbackModal() {
+  document.getElementById('feedbackModal').style.display = 'flex';
+  document.getElementById('fbTitle').value = '';
+  document.getElementById('fbDesc').value = '';
+  const radios = document.querySelectorAll('input[name="fbType"]');
+  radios[0].checked = true;
+  setTimeout(() => document.getElementById('fbTitle').focus(), 100);
 }
-
-async function _refreshTunnelUrl() {
+function closeFeedbackModal() {
+  document.getElementById('feedbackModal').style.display = 'none';
+}
+async function submitFeedback() {
+  const title = document.getElementById('fbTitle').value.trim();
+  if (!title) { document.getElementById('fbTitle').focus(); showToast('请填写标题', 'error'); return; }
+  const type = document.querySelector('input[name="fbType"]:checked').value;
+  const desc = document.getElementById('fbDesc').value.trim();
+  const btn = document.getElementById('fbSubmitBtn');
+  btn.disabled = true; btn.textContent = '提交中...';
   try {
-    const res = await fetch('/api/tunnel');
+    const res = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, title, desc }) });
     const data = await res.json();
-    _updateCfUi(data.url);
-  } catch(e) {}
-}
-
-function _updateCfUi(url) {
-  const urlBlock = document.getElementById('cfUrlBlock');
-  const loadingBlock = document.getElementById('cfLoadingBlock');
-  const errorBlock = document.getElementById('cfErrorBlock');
-  const cfStatus = document.getElementById('cfStatus');
-  if (url) {
-    _cfUrl = url;
-    document.getElementById('cfUrlText').textContent = url;
-    urlBlock.style.display = 'block';
-    loadingBlock.style.display = 'none';
-    errorBlock.style.display = 'none';
-    cfStatus.textContent = '🟢 已连接';
-    cfStatus.style.color = '#16a34a';
-  } else {
-    urlBlock.style.display = 'none';
-    loadingBlock.style.display = 'block';
-    errorBlock.style.display = 'none';
+    if (data.success) {
+      closeFeedbackModal();
+      showToast('✅ 反馈已提交，感谢！', 'success');
+    } else {
+      showToast('提交失败：' + (data.msg || '未知错误'), 'error');
+    }
+  } catch(e) {
+    showToast('提交失败，请重试', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '提交';
   }
 }
-
-function copyCfUrl() {
-  if (!_cfUrl) return;
-  navigator.clipboard.writeText(_cfUrl).then(() => showToast('公网链接已复制，发给手机/同事即可', 'success')).catch(() => {});
-}
-
-function closeRemoteModal() { document.getElementById('remoteModal').classList.remove('open'); }
 
 // ── 指标放大弹窗 ──
 let _mmChart = null;
@@ -1840,10 +1788,6 @@ function openMetricsModal(username) {
 function closeMetricsModal() {
   document.getElementById('metricsModal').style.display = 'none';
   if (_mmChart) { _mmChart.destroy(); _mmChart = null; }
-}
-function copyIp() {
-  const text = document.getElementById('localIpText').textContent;
-  navigator.clipboard.writeText(text).then(() => showToast('地址已复制', 'success')).catch(() => {});
 }
 
 // ── 页面初始化 ──

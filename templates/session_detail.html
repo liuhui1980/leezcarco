@@ -39,10 +39,19 @@
   .page-title a:hover { color:var(--primary); }
 
   /* 指标卡片行 */
-  .metrics-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:20px; }
-  .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center; box-shadow:var(--shadow); }
-  .metric-val { font-size:24px; font-weight:700; color:var(--text); }
-  .metric-label { font-size:12px; color:var(--text2); margin-top:4px; }
+  .metrics-row { display:grid; grid-template-columns:3fr 1fr 1fr 1fr 1fr 1fr 1fr; gap:10px; margin-bottom:20px; align-items:stretch; }
+  .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 12px; text-align:center; box-shadow:var(--shadow); }
+  .metric-val { font-size:20px; font-weight:700; color:var(--text); line-height:1.2; }
+  .metric-label { font-size:11px; color:var(--text2); margin-top:4px; }
+  /* 时间摘要宽卡 */
+  .metric-card.time-card { display:flex; align-items:stretch; padding:0; gap:0; overflow:hidden; }
+  .time-item { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; padding:14px 10px; gap:2px; }
+  .time-item + .time-item { border-left:1px solid var(--border); }
+  .time-item .ti-icon { font-size:13px; color:var(--text2); margin-bottom:4px; }
+  .time-item .ti-date { font-size:11px; color:var(--text2); font-weight:500; letter-spacing:.3px; }
+  .time-item .ti-time { font-size:19px; font-weight:700; color:var(--text); line-height:1.1; letter-spacing:.5px; }
+  .time-item .ti-dur { font-size:22px; font-weight:800; color:var(--primary); line-height:1.1; }
+  .time-item .ti-label { font-size:10px; color:var(--text2); margin-top:4px; letter-spacing:.2px; }
 
   /* Panel */
   .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; box-shadow:var(--shadow); }
@@ -258,7 +267,9 @@
     nav[style] { flex-wrap:wrap; gap:2px; }
     .nav-link { font-size:12px; padding:4px 8px; }
     .main { padding:10px; max-width:100%; }
-    .metrics-row { grid-template-columns:repeat(2,1fr); }
+    .metrics-row { grid-template-columns:repeat(2,1fr) !important; }
+    .metric-card.time-card { flex-direction:row; flex-wrap:wrap; }
+    .time-item { min-width:80px; border-left:none !important; border-top:none !important; flex:1; }
     .metric-val { font-size:18px; }
     .speech-section { grid-template-columns:1fr !important; }
     .two-col { grid-template-columns:1fr !important; }
@@ -268,7 +279,7 @@
   }
   @media(max-width:480px) {
     .navbar-sub, .version-badge { display:none; }
-    .metrics-row { grid-template-columns:repeat(2,1fr); }
+    .metrics-row { grid-template-columns:repeat(2,1fr) !important; }
     .metric-card { padding:10px; }
     .panel { padding:14px; }
   }
@@ -631,60 +642,97 @@ let _sessionData = null;
 // _viewerSnaps 提升为模块级，供时间轴流量节点检测
 let _viewerSnaps = [];
 
-apiFetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
-  const s = data.session || {};
+document.getElementById('metricsRow').innerHTML = '<div class="loading">加载中...</div>';
+
+// ══════════════════════════════════════════════════════════
+// 工具函数
+// ══════════════════════════════════════════════════════════
+function fmtDateTimeParts(t) {
+  if (!t) return {date:'-', time:'-'};
+  try { return { date: t.slice(5,10), time: t.slice(11,16) }; }
+  catch(e) { return {date:'-', time:String(t)}; }
+}
+function fmtDateTime(t) {
+  if (!t) return '-';
+  try { return t.slice(5,16); } catch(e) { return t; }
+}
+
+// ══════════════════════════════════════════════════════════
+// 渲染函数 A：主体数据（指标卡 + 趋势图 + 评论 + 礼物）
+// ══════════════════════════════════════════════════════════
+function renderMainData(data) {
+  if (!data || !data.session) {
+    document.getElementById('metricsRow').innerHTML =
+      '<div class="loading" style="color:#ef4444">⚠️ 数据加载失败，接口返回异常。请刷新重试。</div>';
+    return;
+  }
+  const s = data.session;
   _sessionData = s;
   document.getElementById('pageTitle').textContent = `直播复盘 — @${s.username}`;
 
   // 时长
   let dur = '-';
   if (s.start_time && s.end_time) {
-    const m = Math.round((new Date(s.end_time)-new Date(s.start_time))/60000);
-    dur = m>=60 ? `${Math.floor(m/60)}h${m%60}m` : `${m}m`;
-  }
-
-  // 时间格式化（只显示时分秒）
-  function fmtDateTime(t) {
-    if (!t) return '-';
-    // 格式：YYYY-MM-DD HH:MM:SS → 显示 MM-DD HH:MM
-    try {
-      return t.slice(5,16); // 截取 MM-DD HH:MM
-    } catch(e) { return t; }
+    const m = Math.round((new Date(s.end_time) - new Date(s.start_time)) / 60000);
+    dur = m >= 60 ? `${Math.floor(m/60)}h${m%60}m` : `${m}m`;
   }
 
   // 指标卡片
-  const metrics = [
-    {val: fmtDateTime(s.start_time), label:'开播时间'},
-    {val: (s.status === 'live' && !s.end_time) ? '🔴 直播中' : fmtDateTime(s.end_time), label:'结束时间'},
-    {val:dur, label:'直播时长'},
-    {val:fmt(s.peak_viewers), label:'峰值在线'},
-    {val:fmt(s.total_viewers), label:'累计观看'},
-    {val:fmt(s.total_comments), label:'总评论数'},
-    {val:fmt(s.total_likes), label:'总点赞数'},
-    {val:fmt(s.new_followers), label:'新增关注'},
-    {val:'$'+(s.total_gift_value||0).toFixed(2), label:'礼物收入'},
+  const isLive = s.status === 'live' && !s.end_time;
+  const startParts = fmtDateTimeParts(s.start_time);
+  const endParts   = fmtDateTimeParts(s.end_time);
+  const dataMetrics = [
+    {val: fmt(s.peak_viewers),                         label: '峰值在线'},
+    {val: fmt(s.total_viewers),                        label: '累计观看'},
+    {val: fmt(s.total_comments),                       label: '总评论数'},
+    {val: fmt(s.total_likes),                          label: '总点赞数'},
+    {val: fmt(s.new_followers),                        label: '新增关注'},
+    {val: '$' + (s.total_gift_value||0).toFixed(2),    label: '礼物收入'},
   ];
-  document.getElementById('metricsRow').innerHTML = metrics.map(m =>
-    `<div class="metric-card"><div class="metric-val">${m.val}</div><div class="metric-label">${m.label}</div></div>`
-  ).join('');
+  const timeCard = `<div class="metric-card time-card">
+    <div class="time-item">
+      <div class="ti-icon">📅</div>
+      <div class="ti-date">${startParts.date}</div>
+      <div class="ti-time">${startParts.time}</div>
+      <div class="ti-label">开播时间</div>
+    </div>
+    <div class="time-item">
+      <div class="ti-icon">${isLive ? '🔴' : '🏁'}</div>
+      ${isLive
+        ? `<div class="ti-date" style="color:var(--primary);font-weight:700;">LIVE</div>
+           <div class="ti-time" style="color:var(--primary);">直播中</div>`
+        : `<div class="ti-date">${endParts.date}</div>
+           <div class="ti-time">${endParts.time}</div>`
+      }
+      <div class="ti-label">结束时间</div>
+    </div>
+    <div class="time-item">
+      <div class="ti-icon">⏱</div>
+      <div class="ti-dur">${dur}</div>
+      <div class="ti-label">直播时长</div>
+    </div>
+  </div>`;
+  document.getElementById('metricsRow').innerHTML =
+    timeCard + dataMetrics.map(m =>
+      `<div class="metric-card"><div class="metric-val">${m.val}</div><div class="metric-label">${m.label}</div></div>`
+    ).join('');
 
   // 趋势图
   const snaps = data.snapshots || [];
-  _viewerSnaps = snaps; // 保存供时间轴流量节点检测
+  _viewerSnaps = snaps;
   if (snaps.length > 1) {
-    // 存储趋势图时间范围（毫秒时间戳，用于时间轴对齐）
     chartMinTime = snaps[0].timestamp ? new Date(snaps[0].timestamp.replace(' ','T')).getTime() : 0;
     chartMaxTime = snaps[snaps.length-1].timestamp ? new Date(snaps[snaps.length-1].timestamp.replace(' ','T')).getTime() : 0;
     new Chart(document.getElementById('trendChart'), {
-      type:'line',
-      data:{
-        labels: snaps.map(s=>s.timestamp.slice(-8)),
-        datasets:[
-          {label:'在线人数',data:snaps.map(s=>s.viewer_count),borderColor:'#fe2c55',backgroundColor:'rgba(254,44,85,.08)',tension:.3,fill:true,pointRadius:2},
-          {label:'评论数',data:snaps.map(s=>s.comment_count),borderColor:'#3b82f6',tension:.3,fill:false,pointRadius:0,yAxisID:'y2'},
+      type: 'line',
+      data: {
+        labels: snaps.map(s => s.timestamp.slice(-8)),
+        datasets: [
+          {label:'在线人数', data:snaps.map(s=>s.viewer_count), borderColor:'#fe2c55', backgroundColor:'rgba(254,44,85,.08)', tension:.3, fill:true, pointRadius:2},
+          {label:'评论数',   data:snaps.map(s=>s.comment_count), borderColor:'#3b82f6', tension:.3, fill:false, pointRadius:0, yAxisID:'y2'},
         ]
       },
-      options:{
+      options: {
         responsive:true, maintainAspectRatio:false,
         plugins:{legend:{labels:{color:'#6b7280',font:{size:12}}}},
         scales:{
@@ -696,14 +744,15 @@ apiFetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
     });
   }
 
-  // ★ 调优建议
+  // 调优建议
   renderOptimPanel(s, data);
 
-  // ★ 主播评分卡
+  // 主播评分卡（仅已结束场次）
   if (s.status === 'ended') {
-    fetch(`/api/session/${sessionId}/score`).then(r=>r.json()).then(sc => {
-      renderScorePanel(sc);
-    }).catch(()=>{});
+    fetch(`/api/session/${sessionId}/score`)
+      .then(r => r.json())
+      .then(sc => renderScorePanel(sc))
+      .catch(() => {});
   }
 
   // 礼物排行
@@ -712,11 +761,13 @@ apiFetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
     ? gifts.map((g,i) => `<tr><td>${i+1}</td><td>${escHtml(g.username)}</td><td>$${(g.total_value||0).toFixed(2)}</td><td>${g.cnt}</td></tr>`).join('')
     : '<tr><td colspan="4" class="loading">暂无礼物数据</td></tr>';
 
-  // 评论记录（含方言显示+翻译）
+  // 评论记录
   const comments = data.comments || [];
   document.querySelector('#commentTable tbody').innerHTML = comments.length
     ? comments.map(c => {
-        const langBadge = c.lang ? `<span class="lang-badge lang-${c.lang.replace('_','-')}" style="font-size:10px;padding:1px 5px;border-radius:3px;margin-left:4px;">${c.lang_short||c.lang}</span>` : '';
+        const langBadge = c.lang
+          ? `<span class="lang-badge lang-${c.lang.replace('_','-')}" style="font-size:10px;padding:1px 5px;border-radius:3px;margin-left:4px;">${c.lang_short||c.lang}</span>`
+          : '';
         const zhLine = (c.text_zh && c.text_zh !== c.content)
           ? `<div style="font-size:11px;color:var(--text2);margin-top:2px;padding:2px 6px;background:#f9fafb;border-radius:3px;border-left:2px solid var(--border);">中：${escHtml(c.text_zh)}</div>`
           : '';
@@ -724,11 +775,109 @@ apiFetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
       }).join('')
     : '<tr><td colspan="3" class="loading">暂无评论数据</td></tr>';
 
-  // ★ 评论方言分析（从评论记录统计）
+  // 评论方言分析 & 需求洞察
   renderDialectAnalysis(comments);
-  // ★ 需求洞察（从评论中识别购车/租车/咨询意向）
   renderInsightPanel(comments);
-});
+}
+
+// ══════════════════════════════════════════════════════════
+// 渲染函数 B：复盘对比
+// ══════════════════════════════════════════════════════════
+function renderReviewData(rv) {
+  if (!rv || !rv.current) return;
+  document.getElementById('reviewPanel').style.display = '';
+  document.getElementById('reviewSessionCount').textContent = `共 ${rv.session_count || 0} 场历史数据`;
+  const cur = rv.current, prev = rv.prev, avg7 = rv.avg7, best = rv.best;
+  document.getElementById('reviewTableBody').innerHTML = REVIEW_METRICS.map(m => {
+    const cv = cur[m.key];
+    const pv = prev ? prev[m.key] : null;
+    const av = avg7 ? avg7[m.key] : null;
+    const bv = best ? best[m.key] : null;
+    const isBest = bv !== null && cv >= bv && cv > 0;
+    return `<tr>
+      <td class="metric-name">${m.label}</td>
+      <td class="current-val">${m.fmt(cv)}${isBest ? '<span class="best-mark">历史最佳</span>' : ''}</td>
+      <td>${pv!==null ? m.fmt(pv)+'&nbsp;'+changeBadge(cv,pv,m.higherBetter) : '<span style="color:var(--text3)">-</span>'}</td>
+      <td>${av!==null ? m.fmt(av)+'&nbsp;'+changeBadge(cv,av,m.higherBetter) : '<span style="color:var(--text3)">-</span>'}</td>
+      <td>${bv!==null ? m.fmt(bv) : '<span style="color:var(--text3)">-</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// 渲染函数 C：话术分析
+// ══════════════════════════════════════════════════════════
+function renderSpeechData(sp) {
+  if (!sp || !sp.records || !sp.records.length) return;
+  document.getElementById('speechPanel').style.display = '';
+  document.getElementById('speechCount').textContent = `${sp.records.length} 条话术`;
+
+  // 关键句摘要
+  const summary = sp.summary || [];
+  document.getElementById('summaryList').innerHTML = summary.length
+    ? summary.map((s,i) => `<li class="summary-item"><span class="summary-num">${i+1}</span><span>${escHtml(s)}</span></li>`).join('')
+    : '<li class="summary-item" style="color:var(--text3);">暂无摘要</li>';
+
+  // 关键词词频气泡图
+  renderKeywordCloud(sp.keywords || [], document.getElementById('keywordsWrap'));
+
+  // 全量话术列表
+  document.getElementById('speechList').innerHTML = sp.records.map(r => {
+    const cssClass = r.lang ? `lang-${r.lang.replace('_','-')}` : 'lang-other';
+    const hasTrans = r.text_zh && r.text_zh.trim() && r.text_zh !== r.text;
+    return `<div class="speech-item">
+      <div class="speech-meta">
+        <span class="speech-time">${(r.timestamp||'').slice(-8)}</span>
+        <span class="lang-badge ${cssClass}">${r.lang_short || '?'}</span>
+        ${r.dialect ? `<span style="font-size:10px;color:var(--text3);">${escHtml(r.dialect)}</span>` : ''}
+      </div>
+      <div class="speech-orig">${escHtml(r.text)}</div>
+      ${hasTrans ? `<div class="speech-zh">${escHtml(r.text_zh)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // 时间轴 & 方言分析
+  renderSpeechTimeline(sp.records, chartMinTime, chartMaxTime);
+  renderSpeechDialectAnalysis(sp.records);
+  // 调优建议需要 speech 数据才能完整，重算一次
+  if (_sessionData) renderOptimPanel(_sessionData, sp);
+}
+
+// ══════════════════════════════════════════════════════════
+// 主入口：三接口并发加载，各块独立渲染，互不影响
+// ══════════════════════════════════════════════════════════
+(async () => {
+  const _el = id => document.getElementById(id);
+  const _err = msg => { _el('metricsRow').innerHTML = `<div class="loading" style="color:#ef4444;font-size:14px;">⚠️ ${msg}</div>`; };
+
+  // 第一步：加载数据
+  let data, rv, sp;
+  try {
+    [data, rv, sp] = await Promise.all([
+      apiFetch(`/api/session/${sessionId}`).then(r => r.json()),
+      apiFetch(`/api/session/${sessionId}/review`).then(r => r.json()).catch(() => null),
+      apiFetch(`/api/session/${sessionId}/speech`).then(r => r.json()).catch(() => null),
+    ]);
+  } catch(err) {
+    _err(`数据加载失败：${err.message || err}。请刷新重试。`);
+    return;
+  }
+
+  // 第二步：渲染主体数据
+  try {
+    renderMainData(data);
+  } catch(e) {
+    console.error('[renderMainData]', e);
+    _err(`主数据渲染出错：${e.message}`);
+    return;
+  }
+
+  // 第三步：渲染复盘对比
+  try { renderReviewData(rv); } catch(e) { console.error('[renderReviewData]', e); }
+
+  // 第四步：渲染话术分析
+  try { renderSpeechData(sp); } catch(e) { console.error('[renderSpeechData]', e); }
+})();
 
 // ── 删除本场记录 ──
 async function deleteThisSession() {
@@ -823,75 +972,6 @@ function renderDialectAnalysis(comments) {
     barEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0;">暂无阿拉伯语方言数据</div>';
   }
 }
-
-// ── 加载复盘对比数据 ──
-fetch(`/api/session/${sessionId}/review`).then(r=>{ if(r.status===401){location.href='/login';throw new Error();} return r.json();}).then(rv => {
-  if (!rv || !rv.current) return;
-  const panel = document.getElementById('reviewPanel');
-  panel.style.display = '';
-
-  const cnt = rv.session_count || 0;
-  document.getElementById('reviewSessionCount').textContent = `共 ${cnt} 场历史数据`;
-
-  const tbody = document.getElementById('reviewTableBody');
-  const cur = rv.current, prev = rv.prev, avg7 = rv.avg7, best = rv.best;
-
-  tbody.innerHTML = REVIEW_METRICS.map(m => {
-    const cv = cur[m.key];
-    const pv = prev ? prev[m.key] : null;
-    const av = avg7 ? avg7[m.key] : null;
-    const bv = best ? best[m.key] : null;
-    const isBest = bv !== null && cv >= bv && cv > 0;
-    return `<tr>
-      <td class="metric-name">${m.label}</td>
-      <td class="current-val">${m.fmt(cv)}${isBest ? '<span class="best-mark">历史最佳</span>' : ''}</td>
-      <td>${pv!==null ? m.fmt(pv)+'&nbsp;'+changeBadge(cv,pv,m.higherBetter) : '<span style="color:var(--text3)">-</span>'}</td>
-      <td>${av!==null ? m.fmt(av)+'&nbsp;'+changeBadge(cv,av,m.higherBetter) : '<span style="color:var(--text3)">-</span>'}</td>
-      <td>${bv!==null ? m.fmt(bv) : '<span style="color:var(--text3)">-</span>'}</td>
-    </tr>`;
-  }).join('');
-});
-
-// ── 加载话术分析 ──
-fetch(`/api/session/${sessionId}/speech`).then(r=>{ if(r.status===401){location.href='/login';throw new Error();} return r.json();}).then(sp => {
-  if (!sp || !sp.records || !sp.records.length) return;
-  document.getElementById('speechPanel').style.display = '';
-  document.getElementById('speechCount').textContent = `${sp.records.length} 条话术`;
-
-  // 关键句摘要
-  const summary = sp.summary || [];
-  document.getElementById('summaryList').innerHTML = summary.length
-    ? summary.map((s,i) => `<li class="summary-item"><span class="summary-num">${i+1}</span><span>${escHtml(s)}</span></li>`).join('')
-    : '<li class="summary-item" style="color:var(--text3);">暂无摘要</li>';
-
-  // 关键词词频气泡图（新格式 [{word, zh, count}] 或旧格式 [string]）
-  const kws = sp.keywords || [];
-  renderKeywordCloud(kws, document.getElementById('keywordsWrap'));
-
-  // 全量话术
-  document.getElementById('speechList').innerHTML = sp.records.map(r => {
-    const cssClass = r.lang ? `lang-${r.lang.replace('_','-')}` : 'lang-other';
-    const hasTranslation = r.text_zh && r.text_zh.trim() && r.text_zh !== r.text;
-    return `<div class="speech-item">
-      <div class="speech-meta">
-        <span class="speech-time">${(r.timestamp||'').slice(-8)}</span>
-        <span class="lang-badge ${cssClass}">${r.lang_short || '?'}</span>
-        ${r.dialect ? `<span style="font-size:10px;color:var(--text3);">${escHtml(r.dialect)}</span>` : ''}
-      </div>
-      <div class="speech-orig">${escHtml(r.text)}</div>
-      ${hasTranslation ? `<div class="speech-zh">${escHtml(r.text_zh)}</div>` : ''}
-    </div>`;
-  }).join('');
-
-  // ── 渲染趋势图下方话术时间轴 ──
-  renderSpeechTimeline(sp.records, chartMinTime, chartMaxTime);
-
-  // ── 渲染话术方言分析面板 ──
-  renderSpeechDialectAnalysis(sp.records);
-
-  // ── 用正确的 speechCount 重新更新调优建议 ──
-  if (_sessionData) renderOptimPanel(_sessionData, sp);
-});
 
 // ── 词频气泡图渲染 ──────────────────────────────────────────
 const KW_STOPWORDS = new Set([
@@ -1325,7 +1405,7 @@ function closeScoreHistory() {
 function gradeColor(g) {
   return {S:'#22c55e',A:'#3b82f6',B:'#f59e0b',C:'#f97316',D:'#ef4444'}[g] || '#9ca3af';
 }
-
+</script>
 
 <!-- ── 版本日志弹窗 ── -->
 <div class="changelog-modal" id="changelogModal" onclick="if(event.target===this)closeChangelog()">

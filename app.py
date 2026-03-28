@@ -48,7 +48,8 @@ from src.database import (
     get_auto_monitor_list, upsert_auto_monitor, delete_auto_monitor,
     toggle_auto_monitor, get_enabled_auto_monitors,
     get_follower_snapshots, get_latest_follower_snapshot, get_all_rival_usernames,
-    calc_anchor_score, get_anchor_score_history, get_timeslot_heatmap, get_rival_speech_compare
+    calc_anchor_score, get_anchor_score_history, get_timeslot_heatmap, get_rival_speech_compare,
+    submit_feedback, get_all_feedbacks, update_feedback_status, delete_feedback
 )
 from src.monitor import start_monitor, stop_monitor, get_active_usernames, get_live_usernames, get_monitors_snapshot
 from src.rival_tracker import start_rival_tracker, trigger_snapshot_now
@@ -274,6 +275,56 @@ def api_change_password():
 
 
 # ── 管理员：用户管理 ──
+
+# ==================== 用户反馈 ====================
+
+@app.route('/api/feedback', methods=['POST'])
+@login_required
+def api_submit_feedback():
+    """提交反馈"""
+    u = get_current_user()
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'msg': '参数错误'}), 400
+    title = (data.get('title') or '').strip()
+    if not title:
+        return jsonify({'success': False, 'msg': '标题不能为空'}), 400
+    fb_type = data.get('type', 'feature')
+    if fb_type not in ('feature', 'bug', 'other'):
+        fb_type = 'feature'
+    desc = (data.get('desc') or '').strip()
+    fb_id = submit_feedback(u['id'], u['username'], fb_type, title, desc)
+    return jsonify({'success': True, 'id': fb_id})
+
+
+@app.route('/api/admin/feedbacks')
+@admin_required
+def api_admin_feedbacks():
+    """获取所有反馈（管理员）"""
+    status_filter = request.args.get('status', 'all')
+    rows = get_all_feedbacks(status_filter)
+    return jsonify({'success': True, 'feedbacks': rows})
+
+
+@app.route('/api/admin/feedback/<int:fb_id>/status', methods=['POST'])
+@admin_required
+def api_update_feedback_status(fb_id):
+    """更新反馈状态"""
+    data = request.get_json()
+    status = data.get('status', 'open')
+    if status not in ('open', 'done', 'rejected'):
+        return jsonify({'success': False, 'msg': '状态值无效'})
+    update_feedback_status(fb_id, status)
+    return jsonify({'success': True})
+
+
+@app.route('/api/admin/feedback/<int:fb_id>/delete', methods=['POST'])
+@admin_required
+def api_delete_feedback(fb_id):
+    """删除反馈"""
+    delete_feedback(fb_id)
+    return jsonify({'success': True})
+
 
 @app.route('/admin')
 @login_required
@@ -869,6 +920,7 @@ def api_compare():
                 'avg_peak': avg('peak_viewers'),
                 'avg_total': avg('total_viewers'),
                 'avg_gift': round(sum(s['total_gift_value'] or 0 for s in sessions) / n, 2),
+                'avg_likes': avg('total_likes'),
                 'avg_comments': avg('total_comments'),
                 'avg_followers': avg('new_followers'),
                 'avg_duration': round(sum(dur(s) for s in sessions) / n),
@@ -1365,6 +1417,14 @@ if __name__ == '__main__':
     print("🚀 TikTok 直播监测系统启动")
     print("📊 看板地址: http://localhost:5001")
     print("=" * 50)
+    # 预热 langid（避免第一次请求触发慢加载）
+    def _warmup_langid():
+        try:
+            import langid
+            langid.classify("hello world")
+        except Exception:
+            pass
+    threading.Thread(target=_warmup_langid, daemon=True).start()
     # 后台启动 Cloudflare Tunnel
     t = threading.Thread(target=_start_cloudflare_tunnel, args=(5001,), daemon=True)
     t.start()

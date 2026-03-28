@@ -8,6 +8,12 @@ from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'monitor.db')
 
+# ── 关键词翻译进程级缓存（避免重复调用 Google Translate）
+_KW_TRANSLATE_CACHE: dict = {}
+
+def _get_kw_cache():
+    return _KW_TRANSLATE_CACHE
+
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
@@ -174,6 +180,20 @@ def init_db():
             snapshot_date TEXT NOT NULL,
             created_at TEXT NOT NULL,
             UNIQUE(username, snapshot_date)
+        )
+    ''')
+
+    # 用户反馈表（需求/BUG 提交）
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS feedbacks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_user_id INTEGER DEFAULT 1,
+            submitter TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'feature',
+            title TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            status TEXT DEFAULT 'open',
+            created_at TEXT NOT NULL
         )
     ''')
 
@@ -384,23 +404,27 @@ def get_session_summary(session_id):
     c.execute('SELECT * FROM comments WHERE session_id=? ORDER BY timestamp DESC LIMIT 100', (session_id,))
     comments_raw = [dict(r) for r in c.fetchall()]
 
-    # 对评论做语言检测（纯本地，不走网络，毫秒级完成）
+    # 对评论做语言检测（纯本地，不走网络）
     # 翻译直接用数据库存的 text_zh 字段（监控时已实时翻译存入），不在此重复翻译
     try:
         from src.lang_detect import detect_language
-        comments = []
-        for cm in comments_raw:
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _detect_one(cm):
             if not cm.get('is_anchor') and cm.get('content'):
                 li = detect_language(cm['content'])
-                cm['lang'] = li.get('lang', 'other')
+                cm['lang']       = li.get('lang', 'other')
                 cm['lang_short'] = li.get('lang_short', '?')
-                cm['css_class'] = li.get('css_class', 'lang-other')
-                cm['dialect'] = li.get('dialect')
-                cm['flag'] = li.get('flag', '')
-                # text_zh 直接用数据库已存的值，没有就空字符串
+                cm['css_class']  = li.get('css_class', 'lang-other')
+                cm['dialect']    = li.get('dialect')
+                cm['flag']       = li.get('flag', '')
                 if not cm.get('text_zh'):
                     cm['text_zh'] = ''
-            comments.append(cm)
+            return cm
+
+        # 最多 8 线程并发（评论量通常 ≤100，8线程足够）
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            comments = list(pool.map(_detect_one, comments_raw))
     except Exception:
         comments = comments_raw
 
@@ -583,29 +607,40 @@ def get_speech_summary(session_id):
     for t in all_texts:
         all_words.extend([w.lower() for w in word_pat.findall(t) if len(w) > 1 and w.lower() not in stopwords])
     word_freq = Counter(all_words)
-    raw_keywords = [w for w, _ in word_freq.most_common(15)]
+    raw_keywords = [w for w, _ in word_freq.most_common(8)]
 
-    # 关键词翻译：非中文词尝试翻译为中文
-    keywords = []
-    try:
-        from src.translator import translate_to_zh
-    except Exception:
-        try:
-            from translator import translate_to_zh
-        except Exception:
-            translate_to_zh = None
+    # 关键词：直接返回词频数据，不做翻译（翻译由前端异步请求 /api/translate 获取）
+    # 这样 speech 接口本身在毫秒级返回，不被网络请求阻塞
+    keywords = [{'word': kw, 'zh': _KW_TRANSLATE_CACHE.get(kw, ''), 'count': word_freq.get(kw, 1)}
+                for kw in raw_keywords]
 
-    for kw in raw_keywords:
-        zh = ''
-        is_chinese = all('\u4e00' <= c <= '\u9fff' for c in kw if c.isalpha())
-        if not is_chinese and translate_to_zh:
+    # 后台并发预热翻译缓存（非阻塞，下次请求时直接命中缓存）
+    _needs_translate = [kw for kw in raw_keywords
+                        if kw not in _KW_TRANSLATE_CACHE
+                        and not all('\u4e00' <= c <= '\u9fff' for c in kw if c.isalpha())]
+    if _needs_translate:
+        import threading
+        def _bg_translate():
             try:
-                translated = translate_to_zh(kw)
-                if translated and translated.strip() and translated.strip().lower() != kw.lower():
-                    zh = translated.strip()
+                from src.translator import translate_to_zh
             except Exception:
-                pass
-        keywords.append({'word': kw, 'zh': zh, 'count': word_freq.get(kw, 1)})
+                try:
+                    from translator import translate_to_zh
+                except Exception:
+                    return
+            from concurrent.futures import ThreadPoolExecutor
+            def _do(kw):
+                try:
+                    r = translate_to_zh(kw)
+                    if r and r.strip().lower() != kw.lower():
+                        _KW_TRANSLATE_CACHE[kw] = r.strip()
+                    else:
+                        _KW_TRANSLATE_CACHE[kw] = ''
+                except Exception:
+                    _KW_TRANSLATE_CACHE[kw] = ''
+            with ThreadPoolExecutor(max_workers=8) as p:
+                list(p.map(_do, _needs_translate))
+        threading.Thread(target=_bg_translate, daemon=True).start()
 
     # 关键句：含高频词的句子，且长度 > 10 字符，去重取 Top10
     def score_sentence(s):
@@ -1258,4 +1293,64 @@ def get_rival_speech_compare(own_usernames, rival_usernames, sessions_per_accoun
         'rival': dict(list(rival_kw.items())[:30]),
         'diff': diff[:20],
     }
+
+
+# ==================== 用户反馈 ====================
+
+def submit_feedback(owner_user_id, submitter, fb_type, title, description):
+    """提交反馈（需求/BUG）"""
+    conn = get_conn()
+    c = conn.cursor()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute('''
+        INSERT INTO feedbacks (owner_user_id, submitter, type, title, description, status, created_at)
+        VALUES (?, ?, ?, ?, ?, 'open', ?)
+    ''', (owner_user_id, submitter, fb_type, title, description, now))
+    fb_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return fb_id
+
+
+def get_all_feedbacks(status_filter=None):
+    """获取所有反馈列表（管理员用）"""
+    conn = get_conn()
+    c = conn.cursor()
+    if status_filter and status_filter != 'all':
+        c.execute('''
+            SELECT f.*, u.username as owner_name
+            FROM feedbacks f
+            LEFT JOIN sys_users u ON f.owner_user_id = u.id
+            WHERE f.status = ?
+            ORDER BY f.created_at DESC
+        ''', (status_filter,))
+    else:
+        c.execute('''
+            SELECT f.*, u.username as owner_name
+            FROM feedbacks f
+            LEFT JOIN sys_users u ON f.owner_user_id = u.id
+            ORDER BY f.created_at DESC
+        ''')
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def update_feedback_status(fb_id, status):
+    """更新反馈状态：open / done / rejected"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute('UPDATE feedbacks SET status=? WHERE id=?', (status, fb_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_feedback(fb_id):
+    """删除反馈"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute('DELETE FROM feedbacks WHERE id=?', (fb_id,))
+    conn.commit()
+    conn.close()
+
 

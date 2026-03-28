@@ -96,6 +96,20 @@
   .modal { background: var(--surface); border-radius: var(--radius); padding: 28px; width: 360px; box-shadow: 0 8px 40px rgba(0,0,0,.15); }
   .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
   .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  /* 反馈列表 */
+  .fb-table { width:100%; border-collapse:collapse; }
+  .fb-table th { font-size:12px; color:var(--text2); padding:8px 12px; text-align:left; background:var(--surface2); border-bottom:1px solid var(--border); }
+  .fb-table td { padding:10px 12px; border-bottom:1px solid #f0f1f5; font-size:13px; vertical-align:top; }
+  .fb-table tr:last-child td { border-bottom:none; }
+  .fb-table tr:hover td { background:var(--surface2); }
+  .fb-type-feature { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; background:#eff6ff; color:#1d4ed8; }
+  .fb-type-bug { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; background:#fef2f2; color:#dc2626; }
+  .fb-type-other { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; background:#f3f4f6; color:#374151; }
+  .fb-status-open { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; background:#fef3c7; color:#b45309; }
+  .fb-status-done { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; background:#d1fae5; color:#065f46; }
+  .fb-status-rejected { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; background:#fee2e2; color:#991b1b; }
+  .fb-desc { font-size:12px; color:var(--text2); margin-top:3px; white-space:pre-wrap; word-break:break-all; }
 </style>
 </head>
 <body>
@@ -201,6 +215,34 @@
       <div class="msg-bar" id="pwMsg"></div>
     </div>
   </div>
+
+  <!-- 反馈管理 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">💡 用户反馈管理 <span id="fbUnreadBadge" style="display:none;font-size:11px;background:#fef3c7;color:#b45309;border-radius:10px;padding:2px 7px;margin-left:8px;"></span></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="fbStatusFilter" onchange="loadFeedbacks()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;">
+          <option value="all">全部</option>
+          <option value="open">待处理</option>
+          <option value="done">已完成</option>
+          <option value="rejected">不处理</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="copyAllFeedbacks()">📋 一键复制</button>
+        <button class="btn btn-sm" style="background:var(--bg);border:1px solid var(--border)" onclick="loadFeedbacks()">刷新</button>
+      </div>
+    </div>
+    <div class="card-body" style="padding:0">
+      <table class="fb-table">
+        <thead>
+          <tr><th style="width:60px">ID</th><th style="width:70px">类型</th><th>标题 / 描述</th><th style="width:80px">提交人</th><th style="width:80px">状态</th><th style="width:120px">时间</th><th style="width:130px">操作</th></tr>
+        </thead>
+        <tbody id="fbList">
+          <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <!-- 重置密码模态 -->
@@ -232,6 +274,7 @@ let _resetUserId = null;
   if (!me.is_admin) { location.href = '/'; return; }
   document.getElementById('navUsername').textContent = me.username;
   loadUsers();
+  loadFeedbacks();
 })();
 
 async function loadUsers() {
@@ -441,6 +484,86 @@ function showMsg(el, text, type) {
 document.getElementById('resetOverlay').addEventListener('click', function(e) {
   if (e.target === this) closeReset();
 });
+
+// ── 反馈管理 ──
+const FB_TYPE_LABEL = { feature: '🚀 需求', bug: '🐛 BUG', other: '💬 其他' };
+const FB_STATUS_LABEL = { open: '待处理', done: '✅ 已完成', rejected: '❌ 不处理' };
+
+let _allFeedbacks = [];
+
+async function loadFeedbacks() {
+  const filter = document.getElementById('fbStatusFilter').value;
+  const tbody = document.getElementById('fbList');
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">加载中…</td></tr>';
+  try {
+    const res = await fetch(`/api/admin/feedbacks?status=${filter}`);
+    const data = await res.json();
+    _allFeedbacks = data.feedbacks || [];
+    const openCount = _allFeedbacks.filter(f => f.status === 'open').length;
+    const badge = document.getElementById('fbUnreadBadge');
+    if (openCount > 0) { badge.style.display = ''; badge.textContent = `${openCount} 待处理`; }
+    else { badge.style.display = 'none'; }
+    if (!_allFeedbacks.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">暂无反馈</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _allFeedbacks.map(f => `
+      <tr>
+        <td style="color:var(--text3);font-size:12px;">#${f.id}</td>
+        <td><span class="fb-type-${f.type}">${FB_TYPE_LABEL[f.type] || f.type}</span></td>
+        <td>
+          <div style="font-weight:600;color:var(--text);">${escHtml(f.title)}</div>
+          ${f.description ? `<div class="fb-desc">${escHtml(f.description)}</div>` : ''}
+        </td>
+        <td style="color:var(--text2);">${escHtml(f.submitter || f.owner_name || '-')}</td>
+        <td><span class="fb-status-${f.status}">${FB_STATUS_LABEL[f.status] || f.status}</span></td>
+        <td style="color:var(--text3);font-size:12px;">${(f.created_at||'').slice(0,16)}</td>
+        <td>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            ${f.status !== 'done' ? `<button class="btn btn-sm" style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;" onclick="setFbStatus(${f.id},'done')">完成</button>` : ''}
+            ${f.status !== 'rejected' ? `<button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;" onclick="setFbStatus(${f.id},'rejected')">不处理</button>` : ''}
+            ${f.status !== 'open' ? `<button class="btn btn-sm" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;" onclick="setFbStatus(${f.id},'open')">重开</button>` : ''}
+            <button class="btn btn-sm btn-danger" onclick="deleteFb(${f.id})">删</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">加载失败</td></tr>';
+  }
+}
+
+async function setFbStatus(id, status) {
+  await fetch(`/api/admin/feedback/${id}/status`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ status })
+  });
+  loadFeedbacks();
+}
+
+async function deleteFb(id) {
+  if (!confirm('确定删除这条反馈？')) return;
+  await fetch(`/api/admin/feedback/${id}/delete`, { method:'POST' });
+  loadFeedbacks();
+}
+
+function copyAllFeedbacks() {
+  const list = _allFeedbacks.filter(f => {
+    const filter = document.getElementById('fbStatusFilter').value;
+    return filter === 'all' || f.status === filter;
+  });
+  if (!list.length) { alert('没有反馈内容可复制'); return; }
+  const lines = list.map(f =>
+    `[#${f.id}] [${FB_TYPE_LABEL[f.type]||f.type}] ${f.title}${f.description ? '\n  描述：' + f.description : ''}\n  提交人：${f.submitter||'-'}  时间：${(f.created_at||'').slice(0,16)}  状态：${FB_STATUS_LABEL[f.status]||f.status}`
+  ).join('\n\n');
+  navigator.clipboard.writeText(lines).then(() => alert(`✅ 已复制 ${list.length} 条反馈到剪贴板`)).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = lines; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    alert(`✅ 已复制 ${list.length} 条反馈`);
+  });
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
 </body>
 </html>

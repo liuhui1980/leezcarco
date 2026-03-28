@@ -473,7 +473,7 @@ function renderLeaderboard(data) {
 
   const metrics = [
     { key:'avg_peak', label:'峰值在线', unit:'' },
-    { key:'avg_gift', label:'礼物收入', unit:'$' },
+    { key:'avg_likes', label:'点赞数', unit:'' },
     { key:'avg_comments', label:'评论数', unit:'' },
     { key:'avg_followers', label:'新增关注', unit:'' },
   ];
@@ -527,7 +527,7 @@ function renderCompareCards(data) {
       </div>
       <div class="compare-metrics">
         <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_peak)}</div><div class="cm-label">峰值在线</div></div>
-        <div class="cm"><div class="cm-val ${valCls}">$${(a.avg_gift||0).toFixed(1)}</div><div class="cm-label">礼物收入</div></div>
+        <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_likes)}</div><div class="cm-label">点赞数</div></div>
         <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_comments)}</div><div class="cm-label">评论数</div></div>
         <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_followers)}</div><div class="cm-label">新增关注</div></div>
         <div class="cm"><div class="cm-val ${valCls}">${formatNum(a.avg_total)}</div><div class="cm-label">累计观看</div></div>
@@ -567,7 +567,7 @@ function renderLiveSection(liveRivals) {
         </div>
         <div class="compare-metrics">
           <div class="cm"><div class="cm-val ${s._type}">${formatNum(s.peak_viewers)}</div><div class="cm-label">在线人数</div></div>
-          <div class="cm"><div class="cm-val ${s._type}">$${(s.total_gift_value||0).toFixed(1)}</div><div class="cm-label">礼物收入</div></div>
+          <div class="cm"><div class="cm-val ${s._type}">${formatNum(s.total_likes)}</div><div class="cm-label">点赞数</div></div>
           <div class="cm"><div class="cm-val ${s._type}">${formatNum(s.total_comments)}</div><div class="cm-label">评论数</div></div>
         </div>
         ${note}
