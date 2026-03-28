@@ -238,6 +238,40 @@
 
   <!-- Accounts list -->
   <div id="accountsList"><div class="loading">⏳ 加载中...</div></div>
+
+  <!-- ★ 开播时段热力图 -->
+  <div id="heatmapSection" style="margin-top:24px;display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:15px;font-weight:700;color:var(--text);">🕐 开播时段分析</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="heatmapUserFilter" onchange="loadHeatmap()" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);">
+          <option value="">全部账号</option>
+        </select>
+        <select id="heatmapDays" onchange="loadHeatmap()" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);">
+          <option value="30">近30天</option>
+          <option value="90" selected>近90天</option>
+          <option value="180">近180天</option>
+        </select>
+      </div>
+    </div>
+    <!-- 最佳时段推荐 -->
+    <div id="bestSlots" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+    <!-- 热力图 -->
+    <div style="overflow-x:auto;">
+      <div id="heatmapGrid" style="display:grid;grid-template-columns:56px repeat(24,1fr);gap:2px;min-width:600px;"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--text3);">
+        <span>低</span>
+        <div style="display:flex;gap:2px;">
+          <div style="width:12px;height:12px;border-radius:2px;background:#f0f9ff;border:1px solid #e0f2fe;"></div>
+          <div style="width:12px;height:12px;border-radius:2px;background:#7dd3fc;"></div>
+          <div style="width:12px;height:12px;border-radius:2px;background:#0ea5e9;"></div>
+          <div style="width:12px;height:12px;border-radius:2px;background:#0284c7;"></div>
+          <div style="width:12px;height:12px;border-radius:2px;background:#075985;"></div>
+        </div>
+        <span>高（峰值在线均值）</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -542,9 +576,84 @@ async function initPage() {
     const sessions = await res.json();
     allSessions = sessions.map(s => ({ ...s, _group: groups[s.username] || 'own' }));
     renderAccounts();
+    // 填充热力图账号选择器
+    const users = [...new Set(allSessions.map(s=>s.username))].sort();
+    const sel = document.getElementById('heatmapUserFilter');
+    users.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u; opt.textContent = '@'+u;
+      sel.appendChild(opt);
+    });
+    // 加载热力图
+    loadHeatmap();
   } catch(e) {
     document.getElementById('accountsList').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div>加载失败，请刷新重试</div></div>';
   }
+}
+
+// ── 时段热力图 ──
+const WEEKDAY_NAMES = ['周一','周二','周三','周四','周五','周六','周日'];
+const HOUR_COLORS = ['#f0f9ff','#bae6fd','#7dd3fc','#38bdf8','#0ea5e9','#0284c7','#075985'];
+
+async function loadHeatmap() {
+  const username = document.getElementById('heatmapUserFilter').value;
+  const days = document.getElementById('heatmapDays').value;
+  const url = `/api/heatmap?days=${days}${username ? '&username='+encodeURIComponent(username) : ''}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    renderHeatmap(data);
+  } catch(e) {}
+}
+
+function renderHeatmap(data) {
+  const section = document.getElementById('heatmapSection');
+  const grid = document.getElementById('heatmapGrid');
+  const slotsEl = document.getElementById('bestSlots');
+  const hm = data.heatmap || {};
+
+  // 最大值（用于归一化颜色深度）
+  let maxVal = 0;
+  Object.values(hm).forEach(hh => Object.values(hh).forEach(v => { if(v > maxVal) maxVal = v; }));
+
+  if (maxVal === 0) {
+    section.style.display = '';
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3);font-size:13px;">暂无足够历史数据，开播记录积累后自动显示</div>';
+    slotsEl.innerHTML = '';
+    return;
+  }
+
+  section.style.display = '';
+
+  // 最佳时段推荐
+  const best = data.best_slots || [];
+  slotsEl.innerHTML = best.map((s, i) => `
+    <div style="background:${i===0?'#0284c7':i===1?'#0ea5e9':'#38bdf8'};color:#fff;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;">
+      ${i===0?'🥇':i===1?'🥈':'🥉'} ${s.weekday} ${s.hour}:00-${s.hour+1}:00
+      <span style="opacity:.85;font-weight:400;">均值${s.avg_peak}人</span>
+    </div>
+  `).join('');
+
+  // 绘制热力图
+  let html = '';
+  // 表头（小时）
+  html += '<div style="font-size:10px;color:var(--text3);text-align:right;padding-right:4px;"></div>';
+  for (let h = 0; h < 24; h++) {
+    html += `<div style="font-size:9px;color:var(--text3);text-align:center;">${h}</div>`;
+  }
+  // 每行（周几）
+  for (let wd = 0; wd < 7; wd++) {
+    html += `<div style="font-size:11px;color:var(--text2);text-align:right;padding-right:6px;display:flex;align-items:center;justify-content:flex-end;">${WEEKDAY_NAMES[wd]}</div>`;
+    for (let h = 0; h < 24; h++) {
+      const val = hm[wd]?.[h] || 0;
+      const ratio = val / maxVal;
+      const colorIdx = val === 0 ? 0 : Math.min(Math.ceil(ratio * 6), 6);
+      const bg = HOUR_COLORS[colorIdx];
+      const title = val > 0 ? `${WEEKDAY_NAMES[wd]} ${h}:00 均值${val}人` : '';
+      html += `<div title="${title}" style="background:${bg};border-radius:3px;cursor:${val>0?'pointer':'default'};aspect-ratio:1;" onclick="${val>0?`document.getElementById('filterUser').value='';renderAccounts()`:''}">&nbsp;</div>`;
+    }
+  }
+  grid.innerHTML = html;
 }
 
 initPage();

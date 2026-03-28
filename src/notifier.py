@@ -147,3 +147,40 @@ def test_notify():
     except Exception as e:
         print(f"❌ 推送异常: {e}")
         return False
+
+
+def send_high_value_comment_notify(username: str, intent: str, label: str,
+                                    comment: str, comment_zh: str, commenter: str):
+    """
+    高价值评论实时推送（询价/询货，30秒节流由前端控制）
+    """
+    if not WXPUSHER_APP_TOKEN or not WXPUSHER_UID:
+        return False
+    now = datetime.now().strftime('%H:%M:%S')
+    intent_icon = {'price': '💰', 'stock': '🚗', 'qa': '❓'}.get(intent, '🔔')
+    content = f"""
+<h3>{intent_icon} 高价值评论提醒 — {label}</h3>
+<table border="1" cellpadding="5" style="border-collapse:collapse;width:100%;">
+  <tr><td><b>直播间</b></td><td>@{username}</td></tr>
+  <tr><td><b>评论者</b></td><td>@{commenter}</td></tr>
+  <tr><td><b>原文</b></td><td>{comment}</td></tr>
+  <tr><td><b>中文</b></td><td>{comment_zh or '（翻译中）'}</td></tr>
+  <tr><td><b>时间</b></td><td>{now}</td></tr>
+</table>
+<p style="color:#666;font-size:12px;">💡 立即回复可提升转化率！</p>
+"""
+    payload = {
+        'appToken': WXPUSHER_APP_TOKEN,
+        'content': content,
+        'summary': f'{intent_icon} @{username} 收到{label}：{comment[:30]}...',
+        'contentType': 2,
+        'uids': [WXPUSHER_UID],
+    }
+    try:
+        resp = requests.post(WXPUSHER_API, json=payload, timeout=8)
+        result = resp.json()
+        return result.get('success', False)
+    except Exception as e:
+        logger.error(f"❌ 高价值评论通知推送异常: {e}")
+        return False
+

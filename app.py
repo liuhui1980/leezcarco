@@ -47,7 +47,8 @@ from src.database import (
     set_user_status,
     get_auto_monitor_list, upsert_auto_monitor, delete_auto_monitor,
     toggle_auto_monitor, get_enabled_auto_monitors,
-    get_follower_snapshots, get_latest_follower_snapshot, get_all_rival_usernames
+    get_follower_snapshots, get_latest_follower_snapshot, get_all_rival_usernames,
+    calc_anchor_score, get_anchor_score_history, get_timeslot_heatmap, get_rival_speech_compare
 )
 from src.monitor import start_monitor, stop_monitor, get_active_usernames, get_live_usernames, get_monitors_snapshot
 from src.rival_tracker import start_rival_tracker, trigger_snapshot_now
@@ -1274,6 +1275,82 @@ def on_request_status():
         'active_sessions': get_active_sessions(),
         'monitors_snapshot': get_monitors_snapshot(),  # 完整实时状态快照
     })
+
+
+# ==================== 主播评分卡 API ====================
+
+@app.route('/api/session/<int:session_id>/score')
+@login_required
+def api_session_score(session_id):
+    """返回单场直播的主播评分卡"""
+    score = calc_anchor_score(session_id)
+    if not score:
+        return jsonify({'error': '场次不存在'}), 404
+    return jsonify(score)
+
+
+@app.route('/api/anchor/<username>/score_history')
+@login_required
+def api_anchor_score_history(username):
+    """返回某主播近N场评分趋势"""
+    u = get_current_user()
+    uid = None if u['is_admin'] else u['id']
+    history = get_anchor_score_history(username, limit=20, owner_user_id=uid)
+    return jsonify({'history': history})
+
+
+# ==================== 时段热力图 API ====================
+
+@app.route('/api/heatmap')
+@login_required
+def api_heatmap():
+    """返回开播时段热力图数据"""
+    u = get_current_user()
+    uid = None if u['is_admin'] else u['id']
+    username = request.args.get('username')
+    days = int(request.args.get('days', 90))
+    data = get_timeslot_heatmap(owner_user_id=uid, username=username or None, days=days)
+    return jsonify(data)
+
+
+# ==================== 竞品话术对比 API ====================
+
+@app.route('/api/rivals/speech_compare')
+@login_required
+def api_rival_speech_compare():
+    """竞品话术 vs 自营话术对比分析"""
+    u = get_current_user()
+    uid = None if u['is_admin'] else u['id']
+    from src.database import get_conn
+    conn = get_conn()
+    c = conn.cursor()
+    if uid:
+        c.execute("SELECT username FROM account_groups WHERE owner_user_id=? AND group_name='own'", (uid,))
+    else:
+        c.execute("SELECT username FROM account_groups WHERE group_name='own'")
+    own_users = [r['username'] for r in c.fetchall()]
+    c.execute("SELECT DISTINCT username FROM account_groups WHERE group_name='rival'")
+    rival_users = [r['username'] for r in c.fetchall()]
+    conn.close()
+    result = get_rival_speech_compare(own_users, rival_users, sessions_per_account=10)
+    return jsonify(result)
+
+
+@app.route('/api/notify/high_value_comment', methods=['POST'])
+@login_required
+def api_notify_high_value_comment():
+    """高价值评论微信推送接口（前端触发，已做30秒节流）"""
+    data = request.get_json() or {}
+    from src.notifier import send_high_value_comment_notify
+    ok = send_high_value_comment_notify(
+        username=data.get('username', ''),
+        intent=data.get('intent', ''),
+        label=data.get('label', ''),
+        comment=data.get('comment', ''),
+        comment_zh=data.get('comment_zh', ''),
+        commenter=data.get('commenter', ''),
+    )
+    return jsonify({'success': ok})
 
 
 if __name__ == '__main__':

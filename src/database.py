@@ -934,3 +934,329 @@ def get_all_rival_usernames():
     conn.close()
     return rows
 
+
+# ==================== 主播评分卡 ====================
+
+def calc_anchor_score(session_id):
+    """
+    计算单场直播主播评分（0-100分），返回各维度分数和总分。
+    维度：互动率(25) + 留存率(20) + 话术活跃度(20) + 语言覆盖(20) + 峰值爬升速度(15)
+    """
+    import re
+    from collections import Counter
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute('SELECT * FROM live_sessions WHERE id=?', (session_id,))
+    s = c.fetchone()
+    if not s:
+        conn.close()
+        return None
+    s = dict(s)
+
+    # ── 基础数据 ──
+    peak_viewers = max(s.get('peak_viewers') or 1, 1)
+    total_comments = s.get('total_comments') or 0
+    total_viewers = max(s.get('total_viewers') or 1, 1)
+
+    # 直播时长（分钟）
+    duration_min = 0
+    try:
+        from datetime import datetime as _dt
+        if s.get('start_time') and s.get('end_time'):
+            t0 = _dt.strptime(s['start_time'], '%Y-%m-%d %H:%M:%S')
+            t1 = _dt.strptime(s['end_time'], '%Y-%m-%d %H:%M:%S')
+            duration_min = max((t1 - t0).total_seconds() / 60, 1)
+        else:
+            duration_min = 60  # 未结束场次默认60分钟
+    except Exception:
+        duration_min = 60
+
+    # ── 维度1：互动率（评论数/峰值在线，25分）──
+    interaction_rate = total_comments / peak_viewers
+    # 行业均值约0.15，优秀>0.3
+    score_interaction = min(interaction_rate / 0.3 * 25, 25)
+
+    # ── 维度2：留存率（平均在线/峰值在线，20分）──
+    c.execute('SELECT AVG(viewer_count) as avg_v FROM metrics_snapshots WHERE session_id=?', (session_id,))
+    row = c.fetchone()
+    avg_viewers = (row['avg_v'] or 0) if row else 0
+    retention_rate = avg_viewers / peak_viewers if peak_viewers > 0 else 0
+    # 优秀留存>0.6
+    score_retention = min(retention_rate / 0.6 * 20, 20)
+
+    # ── 维度3：话术活跃度（每10分钟话术条数，20分）──
+    c.execute('SELECT COUNT(*) as cnt FROM speech_records WHERE session_id=? AND is_anchor=0', (session_id,))
+    # speech_records没有is_anchor列，用全量
+    c.execute('SELECT COUNT(*) as cnt FROM speech_records WHERE session_id=?', (session_id,))
+    row = c.fetchone()
+    speech_cnt = (row['cnt'] or 0) if row else 0
+    speech_per_10min = speech_cnt / duration_min * 10
+    # 优秀：每10分钟>8条
+    score_speech = min(speech_per_10min / 8 * 20, 20)
+
+    # ── 维度4：语言覆盖（阿语+英语互动占比，20分）──
+    c.execute('''
+        SELECT lang_short, COUNT(*) as cnt
+        FROM comments WHERE session_id=? AND is_anchor=0
+        GROUP BY lang_short
+    ''', (session_id,))
+    lang_rows = c.fetchall()
+    lang_total = sum(r['cnt'] for r in lang_rows)
+    lang_ar = sum(r['cnt'] for r in lang_rows if r['lang_short'] in ('AR', 'ar'))
+    lang_en = sum(r['cnt'] for r in lang_rows if r['lang_short'] in ('EN', 'en'))
+    lang_target_ratio = (lang_ar + lang_en) / lang_total if lang_total > 0 else 0
+    # 目标语言（阿+英）占比>0.7为优秀
+    score_lang = min(lang_target_ratio / 0.7 * 20, 20)
+
+    # ── 维度5：峰值爬升速度（开播30分钟内达到峰值的比例，15分）──
+    score_ramp = 0
+    try:
+        from datetime import datetime as _dt, timedelta
+        if s.get('start_time'):
+            t0 = _dt.strptime(s['start_time'], '%Y-%m-%d %H:%M:%S')
+            t30 = (t0 + timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
+            c.execute('''
+                SELECT MAX(viewer_count) as max_v
+                FROM metrics_snapshots
+                WHERE session_id=? AND timestamp <= ?
+            ''', (session_id, t30))
+            row = c.fetchone()
+            peak_30 = (row['max_v'] or 0) if row else 0
+            ramp_ratio = peak_30 / peak_viewers if peak_viewers > 0 else 0
+            # 30分钟内能到峰值60%以上为优秀
+            score_ramp = min(ramp_ratio / 0.6 * 15, 15)
+    except Exception:
+        score_ramp = 7.5  # 数据不足时给中间分
+
+    conn.close()
+
+    total_score = score_interaction + score_retention + score_speech + score_lang + score_ramp
+
+    # 等级
+    if total_score >= 80:
+        grade, grade_color = 'S', '#22c55e'
+    elif total_score >= 65:
+        grade, grade_color = 'A', '#3b82f6'
+    elif total_score >= 50:
+        grade, grade_color = 'B', '#f59e0b'
+    elif total_score >= 35:
+        grade, grade_color = 'C', '#f97316'
+    else:
+        grade, grade_color = 'D', '#ef4444'
+
+    return {
+        'total': round(total_score, 1),
+        'grade': grade,
+        'grade_color': grade_color,
+        'dimensions': {
+            'interaction': {'score': round(score_interaction, 1), 'max': 25, 'label': '互动率',
+                            'detail': f'{interaction_rate:.1%} (评论/峰值在线)'},
+            'retention': {'score': round(score_retention, 1), 'max': 20, 'label': '留存率',
+                          'detail': f'{retention_rate:.1%} (均值/峰值在线)'},
+            'speech': {'score': round(score_speech, 1), 'max': 20, 'label': '话术活跃度',
+                       'detail': f'{speech_per_10min:.1f} 条/10min'},
+            'lang': {'score': round(score_lang, 1), 'max': 20, 'label': '语言覆盖',
+                     'detail': f'阿+英 {lang_target_ratio:.1%}'},
+            'ramp': {'score': round(score_ramp, 1), 'max': 15, 'label': '峰值爬升',
+                     'detail': f'30min内达峰值 {min(ramp_ratio if "ramp_ratio" in dir() else 0, 1):.1%}'},
+        },
+        'duration_min': round(duration_min, 0),
+        'peak_viewers': peak_viewers,
+        'interaction_rate': round(interaction_rate, 3),
+        'retention_rate': round(retention_rate, 3),
+    }
+
+
+def get_anchor_score_history(username, limit=20, owner_user_id=None):
+    """获取某主播最近N场的评分历史（用于趋势图）"""
+    conn = get_conn()
+    c = conn.cursor()
+    if owner_user_id:
+        c.execute('''
+            SELECT id, start_time, peak_viewers, total_comments, end_time
+            FROM live_sessions
+            WHERE username=? AND owner_user_id=? AND status='ended'
+            ORDER BY start_time DESC LIMIT ?
+        ''', (username, owner_user_id, limit))
+    else:
+        c.execute('''
+            SELECT id, start_time, peak_viewers, total_comments, end_time
+            FROM live_sessions
+            WHERE username=? AND status='ended'
+            ORDER BY start_time DESC LIMIT ?
+        ''', (username, limit))
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    results = []
+    for r in rows:
+        score = calc_anchor_score(r['id'])
+        if score:
+            results.append({
+                'session_id': r['id'],
+                'start_time': r['start_time'],
+                'total_score': score['total'],
+                'grade': score['grade'],
+            })
+    return results
+
+
+# ==================== 时段热力图 ====================
+
+def get_timeslot_heatmap(owner_user_id=None, username=None, days=90):
+    """
+    返回开播时段热力图数据：{weekday(0=周一..6=周日): {hour: avg_peak_viewers}}
+    """
+    from datetime import datetime as _dt, timedelta
+    conn = get_conn()
+    c = conn.cursor()
+
+    since = (_dt.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    params = [since]
+    sql = "SELECT start_time, peak_viewers FROM live_sessions WHERE start_time >= ? AND status='ended'"
+    if owner_user_id:
+        sql += ' AND owner_user_id=?'
+        params.append(owner_user_id)
+    if username:
+        sql += ' AND username=?'
+        params.append(username)
+    c.execute(sql, params)
+    rows = c.fetchall()
+    conn.close()
+
+    from collections import defaultdict
+    bucket = defaultdict(list)  # (weekday, hour) -> [peak_viewers]
+    for r in rows:
+        try:
+            t = _dt.strptime(r['start_time'], '%Y-%m-%d %H:%M:%S')
+            key = (t.weekday(), t.hour)  # 0=周一
+            bucket[key].append(r['peak_viewers'] or 0)
+        except Exception:
+            pass
+
+    # 转成前端友好格式
+    heatmap = {}
+    for (wd, h), vals in bucket.items():
+        if wd not in heatmap:
+            heatmap[wd] = {}
+        heatmap[wd][h] = round(sum(vals) / len(vals))
+
+    # 找最佳时段（按平均峰值排序，取top3）
+    flat = [(wd, h, round(sum(v)/len(v))) for (wd, h), v in bucket.items()]
+    flat.sort(key=lambda x: -x[2])
+    weekday_names = ['周一','周二','周三','周四','周五','周六','周日']
+    best_slots = [
+        {'weekday': weekday_names[wd], 'hour': h, 'avg_peak': peak}
+        for wd, h, peak in flat[:3]
+    ]
+
+    return {'heatmap': heatmap, 'best_slots': best_slots, 'weekday_names': weekday_names}
+
+
+# ==================== 竞品话术对比 ====================
+
+def get_speech_keywords(session_ids, top_n=50, exclude_own=False):
+    """
+    提取多场次的话术高频词，返回词频字典。
+    exclude_own=True 时过滤停用词更严格（竞品差异词分析用）
+    """
+    import re
+    from collections import Counter
+
+    conn = get_conn()
+    c = conn.cursor()
+    if not session_ids:
+        conn.close()
+        return {}
+    placeholders = ','.join('?' * len(session_ids))
+    c.execute(f'SELECT text, text_zh FROM speech_records WHERE session_id IN ({placeholders})', session_ids)
+    rows = c.fetchall()
+    conn.close()
+
+    # 中文停用词
+    zh_stop = {
+        '的','了','是','在','我','你','他','她','它','们','就','都','也','和','而','但','或','与',
+        '这','那','有','说','要','来','去','对','可','不','把','被','让','给','会','能','好',
+        '什么','这个','那个','一个','可以','没有','因为','所以','如果','这样','那样','大家',
+        '大','小','多','少','一','二','三','四','五','中','上','下','里','外','前','后',
+    }
+    en_stop = {
+        'the','a','an','is','are','was','were','be','been','have','has','had','do','does','did',
+        'this','that','it','we','you','they','i','and','or','but','in','on','at','to','for',
+        'of','with','by','from','so','if','not','no','yes','ok','yeah','hi','hey',
+    }
+    ar_stop = {
+        'في','من','على','إلى','عن','مع','هذا','هذه','ذلك','التي','الذي','أن','كان','كانت',
+        'هو','هي','نحن','أنا','انت','لا','نعم','اوك',
+    }
+
+    word_pat = re.compile(r'[\w\u4e00-\u9fff\u0600-\u06ff]{2,}')
+    counter = Counter()
+    for row in rows:
+        texts = [row['text'] or '', row['text_zh'] or '']
+        for text in texts:
+            words = word_pat.findall(text.lower())
+            for w in words:
+                if w in zh_stop or w in en_stop or w in ar_stop:
+                    continue
+                if w.isdigit():
+                    continue
+                counter[w] += 1
+
+    return dict(counter.most_common(top_n))
+
+
+def get_rival_speech_compare(own_usernames, rival_usernames, sessions_per_account=10):
+    """
+    对比自营和竞品账号近N场的话术差异词。
+    返回：own_keywords, rival_keywords, diff_keywords（竞品有但自营没强调的词）
+    """
+    conn = get_conn()
+    c = conn.cursor()
+
+    def get_recent_session_ids(usernames, n):
+        if not usernames:
+            return []
+        ids = []
+        for u in usernames:
+            c.execute('''
+                SELECT id FROM live_sessions WHERE username=?
+                ORDER BY start_time DESC LIMIT ?
+            ''', (u, n))
+            ids += [r['id'] for r in c.fetchall()]
+        return ids
+
+    own_ids = get_recent_session_ids(own_usernames, sessions_per_account)
+    rival_ids = get_recent_session_ids(rival_usernames, sessions_per_account)
+    conn.close()
+
+    own_kw = get_speech_keywords(own_ids, top_n=80)
+    rival_kw = get_speech_keywords(rival_ids, top_n=80)
+
+    if not own_kw and not rival_kw:
+        return {'own': {}, 'rival': {}, 'diff': [], 'rival_only': []}
+
+    # 归一化频率（防止场次数量不同导致偏差）
+    own_total = max(sum(own_kw.values()), 1)
+    rival_total = max(sum(rival_kw.values()), 1)
+    own_norm = {k: v/own_total for k, v in own_kw.items()}
+    rival_norm = {k: v/rival_total for k, v in rival_kw.items()}
+
+    # 差异词：竞品频率 > 自营频率 * 1.5（即竞品明显更强调的词）
+    diff = []
+    all_words = set(rival_norm.keys())
+    for w in all_words:
+        r_freq = rival_norm.get(w, 0)
+        o_freq = own_norm.get(w, 0)
+        if r_freq > o_freq * 1.5 and rival_kw.get(w, 0) >= 3:
+            diff.append({'word': w, 'rival_freq': round(r_freq*1000, 1), 'own_freq': round(o_freq*1000, 1),
+                         'ratio': round(r_freq/(o_freq+0.0001), 1)})
+    diff.sort(key=lambda x: -x['ratio'])
+
+    return {
+        'own': dict(list(own_kw.items())[:30]),
+        'rival': dict(list(rival_kw.items())[:30]),
+        'diff': diff[:20],
+    }
+

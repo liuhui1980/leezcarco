@@ -272,6 +272,33 @@
     .panel { padding:14px; }
   }
 
+  /* ── 主播评分卡 ── */
+  .score-panel { background:linear-gradient(135deg,#f0f9ff,#e0f2fe); border:2px solid #bae6fd; border-radius:var(--radius); padding:20px; margin-bottom:20px; box-shadow:var(--shadow); }
+  .score-header { display:flex; align-items:center; gap:16px; margin-bottom:20px; }
+  .score-circle { width:80px; height:80px; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:800; flex-shrink:0; box-shadow:0 4px 12px rgba(0,0,0,.15); }
+  .score-circle .sc-val { font-size:26px; line-height:1; }
+  .score-circle .sc-grade { font-size:14px; margin-top:2px; }
+  .score-meta { flex:1; }
+  .score-meta h3 { font-size:16px; font-weight:700; color:#0c4a6e; margin:0 0 4px; }
+  .score-meta p { font-size:12px; color:#0369a1; margin:0; }
+  .score-history-btn { background:#0284c7; color:#fff; border:none; border-radius:6px; padding:6px 14px; font-size:12px; cursor:pointer; font-weight:600; }
+  .score-dims { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+  .score-dim { background:#fff; border:1px solid #bae6fd; border-radius:10px; padding:12px; }
+  .score-dim .sd-label { font-size:11px; color:#0369a1; font-weight:600; margin-bottom:6px; display:flex; justify-content:space-between; }
+  .score-dim .sd-bar-track { height:6px; background:#e0f2fe; border-radius:3px; overflow:hidden; margin-bottom:4px; }
+  .score-dim .sd-bar-fill { height:100%; border-radius:3px; background:linear-gradient(90deg,#0ea5e9,#0284c7); transition:width .6s ease; }
+  .score-dim .sd-detail { font-size:10px; color:var(--text3); }
+  /* 评分历史弹窗 */
+  .score-history-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9999; align-items:center; justify-content:center; }
+  .score-history-modal.open { display:flex; }
+  .shm-box { background:#fff; border-radius:14px; padding:24px; width:min(600px,95vw); max-height:80vh; overflow-y:auto; }
+  .shm-box h3 { margin:0 0 16px; font-size:16px; }
+  .shm-close { float:right; background:none; border:none; font-size:20px; cursor:pointer; color:var(--text3); }
+  .shm-chart-wrap { height:200px; margin-bottom:16px; }
+  .shm-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .shm-table th { background:#f1f5f9; padding:8px; text-align:left; font-weight:600; }
+  .shm-table td { padding:8px; border-bottom:1px solid var(--border); }
+
   .version-badge { font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;padding:2px 7px;cursor:pointer;transition:all .15s;user-select:none;letter-spacing:.3px;white-space:nowrap; }
   .version-badge:hover { background:#e5e7eb;color:#374151; }
   .changelog-modal { display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center; }
@@ -319,7 +346,37 @@
   <!-- 指标卡片 -->
   <div class="metrics-row" id="metricsRow"><div class="loading">加载中...</div></div>
 
-  <!-- 在线人数趋势图 -->
+  <!-- ★ 主播评分卡 -->
+  <div class="score-panel" id="scorePanelWrap" style="display:none;">
+    <div class="panel-title" style="color:#0c4a6e;margin-bottom:16px;">🏆 主播表现评分</div>
+    <div class="score-header">
+      <div class="score-circle" id="scoreCircle">
+        <span class="sc-val" id="scoreVal">--</span>
+        <span class="sc-grade" id="scoreGrade">-</span>
+      </div>
+      <div class="score-meta">
+        <h3 id="scoreTitle">计算中...</h3>
+        <p id="scoreDesc"></p>
+      </div>
+      <button class="score-history-btn" onclick="openScoreHistory()">📈 历史趋势</button>
+    </div>
+    <div class="score-dims" id="scoreDims"></div>
+  </div>
+
+  <!-- 评分历史弹窗 -->
+  <div class="score-history-modal" id="scoreHistoryModal">
+    <div class="shm-box">
+      <button class="shm-close" onclick="closeScoreHistory()">✕</button>
+      <h3>📈 主播评分历史趋势</h3>
+      <div class="shm-chart-wrap"><canvas id="scoreHistoryChart"></canvas></div>
+      <table class="shm-table" id="scoreHistoryTable">
+        <thead><tr><th>场次时间</th><th>评分</th><th>等级</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+
   <div class="panel">
     <div class="panel-title">📈 在线人数趋势</div>
     <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
@@ -633,6 +690,13 @@ fetch(`/api/session/${sessionId}`).then(r=>r.json()).then(data => {
 
   // ★ 调优建议
   renderOptimPanel(s, data);
+
+  // ★ 主播评分卡
+  if (s.status === 'ended') {
+    fetch(`/api/session/${sessionId}/score`).then(r=>r.json()).then(sc => {
+      renderScorePanel(sc);
+    }).catch(()=>{});
+  }
 
   // 礼物排行
   const gifts = data.gift_rank || [];
@@ -1171,7 +1235,89 @@ function renderOptimPanel(session, summary) {
     </div>`
   ).join('')}</div>`;
 }
-</script>
+
+// ── 主播评分卡 ──
+let _scoreHistoryChart = null;
+
+function renderScorePanel(sc) {
+  if (!sc || sc.error) return;
+  const wrap = document.getElementById('scorePanelWrap');
+  const circle = document.getElementById('scoreCircle');
+  const valEl = document.getElementById('scoreVal');
+  const gradeEl = document.getElementById('scoreGrade');
+  const titleEl = document.getElementById('scoreTitle');
+  const descEl = document.getElementById('scoreDesc');
+  const dimsEl = document.getElementById('scoreDims');
+
+  wrap.style.display = '';
+  circle.style.background = sc.grade_color;
+  circle.style.color = '#fff';
+  valEl.textContent = sc.total;
+  gradeEl.textContent = sc.grade + '级';
+
+  const gradeDesc = {S:'优秀主播，全维度表现突出', A:'良好，互动或留存有明显优势', B:'合格，部分维度有提升空间', C:'需改进，互动率或话术偏弱', D:'较差，建议针对性培训'};
+  titleEl.textContent = `综合评分 ${sc.total}分 · ${sc.grade}级`;
+  descEl.textContent = gradeDesc[sc.grade] || '';
+
+  const dims = sc.dimensions || {};
+  dimsEl.innerHTML = Object.values(dims).map(d => {
+    const pct = Math.round(d.score / d.max * 100);
+    return `<div class="score-dim">
+      <div class="sd-label"><span>${d.label}</span><span style="font-weight:700;color:#0284c7;">${d.score}/${d.max}</span></div>
+      <div class="sd-bar-track"><div class="sd-bar-fill" style="width:${pct}%"></div></div>
+      <div class="sd-detail">${d.detail}</div>
+    </div>`;
+  }).join('');
+}
+
+function openScoreHistory() {
+  const modal = document.getElementById('scoreHistoryModal');
+  modal.classList.add('open');
+  // 取当前场次的主播账号名
+  const username = (document.getElementById('pageTitle').textContent.match(/@(\S+)/) || [])[1];
+  if (!username) return;
+  fetch(`/api/anchor/${username}/score_history`).then(r=>r.json()).then(data => {
+    const history = (data.history || []).reverse(); // 时间正序
+    const tbody = document.querySelector('#scoreHistoryTable tbody');
+    tbody.innerHTML = history.map(h => `<tr>
+      <td>${h.start_time ? h.start_time.slice(0,16) : '-'}</td>
+      <td><strong style="color:#0284c7;">${h.total_score}</strong></td>
+      <td><span style="background:${gradeColor(h.grade)};color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;">${h.grade}</span></td>
+    </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text3);">暂无历史数据（需要结束场次才能评分）</td></tr>';
+
+    // 折线图
+    const ctx = document.getElementById('scoreHistoryChart');
+    if (_scoreHistoryChart) _scoreHistoryChart.destroy();
+    if (history.length > 1) {
+      _scoreHistoryChart = new Chart(ctx, {
+        type:'line',
+        data:{
+          labels: history.map(h => h.start_time ? h.start_time.slice(5,16) : ''),
+          datasets:[{
+            label:'综合评分',data:history.map(h=>h.total_score),
+            borderColor:'#0284c7',backgroundColor:'rgba(2,132,199,.1)',
+            tension:.3,fill:true,pointRadius:4,
+          }]
+        },
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false}},
+          scales:{
+            y:{min:0,max:100,ticks:{color:'#9ca3af'},grid:{color:'#f0f1f5'}},
+            x:{ticks:{color:'#9ca3af'},grid:{color:'#f0f1f5'}},
+          }
+        }
+      });
+    }
+  });
+}
+function closeScoreHistory() {
+  document.getElementById('scoreHistoryModal').classList.remove('open');
+}
+function gradeColor(g) {
+  return {S:'#22c55e',A:'#3b82f6',B:'#f59e0b',C:'#f97316',D:'#ef4444'}[g] || '#9ca3af';
+}
+
 
 <!-- ── 版本日志弹窗 ── -->
 <div class="changelog-modal" id="changelogModal" onclick="if(event.target===this)closeChangelog()">

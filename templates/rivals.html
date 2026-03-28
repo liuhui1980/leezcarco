@@ -215,7 +215,40 @@
     <div id="recommendList"></div>
   </div>
 
-  <!-- 竞品账号管理 -->
+  <!-- ★ 话术对比面板 -->
+  <div class="section" id="speechCompareSection">
+    <div class="section-header">
+      <div>
+        <div class="section-title">🗣️ 话术差距分析</div>
+        <div class="section-sub">竞品在讲什么、你没讲 — 找到高频差异词，优化话术策略</div>
+      </div>
+      <button class="btn btn-rival btn-sm" onclick="loadSpeechCompare()" id="btnSpeechCompare">🔍 开始分析</button>
+    </div>
+    <div id="speechCompareContent" style="display:none;">
+      <!-- 差异词（竞品强调但自营较少的词） -->
+      <div style="margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:8px;">⚠️ 竞品高频 · 自营欠缺的词</div>
+        <div id="diffWordsRow" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;">这些词竞品反复提及，而你的主播讲得较少——可能是值得补充的话术点</div>
+      </div>
+      <!-- 双栏词云对比 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#0284c7;margin-bottom:8px;">🏠 自营 Top词</div>
+          <div id="ownWordsCloud" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#dc2626;margin-bottom:8px;">⚔️ 竞品 Top词</div>
+          <div id="rivalWordsCloud" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+        </div>
+      </div>
+    </div>
+    <div id="speechCompareEmpty" style="text-align:center;padding:20px;color:var(--text3);font-size:13px;display:none;">
+      需要自营和竞品账号均有话术记录才能对比
+    </div>
+  </div>
+
+
   <div class="section">
     <div class="section-header">
       <div>
@@ -607,6 +640,52 @@ async function confirmAddRival(username, btn) {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('recommendSection').style.display = '';
 });
+
+// ── 话术差距分析 ──
+async function loadSpeechCompare() {
+  const btn = document.getElementById('btnSpeechCompare');
+  const content = document.getElementById('speechCompareContent');
+  const empty = document.getElementById('speechCompareEmpty');
+  btn.textContent = '分析中...'; btn.disabled = true;
+  content.style.display = 'none'; empty.style.display = 'none';
+  try {
+    const res = await fetch('/api/rivals/speech_compare');
+    const data = await res.json();
+    const diff = data.diff || [];
+    const own = data.own || {};
+    const rival = data.rival || {};
+
+    if (!Object.keys(own).length && !Object.keys(rival).length) {
+      empty.style.display = '';
+    } else {
+      content.style.display = '';
+      // 差异词
+      const diffEl = document.getElementById('diffWordsRow');
+      diffEl.innerHTML = diff.length ? diff.map(d =>
+        `<div title="竞品频率${d.rival_freq}‰ vs 自营${d.own_freq}‰ · 差距${d.ratio}x" style="background:linear-gradient(135deg,#fdf4ff,#f3e8ff);border:1px solid #c4b5fd;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600;color:#7c3aed;cursor:default;">
+          ${d.word} <span style="font-size:10px;opacity:.7;">${d.ratio}x</span>
+        </div>`
+      ).join('') : '<span style="color:var(--text3);font-size:12px;">暂无明显差异词（话术数据较少）</span>';
+
+      // 词云
+      function renderCloud(el, words, baseColor) {
+        const entries = Object.entries(words).sort((a,b)=>b[1]-a[1]);
+        const maxCnt = entries[0]?.[1] || 1;
+        el.innerHTML = entries.map(([w, cnt]) => {
+          const size = 10 + Math.round((cnt/maxCnt) * 10);
+          const opacity = 0.5 + (cnt/maxCnt) * 0.5;
+          return `<span title="${cnt}次" style="font-size:${size}px;color:${baseColor};opacity:${opacity.toFixed(2)};cursor:default;">${w}</span>`;
+        }).join(' ');
+      }
+      renderCloud(document.getElementById('ownWordsCloud'), own, '#0284c7');
+      renderCloud(document.getElementById('rivalWordsCloud'), rival, '#dc2626');
+    }
+  } catch(e) {
+    empty.textContent = '分析失败，请稍后重试';
+    empty.style.display = '';
+  }
+  btn.textContent = '🔍 重新分析'; btn.disabled = false;
+}
 
 // ── 初始化 ──
 loadRivals();

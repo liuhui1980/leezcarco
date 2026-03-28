@@ -124,6 +124,19 @@
   .group-tab:hover { border-color: var(--primary); color: var(--primary); }
   .group-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
   .group-tag { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px; font-weight: 600; margin-left: 6px; vertical-align: middle; }
+
+  /* ── Intent Filter ── */
+  .intent-btn { padding: 2px 7px; border-radius: 10px; border: 1px solid #e5e7eb; background: #f9fafb; color: #6b7280; font-size: 10px; cursor: pointer; transition: all .15s; white-space:nowrap; }
+  .intent-btn:hover { border-color: #f59e0b; color: #d97706; }
+  .intent-btn.active { background: #fef3c7; border-color: #fcd34d; color: #92400e; font-weight: 600; }
+  .intent-btn[data-intent="price"].active { background:#dcfce7;border-color:#86efac;color:#166534; }
+  .intent-btn[data-intent="stock"].active { background:#dbeafe;border-color:#93c5fd;color:#1e40af; }
+  .intent-btn[data-intent="qa"].active { background:#f3e8ff;border-color:#c4b5fd;color:#6b21a8; }
+  .intent-tag { display:inline-block; font-size:9px; padding:1px 5px; border-radius:8px; margin-left:4px; font-weight:700; vertical-align:middle; }
+  .intent-tag-price { background:#dcfce7;color:#166534; }
+  .intent-tag-stock { background:#dbeafe;color:#1e40af; }
+  .intent-tag-qa { background:#f3e8ff;color:#6b21a8; }
+  .comment-item.intent-hidden { display:none !important; }
   .tag-own { background: #dbeafe; color: #1d4ed8; }
   .tag-rival { background: #fce7f3; color: #9d174d; }
   .tag-watch { background: #d1fae5; color: #065f46; }
@@ -373,7 +386,7 @@
         <span class="selector-arrow">▾</span>
         <div class="username-dropdown" id="usernameDropdown"></div>
       </div>
-      <select id="groupSelect" class="add-input" style="flex:0;min-width:90px;">
+      <select id="groupSelect" class="add-input" style="flex:0;min-width:120px;max-width:140px;">
         <option value="own">🏠 自营</option>
         <option value="rival">⚔️ 竞品</option>
         <option value="watch">👁 关注</option>
@@ -730,7 +743,15 @@ function createAccountCard(username, group = 'own', prependToFront = false) {
         </div>
       </div>
     </div>
-    <div class="section-label">最新评论</div>
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+      <span>最新评论</span>
+      <div style="display:flex;gap:4px;" id="intent-filter-${username}">
+        <button class="intent-btn active" data-intent="all" onclick="setIntentFilter('${username}','all',this)" title="全部">全部</button>
+        <button class="intent-btn" data-intent="price" onclick="setIntentFilter('${username}','price',this)" title="询价">💰询价</button>
+        <button class="intent-btn" data-intent="stock" onclick="setIntentFilter('${username}','stock',this)" title="询货">🚗询货</button>
+        <button class="intent-btn" data-intent="qa" onclick="setIntentFilter('${username}','qa',this)" title="咨询">❓咨询</button>
+      </div>
+    </div>
     <div class="comments-box" id="comments-box-${username}"></div>
     <div class="mini-summary" id="comment-summary-${username}"><span class="ms-label">💬 评论摘要</span><span id="comment-summary-text-${username}">等待数据...</span></div>
     <div class="speech-label">
@@ -1351,6 +1372,64 @@ function detectLang(text) {
   return { lang:'other', lang_short:'其他', css_class:'lang-other', lang_display:'其他' };
 }
 
+// ── 评论意图识别（阿语+英语关键词词库）──
+const INTENT_KEYWORDS = {
+  price: [
+    // 阿语
+    'كم السعر','كم سعر','السعر','سعر','كم ثمن','الثمن','ثمن','كم تكلفة','التكلفة','تكلفة',
+    'كم يكلف','بكم','بكام','كام','سعره','سعرها','كم','بسعر',
+    // 英语
+    'price','how much','cost','pricing','rate','fee','charge','what\'s the price',
+    'whats the price','how much is','how much does','price?','cost?',
+  ],
+  stock: [
+    // 阿语
+    'متوفر','متوفرة','هل يوجد','يوجد','اللون','الألوان','موجود','موجودة',
+    'متاح','متاحة','هل عندكم','عندكم','هل لديكم','لديكم','موديل','الموديل',
+    // 英语
+    'available','in stock','do you have','any stock','color','colour','model',
+    'availability','have this','is there','left in stock',
+  ],
+  qa: [
+    // 阿语
+    'ضمان','كفالة','الضمان','توصيل','شحن','التوصيل','كيف','كيفية','خدمة','الدفع',
+    'تقسيط','أقساط','دفع','طريقة الدفع','متى','موعد','كم يوم',
+    // 英语
+    'warranty','guarantee','delivery','shipping','how to','payment','installment',
+    'when','how long','return','refund','exchange','policy','contact','whatsapp',
+  ],
+};
+
+function detectIntent(text) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
+    if (keywords.some(kw => t.includes(kw.toLowerCase()))) return intent;
+  }
+  return null;
+}
+
+// 每个卡片的当前意图过滤状态
+const cardIntentFilter = {};
+
+function setIntentFilter(username, intent, btn) {
+  cardIntentFilter[username] = intent;
+  // 更新按钮状态
+  document.querySelectorAll(`#intent-filter-${username} .intent-btn`).forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // 重新过滤显示
+  const box = document.getElementById(`comments-box-${username}`);
+  if (!box) return;
+  box.querySelectorAll('.comment-item').forEach(item => {
+    if (intent === 'all') {
+      item.classList.remove('intent-hidden');
+    } else {
+      const itemIntent = item.dataset.intent;
+      item.classList.toggle('intent-hidden', itemIntent !== intent);
+    }
+  });
+}
+
 function addCommentToCard(username, data) {
   const box = document.getElementById(`comments-box-${username}`); if (!box) return;
   const fallback = detectLang(data.content);
@@ -1362,11 +1441,48 @@ function addCommentToCard(username, data) {
   const zhLine = (data.text_zh && data.text_zh !== data.content)
     ? `<div style="font-size:10px;color:var(--text2);margin-top:2px;padding:2px 5px;background:#f9fafb;border-radius:3px;border-left:2px solid var(--border);">中：${escapeHtml(data.text_zh)}</div>`
     : '';
+
+  // 意图识别（用原文+翻译综合判断）
+  const searchText = (data.content || '') + ' ' + (data.text_zh || '');
+  const intent = isAnchor ? null : detectIntent(searchText);
+  const intentTagHtml = intent ? `<span class="intent-tag intent-tag-${intent}">${{price:'💰询价',stock:'🚗询货',qa:'❓咨询'}[intent]}</span>` : '';
+
   const item = document.createElement('div');
   item.className = 'comment-item';
-  item.innerHTML = `<span class="comment-user${isAnchor?' anchor':''}">${escapeHtml(data.username)}</span>${isAnchor?'<span class="comment-anchor-tag">主播</span>':''}<span class="comment-lang ${cssClass}" title="${lang_display}">${label}</span><span class="comment-time">${data.timestamp}</span><div class="comment-content comment-text">${escapeHtml(data.content)}${zhLine}</div>`;
+  if (intent) item.dataset.intent = intent;
+
+  // 当前过滤状态决定是否隐藏
+  const curFilter = cardIntentFilter[username] || 'all';
+  if (curFilter !== 'all' && intent !== curFilter) item.classList.add('intent-hidden');
+
+  item.innerHTML = `<span class="comment-user${isAnchor?' anchor':''}">${escapeHtml(data.username)}</span>${isAnchor?'<span class="comment-anchor-tag">主播</span>':''}${intentTagHtml}<span class="comment-lang ${cssClass}" title="${lang_display}">${label}</span><span class="comment-time">${data.timestamp}</span><div class="comment-content comment-text">${escapeHtml(data.content)}${zhLine}</div>`;
   box.insertBefore(item, box.firstChild);
   while (box.children.length > 50) box.removeChild(box.lastChild);
+
+  // 高价值评论（询价/询货）微信推送（节流：同账号30秒内最多1次）
+  if (intent === 'price' || intent === 'stock') {
+    _throttleHighValueNotify(username, data, intent);
+  }
+}
+
+// 高价值评论节流推送
+const _hvNotifyLastTime = {};
+function _throttleHighValueNotify(username, data, intent) {
+  const now = Date.now();
+  const key = username;
+  if (_hvNotifyLastTime[key] && now - _hvNotifyLastTime[key] < 30000) return;
+  _hvNotifyLastTime[key] = now;
+  const label = {price:'💰询价',stock:'🚗询货',qa:'❓咨询'}[intent] || intent;
+  fetch('/api/notify/high_value_comment', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      username, intent, label,
+      comment: data.content,
+      comment_zh: data.text_zh || '',
+      commenter: data.username,
+    })
+  }).catch(()=>{});
 }
 
 function updateGlobalStats() {
