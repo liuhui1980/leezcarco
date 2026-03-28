@@ -987,8 +987,7 @@ def calc_anchor_score(session_id):
     score_retention = min(retention_rate / 0.6 * 20, 20)
 
     # ── 维度3：话术活跃度（每10分钟话术条数，20分）──
-    c.execute('SELECT COUNT(*) as cnt FROM speech_records WHERE session_id=? AND is_anchor=0', (session_id,))
-    # speech_records没有is_anchor列，用全量
+    # speech_records 中所有记录均为主播话术，直接全量统计
     c.execute('SELECT COUNT(*) as cnt FROM speech_records WHERE session_id=?', (session_id,))
     row = c.fetchone()
     speech_cnt = (row['cnt'] or 0) if row else 0
