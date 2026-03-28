@@ -560,11 +560,13 @@ socket.on('live_detected', (data) => {
   }
   setBadge(u, '连接中...', 'connecting');
   showToast(`🔴 @${u} 开播了！正在连接...`, 'success');
-  // 记录开播信息（startTs 基于监测到的本地时间，即"从你监测到开播起计算"）
+  // 记录开播信息（startTs 优先使用服务器记录的 start_time，确保已播时长准确）
   if (monitors[u]) {
     monitors[u].startTime = data.start_time ? data.start_time.slice(11,16) : new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
     monitors[u].sessionId = data.session_id || null;
-    monitors[u].startTs = Date.now();  // 从监测到开播时刻开始计时
+    // 用服务器记录的 start_time 解析为时间戳，这样即使主播已播一段时间才被检测到也能准确显示已播时长
+    const _ts = data.start_time ? parseBJTime(data.start_time) : null;
+    monitors[u].startTs = (_ts && !isNaN(_ts)) ? _ts : Date.now();
   }
   // 显示开播时间行（北京时间 HH:MM，直接取服务器字符串）
   const row = document.getElementById(`live-time-row-${u}`);

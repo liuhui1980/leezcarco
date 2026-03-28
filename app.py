@@ -838,8 +838,8 @@ def api_rivals():
             def dur(s):
                 try:
                     from datetime import datetime as dt
-                    a = dt.fromisoformat(s['start_time'])
-                    b = dt.fromisoformat(s['end_time'])
+                    a = dt.strptime(s['start_time'], '%Y-%m-%d %H:%M:%S')
+                    b = dt.strptime(s['end_time'], '%Y-%m-%d %H:%M:%S') if s.get('end_time') else dt.now()
                     return round((b - a).total_seconds() / 60)
                 except: return 0
             avg_dur = round(sum(dur(s) for s in sessions) / n) if n else 0
@@ -890,7 +890,7 @@ def api_compare():
 
         def get_stats(username, limit=10):
             c.execute(
-                "SELECT id, peak_viewers, total_viewers, total_gift_value, total_comments, new_followers, start_time, end_time FROM live_sessions WHERE username=? AND status='ended' ORDER BY start_time DESC LIMIT ?",
+                "SELECT id, peak_viewers, total_viewers, total_gift_value, total_comments, new_followers, total_likes, start_time, end_time FROM live_sessions WHERE username=? AND status='ended' ORDER BY start_time DESC LIMIT ?",
                 (username, limit)
             )
             sessions = [dict(r) for r in c.fetchall()]
@@ -901,7 +901,9 @@ def api_compare():
             def dur(s):
                 try:
                     from datetime import datetime as dt
-                    return round((dt.fromisoformat(s['end_time']) - dt.fromisoformat(s['start_time'])).total_seconds() / 60)
+                    a = dt.strptime(s['start_time'], '%Y-%m-%d %H:%M:%S')
+                    b = dt.strptime(s['end_time'], '%Y-%m-%d %H:%M:%S') if s.get('end_time') else dt.now()
+                    return round((b - a).total_seconds() / 60)
                 except: return 0
             # 近期场次（旧→新，最多10条，含 peak/gift/start_time）
             recent = [
@@ -1023,8 +1025,11 @@ def api_rival_detail(username):
             # 计算时长
             try:
                 from datetime import datetime as dt
-                st = dt.fromisoformat(s['start_time'])
-                et = dt.fromisoformat(s['end_time'])
+                st = dt.strptime(s['start_time'], '%Y-%m-%d %H:%M:%S')
+                if s.get('end_time'):
+                    et = dt.strptime(s['end_time'], '%Y-%m-%d %H:%M:%S')
+                else:
+                    et = dt.now()  # 仍在进行的场次用当前时间
                 s['duration_min'] = round((et - st).total_seconds() / 60)
                 s['hour'] = st.hour  # 开播时段
                 s['weekday'] = st.weekday()  # 星期几 0=周一

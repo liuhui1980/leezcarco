@@ -289,7 +289,8 @@ function isUserLive(username) {
 
 function durationMin(s) {
   if (!s.start_time || !s.end_time) return 0;
-  return Math.round((new Date(s.end_time) - new Date(s.start_time)) / 60000);
+  // 替换空格为T，兼容Safari的ISO格式解析
+  return Math.round((new Date(s.end_time.replace(' ','T')) - new Date(s.start_time.replace(' ','T'))) / 60000);
 }
 function durationStr(min) {
   if (!min) return '-';
@@ -338,7 +339,8 @@ function getFilteredAccountGroups() {
 
 // ── 切换账号卡片展开/折叠 ──
 function toggleAccount(username) {
-  const card = document.getElementById(`ac-${CSS.escape(username)}`);
+  // getElementById 直接查字符串，不需要 CSS.escape（CSS.escape 会加反斜杠导致找不到元素）
+  const card = document.getElementById('ac-' + username);
   if (!card) return;
   const isOpen = card.classList.toggle('open');
   if (isOpen) expandedAccounts.add(username);

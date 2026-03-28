@@ -72,28 +72,22 @@
   .stl-scroll { overflow-x:auto; padding-bottom:6px; }
   .stl-track-flow { display:flex; gap:8px; min-width:max-content; flex-wrap:nowrap; align-items:flex-start; padding:4px 0 8px; }
 
-  /* 绝对定位模式（有时间范围时） */
+  /* 绝对定位模式（已废弃，保留备用） */
   .stl-track-abs { position:relative; min-height:100px; margin-bottom:4px; }
   .stl-baseline { position:absolute; bottom:10px; left:0; right:0; height:2px; background:var(--border2); border-radius:1px; }
-
-  /* 每个条目 */
-  .stl-item {
-    display:flex; flex-direction:column; align-items:center; gap:2px;
-    cursor:pointer; position:relative;
-  }
-  .stl-item.peak-item .stl-dot { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.25); }
-  .stl-item.peak-item .stl-chip { border-color:#fde68a; background:#fffbeb; }
-
-  /* 绝对定位的 item */
-  .stl-item-abs {
-    position:absolute; transform:translateX(-50%);
-    display:flex; flex-direction:column; align-items:center; gap:2px;
-    cursor:pointer;
-  }
-  /* 上排和下排交替，避免遮挡 */
+  /* 绝对定位的 item（已废弃） */
+  .stl-item-abs { position:absolute; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; }
   .stl-item-abs.row-top { bottom:18px; flex-direction:column-reverse; }
   .stl-item-abs.row-bottom { top:0; flex-direction:column; }
   .stl-item-abs.peak-item .stl-dot { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.25); }
+
+  /* 每个话术条目 */
+  .stl-item {
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    cursor:pointer; position:relative; flex-shrink:0;
+  }
+  .stl-item.peak-item .stl-dot { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.25); }
+  .stl-item.peak-item .stl-chip { border-color:#fde68a; background:#fffbeb; }
 
   .stl-dot { width:8px; height:8px; border-radius:50%; background:var(--primary); flex-shrink:0; }
   .stl-chip {
@@ -670,10 +664,10 @@ function renderMainData(data) {
   _sessionData = s;
   document.getElementById('pageTitle').textContent = `直播复盘 — @${s.username}`;
 
-  // 时长
+  // 时长（用字符串替换空格为T，兼容Safari的ISO格式解析）
   let dur = '-';
   if (s.start_time && s.end_time) {
-    const m = Math.round((new Date(s.end_time) - new Date(s.start_time)) / 60000);
+    const m = Math.round((new Date(s.end_time.replace(' ','T')) - new Date(s.start_time.replace(' ','T'))) / 60000);
     dur = m >= 60 ? `${Math.floor(m/60)}h${m%60}m` : `${m}m`;
   }
 
@@ -1128,44 +1122,21 @@ function renderSpeechTimeline(records, minTs, maxTs, viewerSnapshots) {
   // 先渲染峰值摘要卡
   const peakCardsHtml = buildPeakCards();
 
-  if (timeRange > 0) {
-    // 绝对定位模式（与趋势图X轴对齐）
-    const trackHtml = [];
-    records.forEach((r, idx) => {
-      const rTs = r.timestamp ? new Date(r.timestamp.replace(' ','T')).getTime() : 0;
-      const pct = rTs ? Math.max(0, Math.min(99, ((rTs - minTs) / timeRange) * 100)) : 0;
-      const isPeak = r.timestamp ? isNearPeak(r.timestamp) : false;
-      const { time, label, langCls, peakCls, origEl, tooltip } = buildItem(r, isPeak, 13);
-      // 奇偶交替 + 峰值节点置顶
-      const rowCls = isPeak ? 'row-bottom' : (idx % 2 === 0 ? 'row-top' : 'row-bottom');
-      trackHtml.push(`<div class="stl-item-abs ${rowCls}${peakCls}" style="left:${pct.toFixed(1)}%;${isPeak?'z-index:10;':''}" title="${escHtml(tooltip)}" onclick="this.classList.toggle('pinned')">
-        <div class="stl-chip ${langCls}">${escHtml(label)}</div>
-        ${origEl}
-        <div class="stl-stem"></div>
-        <div class="stl-dot"></div>
-        <div class="stl-time">${time}</div>
-      </div>`);
-    });
-    scrollWrap.innerHTML =
-      peakCardsHtml +
-      `<div class="stl-track-abs" style="height:130px;">${trackHtml.join('')}<div class="stl-baseline"></div></div>`;
-  } else {
-    // 横向滚动模式
-    track.className = 'stl-track-flow';
-    track.innerHTML = records.map((r, idx) => {
-      const isPeak = r.timestamp ? isNearPeak(r.timestamp) : false;
-      const { time, label, langCls, peakCls, origEl, tooltip } = buildItem(r, isPeak, 18);
-      return `<div class="stl-item${peakCls}" title="${escHtml(tooltip)}" onclick="this.classList.toggle('pinned')">
-        <div class="stl-dot"></div>
-        <div class="stl-chip ${langCls}">${escHtml(label)}</div>
-        ${origEl}
-        <div class="stl-time">${time}</div>
-      </div>`;
-    }).join('');
-    // 峰值摘要卡放在滚动轨道上方
-    if (peakCardsHtml) {
-      scrollWrap.insertAdjacentHTML('beforebegin', peakCardsHtml);
-    }
+  // 统一使用横向滚动模式，废弃绝对定位（绝对定位在节点密集时严重重叠）
+  track.className = 'stl-track-flow';
+  track.innerHTML = records.map((r) => {
+    const isPeak = r.timestamp ? isNearPeak(r.timestamp) : false;
+    const { time, label, langCls, peakCls, origEl, tooltip } = buildItem(r, isPeak, 18);
+    return `<div class="stl-item${peakCls}" title="${escHtml(tooltip)}" onclick="this.classList.toggle('pinned')">
+      <div class="stl-dot"></div>
+      <div class="stl-chip ${langCls}">${escHtml(label)}</div>
+      ${origEl}
+      <div class="stl-time">${time}</div>
+    </div>`;
+  }).join('');
+  // 峰值摘要卡放在滚动轨道上方
+  if (peakCardsHtml) {
+    scrollWrap.insertAdjacentHTML('afterbegin', peakCardsHtml);
   }
 }
 
@@ -1292,7 +1263,7 @@ function renderOptimPanel(session, summary) {
   if (!panel || !session) return;
 
   const dur = session.end_time && session.start_time
-    ? Math.round((new Date(session.end_time) - new Date(session.start_time)) / 60000) : 0;
+    ? Math.round((new Date(session.end_time.replace(' ','T')) - new Date(session.start_time.replace(' ','T'))) / 60000) : 0;
   const peakViewers = session.peak_viewers || 0;
   const totalViewers = session.total_viewers || 0;
   const totalComments = session.total_comments || 0;

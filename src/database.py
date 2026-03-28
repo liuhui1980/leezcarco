@@ -275,15 +275,21 @@ def _ensure_default_admin(conn):
 
 
 def _fix_zombie_sessions():
-    """服务启动时自动将未正常结束的 live 记录修复为 ended"""
+    """服务启动时自动将未正常结束的 live 记录修复为 ended。
+    end_time 使用当前时间而非 start_time，避免时长记录为 0。
+    """
     conn = get_conn()
     c = conn.cursor()
-    c.execute("UPDATE live_sessions SET status='ended', end_time=start_time WHERE status='live' AND end_time IS NULL")
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute(
+        "UPDATE live_sessions SET status='ended', end_time=? WHERE status='live' AND end_time IS NULL",
+        (now,)
+    )
     fixed = c.rowcount
     conn.commit()
     conn.close()
     if fixed:
-        print(f"🔧 自动修复 {fixed} 条未结束的直播记录（status: live -> ended）")
+        print(f"🔧 自动修复 {fixed} 条未结束的直播记录（status: live -> ended，end_time={now}）")
 
 
 def create_session(username, room_id=None, owner_user_id=1):
@@ -1003,10 +1009,14 @@ def calc_anchor_score(session_id):
             t0 = _dt.strptime(s['start_time'], '%Y-%m-%d %H:%M:%S')
             t1 = _dt.strptime(s['end_time'], '%Y-%m-%d %H:%M:%S')
             duration_min = max((t1 - t0).total_seconds() / 60, 1)
+        elif s.get('start_time'):
+            # 直播仍在进行，用当前时间计算已播时长
+            t0 = _dt.strptime(s['start_time'], '%Y-%m-%d %H:%M:%S')
+            duration_min = max((_dt.now() - t0).total_seconds() / 60, 1)
         else:
-            duration_min = 60  # 未结束场次默认60分钟
+            duration_min = 1
     except Exception:
-        duration_min = 60
+        duration_min = 1
 
     # ── 维度1：互动率（评论数/峰值在线，25分）──
     interaction_rate = total_comments / peak_viewers
