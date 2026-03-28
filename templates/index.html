@@ -1445,7 +1445,8 @@ function addCommentToCard(username, data) {
   // 意图识别（用原文+翻译综合判断）
   const searchText = (data.content || '') + ' ' + (data.text_zh || '');
   const intent = isAnchor ? null : detectIntent(searchText);
-  const intentTagHtml = intent ? `<span class="intent-tag intent-tag-${intent}">${{price:'💰询价',stock:'🚗询货',qa:'❓咨询'}[intent]}</span>` : '';
+  const intentLabels = {price:'💰询价',stock:'🚗询货',qa:'❓咨询'};
+  const intentTagHtml = intent ? `<span class="intent-tag intent-tag-${intent}">${intentLabels[intent]}</span>` : '';
 
   const item = document.createElement('div');
   item.className = 'comment-item';
