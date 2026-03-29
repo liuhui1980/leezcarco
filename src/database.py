@@ -197,6 +197,20 @@ def init_db():
         )
     ''')
 
+    # ── 用户操作日志表 ──
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS user_action_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER DEFAULT 1,
+            username TEXT NOT NULL,
+            action TEXT NOT NULL,
+            target TEXT DEFAULT '',
+            detail TEXT DEFAULT '',
+            ip TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+    ''')
+
     conn.commit()
 
     # ── 兼容旧数据库：添加新列（若不存在） ──
@@ -1362,5 +1376,39 @@ def delete_feedback(fb_id):
     c.execute('DELETE FROM feedbacks WHERE id=?', (fb_id,))
     conn.commit()
     conn.close()
+
+
+# ── 用户操作日志 ──
+
+def write_action_log(user_id: int, username: str, action: str, target: str = '', detail: str = '', ip: str = ''):
+    """记录用户操作日志"""
+    conn = get_conn()
+    c = conn.cursor()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute(
+        'INSERT INTO user_action_logs (user_id, username, action, target, detail, ip, created_at) VALUES (?,?,?,?,?,?,?)',
+        (user_id, username, action, target, detail, ip, now)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_action_logs(user_id: int = None, limit: int = 200, offset: int = 0):
+    """查询用户操作日志，管理员传 user_id=None 查全部"""
+    conn = get_conn()
+    c = conn.cursor()
+    if user_id is not None:
+        c.execute(
+            'SELECT * FROM user_action_logs WHERE user_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+            (user_id, limit, offset)
+        )
+    else:
+        c.execute(
+            'SELECT l.*, u.username as user_display FROM user_action_logs l LEFT JOIN sys_users u ON l.user_id=u.id ORDER BY l.created_at DESC LIMIT ? OFFSET ?',
+            (limit, offset)
+        )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
 
 

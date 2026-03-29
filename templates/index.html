@@ -578,10 +578,18 @@ socket.on('live_detected', (data) => {
   }
 });
 socket.on('monitor_error', (data) => {
-  setBadge(data.username, '出错', 'error');
+  const u = data.username;
+  // 只有卡片还在监控列表里才处理（防止重复触发）
+  if (!monitors[u]) return;
+  setBadge(u, '出错', 'error');
   showToast(`❌ ${data.msg}`, 'error');
-  if (data.msg && data.msg.includes('不存在')) {
-    setTimeout(() => removeAccountCard(data.username), 3000);
+  // 精确匹配：用户不存在 → 3秒后移除卡片
+  // 注意：'长时间未开播' 也触发 monitor_error，但不应移除卡片（改为显示超时状态即可）
+  if (data.msg && (data.msg.includes('不存在') || data.msg.includes('not found'))) {
+    setTimeout(() => removeAccountCard(u), 3000);
+  } else if (data.msg && data.msg.includes('长时间未开播')) {
+    // 超时等待：显示超时标记但保留卡片，让用户决定是否手动关闭
+    setBadge(u, '等待超时', 'error');
   }
 });
 
@@ -1523,9 +1531,15 @@ async function _checkLiveAsync(username) {
     const checkRes = await fetch('/api/check_live', {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username})
     });
+    if (!checkRes.ok) {
+      // 服务器返回 4xx/5xx，可能是 gevent+asyncio 冲突等后端错误，不做任何处理，后端 monitor 线程会自行判断
+      console.warn(`[checkLive] @${username} 接口返回 ${checkRes.status}，跳过前端判断`);
+      return;
+    }
     const checkData = await checkRes.json();
     if (!monitors[username]) return; // 已被用户手动停止
-    if (!checkData.exists) {
+    // 只有明确收到 success:true 且 exists:false 才认为账号不存在，避免误判
+    if (checkData.success === true && checkData.exists === false) {
       showToast(`❌ 用户 @${username} 不存在，已停止监控`, 'error');
       // 停止后端监控
       await fetch('/api/monitor/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username}) });
@@ -1535,11 +1549,14 @@ async function _checkLiveAsync(username) {
     if (checkData.is_live) {
       showToast(`🔴 @${username} 正在直播！`, 'success');
       setBadge(username, '连接中...', 'connecting');
-    } else {
+    } else if (checkData.exists !== false) {
       showToast(`⏳ @${username} 未开播，等待中...`, 'info');
       setBadge(username, '等待开播', 'waiting');
     }
-  } catch(e) { /* 检测失败忽略，后端会处理 */ }
+  } catch(e) {
+    // 网络错误：卡片保留，后端 monitor 线程会自行判断用户是否存在
+    console.warn(`[checkLive] @${username} 网络异常，保留卡片等后端判断`, e);
+  }
 }
 
 async function stopMonitor(username) {

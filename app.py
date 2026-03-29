@@ -49,7 +49,8 @@ from src.database import (
     toggle_auto_monitor, get_enabled_auto_monitors,
     get_follower_snapshots, get_latest_follower_snapshot, get_all_rival_usernames,
     calc_anchor_score, get_anchor_score_history, get_timeslot_heatmap, get_rival_speech_compare,
-    submit_feedback, get_all_feedbacks, update_feedback_status, delete_feedback
+    submit_feedback, get_all_feedbacks, update_feedback_status, delete_feedback,
+    write_action_log, get_action_logs
 )
 from src.monitor import start_monitor, stop_monitor, get_active_usernames, get_live_usernames, get_monitors_snapshot
 from src.rival_tracker import start_rival_tracker, trigger_snapshot_now
@@ -213,12 +214,16 @@ def api_login():
     session['user_id'] = user['id']
     session['username'] = user['username']
     session['is_admin'] = bool(user['is_admin'])
+    write_action_log(user['id'], user['username'], 'login', ip=request.remote_addr or '')
     return jsonify({'success': True, 'username': user['username'], 'is_admin': bool(user['is_admin'])})
 
 
 @app.route('/api/auth/logout', methods=['POST'])
 def api_logout():
     """登出"""
+    u = get_current_user()
+    if u:
+        write_action_log(u['id'], u['username'], 'logout', ip=request.remote_addr or '')
     session.clear()
     return jsonify({'success': True})
 
@@ -463,6 +468,28 @@ def api_admin_disable_user(user_id):
     return jsonify({'success': True})
 
 
+@app.route('/api/admin/action_logs')
+@admin_required
+def api_admin_action_logs():
+    """查询所有用户的操作日志（管理员专用）"""
+    limit = int(request.args.get('limit', 200))
+    offset = int(request.args.get('offset', 0))
+    user_id_filter = request.args.get('user_id')
+    uid = int(user_id_filter) if user_id_filter else None
+    logs = get_action_logs(user_id=uid, limit=limit, offset=offset)
+    return jsonify({'logs': logs, 'total': len(logs)})
+
+
+@app.route('/api/my/action_logs')
+@login_required
+def api_my_action_logs():
+    """查询当前用户自己的操作日志"""
+    u = get_current_user()
+    limit = int(request.args.get('limit', 100))
+    logs = get_action_logs(user_id=u['id'], limit=limit)
+    return jsonify({'logs': logs})
+
+
 @app.route('/')
 @login_required
 def index():
@@ -533,8 +560,9 @@ def api_session_detail(session_id):
 @app.route('/api/check_live', methods=['POST'])
 @login_required
 def api_check_live():
-    """检查某账号是否正在直播"""
+    """检查某账号是否正在直播（在独立线程里跑 asyncio，避免与 gevent 事件循环冲突）"""
     import asyncio
+    import concurrent.futures
     from TikTokLive import TikTokLiveClient
     data = request.get_json()
     username = data.get('username', '').strip().lstrip('@')
@@ -548,11 +576,30 @@ def api_check_live():
             return {'exists': True, 'is_live': is_live}
         except Exception as e:
             err = str(e)
-            if 'NotFound' in type(e).__name__ or 'not found' in err.lower():
+            if 'NotFound' in type(e).__name__ or 'not found' in err.lower() or '404' in err:
                 return {'exists': False, 'is_live': False}
-            return {'exists': True, 'is_live': False}
+            # 网络超时或其他临时错误：返回 exists=None 表示无法判断，前端不应删卡片
+            return {'exists': None, 'is_live': False, 'error': err}
 
-    result = asyncio.run(_check())
+    def _run_in_thread():
+        """在独立线程里新建事件循环执行异步检测，避免 gevent patch 影响"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(_check())
+        finally:
+            loop.close()
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run_in_thread)
+            result = future.result(timeout=15)  # 15秒超时
+    except concurrent.futures.TimeoutError:
+        return jsonify({'success': False, 'msg': '检测超时，请稍后重试', 'exists': None})
+    except Exception as e:
+        logger.warning(f'[check_live] @{username} 检测异常: {e}')
+        return jsonify({'success': False, 'msg': f'检测失败: {str(e)[:80]}', 'exists': None})
+
     return jsonify({
         'success': True,
         'username': username,
@@ -563,6 +610,8 @@ def api_check_live():
             else f'@{username} 当前未开播，加入后会自动等待开播'
             if result['exists']
             else f'用户 @{username} 不存在，请检查用户名'
+            if result['exists'] is False
+            else f'@{username} 状态检测失败，已保留监控，后端会继续检测'
         )
     })
 
@@ -577,8 +626,11 @@ def api_start_monitor():
     if not username:
         return jsonify({'success': False, 'msg': '用户名不能为空'}), 400
 
+    u = get_current_user()
     result = start_monitor(username, socketio=socketio)
     if result:
+        write_action_log(u['id'], u['username'], 'monitor_start', target=username,
+                         ip=request.remote_addr or '')
         return jsonify({'success': True, 'msg': f'已开始监控 @{username}'})
     else:
         return jsonify({'success': False, 'msg': f'@{username} 已在监控中或启动失败'})
@@ -590,8 +642,11 @@ def api_stop_monitor():
     """停止监控"""
     data = request.get_json() or {}
     username = data.get('username', '').strip().lstrip('@')
+    u = get_current_user()
     result = stop_monitor(username)
     if result:
+        write_action_log(u['id'], u['username'], 'monitor_stop', target=username,
+                         ip=request.remote_addr or '')
         return jsonify({'success': True, 'msg': f'已停止监控 @{username}'})
     else:
         return jsonify({'success': False, 'msg': f'@{username} 不在监控列表中'})
