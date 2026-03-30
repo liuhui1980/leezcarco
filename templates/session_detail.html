@@ -457,6 +457,18 @@
     <div id="speechDialectBarList" class="dialect-bar-list"></div>
   </div>
 
+  <!-- ★ 语言总结性分析（英文水平+阿语地区） -->
+  <div class="panel" id="languageSummaryPanel" style="display:none; background:linear-gradient(135deg,#f0f9ff,#e0f2fe); border:2px solid #bae6fd;">
+    <div class="panel-title">🌍 语言总结性分析 <span class="badge" style="background:#3b82f6;color:white;">AI分析</span></div>
+    <div id="languageSummaryContent" style="padding:12px 16px;">
+      <div id="languageSummaryLoading" style="text-align:center;color:#64748b;padding:20px;">
+        <div style="display:inline-block;width:24px;height:24px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;"></div>
+        正在分析语言数据...
+      </div>
+      <div id="languageSummaryResult" style="display:none;"></div>
+    </div>
+  </div>
+
   <!-- ★ 评论方言分析（核心重点区域） -->
   <div class="dialect-analysis" id="dialectPanel">
     <div class="panel-title">🗣️ 评论方言分析 <span class="badge badge-new" id="dialectBadge"></span></div>
@@ -886,6 +898,13 @@ function renderSpeechData(sp) {
 
   // 第四步：渲染话术分析
   try { renderSpeechData(sp); } catch(e) { console.error('[renderSpeechData]', e); }
+  
+  // 第五步：语言总结性分析
+  try { 
+    if (data && data.comments && sp && sp.records) {
+      analyzeLanguageSummary(sessionId, data.comments, sp.records);
+    }
+  } catch(e) { console.error('[analyzeLanguageSummary]', e); }
 })();
 
 // ── 删除本场记录 ──
@@ -1465,6 +1484,173 @@ async function submitFeedback() {
   btn.disabled = false; btn.textContent = '提交';
   const data = await res.json();
   if (data.success) { closeFeedbackModal(); alert('✅ 反馈已提交，感谢！'); } else { alert('提交失败：' + (data.msg||'')); }
+}
+
+// 语言总结性分析
+async function analyzeLanguageSummary(sessionId, comments, speeches) {
+  const panel = document.getElementById('languageSummaryPanel');
+  const loading = document.getElementById('languageSummaryLoading');
+  const result = document.getElementById('languageSummaryResult');
+  
+  if (!panel) return;
+  
+  // 显示面板
+  panel.style.display = '';
+  
+  // 确保参数不为空
+  const safeComments = comments || [];
+  const safeSpeeches = speeches || [];
+  
+  // 如果没有足够的数据，隐藏面板
+  if (safeComments.length === 0 && safeSpeeches.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  
+  try {
+    // 准备数据
+    const payload = {
+      comments: safeComments.map(c => ({
+        content: c.content || '',
+        lang: c.lang || '',
+        lang_short: c.lang_short || '',
+        is_anchor: c.is_anchor || 0
+      })),
+      speeches: safeSpeeches.map(s => ({
+        text: s.text || '',
+        lang: s.lang || '',
+        lang_short: s.lang_short || '',
+        dialect: s.dialect || ''
+      }))
+    };
+    
+    // 调用API
+    const response = await fetch(`/api/session/${sessionId}/language_summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API错误: ${response.status}`);
+    }
+    
+    const analysis = await response.json();
+    
+    // 隐藏加载，显示结果
+    loading.style.display = 'none';
+    result.style.display = 'block';
+    
+    // 渲染分析结果
+    renderLanguageAnalysis(analysis);
+    
+  } catch (error) {
+    console.error('语言分析失败:', error);
+    loading.innerHTML = `<div style="color:#ef4444;text-align:center;padding:20px;">
+      <div>❌ 语言分析失败</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:4px;">${error.message}</div>
+    </div>`;
+  }
+}
+
+function renderLanguageAnalysis(analysis) {
+  const result = document.getElementById('languageSummaryResult');
+  if (!result) return;
+  
+  let html = '';
+  
+  // 总体统计
+  if (analysis.overall_stats) {
+    const stats = analysis.overall_stats;
+    html += `<div style="margin-bottom:20px;">
+      <h4 style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:8px;">📊 语言总体统计</h4>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:13px;">
+        <div style="background:#f8fafc;padding:8px;border-radius:6px;">
+          <div style="color:#64748b;">评论总数</div>
+          <div style="font-weight:700;color:#1e293b;">${stats.total_comments}</div>
+        </div>
+        <div style="background:#f8fafc;padding:8px;border-radius:6px;">
+          <div style="color:#64748b;">话术总数</div>
+          <div style="font-weight:700;color:#1e293b;">${stats.total_speeches}</div>
+        </div>
+        <div style="background:#f8fafc;padding:8px;border-radius:6px;">
+          <div style="color:#64748b;">英语内容</div>
+          <div style="font-weight:700;color:#1e293b;">${stats.english_count}</div>
+        </div>
+        <div style="background:#f8fafc;padding:8px;border-radius:6px;">
+          <div style="color:#64748b;">阿拉伯语</div>
+          <div style="font-weight:700;color:#1e293b;">${stats.arabic_count}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+  
+  // 英语分析
+  if (analysis.english_analysis) {
+    const eng = analysis.english_analysis;
+    const levelColors = {
+      'A1': '#22c55e', 'A2': '#3b82f6', 'B1': '#f59e0b',
+      'B2': '#f97316', 'C1': '#ef4444', 'C2': '#8b5cf6'
+    };
+    const color = levelColors[eng.level] || '#9ca3af';
+    
+    html += `<div style="margin-bottom:20px;border-left:3px solid ${color};padding-left:12px;">
+      <h4 style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:6px;">
+        🇬🇧 英语水平分析
+        <span style="background:${color};color:white;font-size:11px;padding:2px 8px;border-radius:12px;margin-left:6px;">${eng.level}</span>
+      </h4>
+      <div style="font-size:13px;color:#475569;margin-bottom:4px;">${eng.explanation}</div>
+      <div style="font-size:12px;color:#64748b;">置信度: ${(eng.confidence * 100).toFixed(0)}%</div>
+    </div>`;
+  }
+  
+  // 阿拉伯语分析
+  if (analysis.arabic_analysis) {
+    const ar = analysis.arabic_analysis;
+    html += `<div style="margin-bottom:20px;border-left:3px solid #f59e0b;padding-left:12px;">
+      <h4 style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:6px;">🇸🇦 阿拉伯语地区分析</h4>
+      <div style="font-size:13px;color:#475569;margin-bottom:4px;">主要地区: <strong>${ar.primary}</strong></div>
+      <div style="font-size:12px;color:#64748b;">置信度: ${(ar.confidence * 100).toFixed(0)}%</div>`;
+    
+    if (ar.distribution && Object.keys(ar.distribution).length > 0) {
+      html += `<div style="margin-top:8px;font-size:12px;color:#64748b;">
+        <div style="font-weight:600;margin-bottom:4px;">地区分布:</div>`;
+      for (const [region, pct] of Object.entries(ar.distribution)) {
+        html += `<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+          <span>${region}</span>
+          <span style="font-weight:600;">${pct}</span>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  
+  // 中文分析
+  if (analysis.chinese_analysis) {
+    const zh = analysis.chinese_analysis;
+    html += `<div style="margin-bottom:20px;border-left:3px solid #ef4444;padding-left:12px;">
+      <h4 style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:6px;">🇨🇳 中文分析</h4>
+      <div style="font-size:13px;color:#475569;">${zh.note}</div>
+    </div>`;
+  }
+  
+  // 总结
+  if (analysis.summary) {
+    html += `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:16px;">
+      <div style="font-size:13px;font-weight:600;color:#0369a1;margin-bottom:6px;">📋 分析总结</div>
+      <div style="font-size:13px;color:#1e293b;line-height:1.5;">${analysis.summary}</div>
+    </div>`;
+  }
+  
+  // 如果没有分析结果
+  if (html === '') {
+    html = `<div style="text-align:center;color:#64748b;padding:20px;">
+      <div>📝 本场直播语言数据有限，无法进行详细分析</div>
+    </div>`;
+  }
+  
+  result.innerHTML = html;
 }
 </script>
 </body>

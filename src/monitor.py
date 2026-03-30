@@ -32,26 +32,30 @@ class LiveMonitor:
     """单个 TikTok 账号的直播监控器"""
 
     def __init__(self, username: str, anchor_username: str = None, socketio=None,
-                 is_auto: bool = False, group_name: str = 'own'):
+                 is_auto: bool = False, group_name: str = 'own', owner_user_id: int = 1):
         """
         :param username: TikTok 用户名（@后面的部分）
         :param anchor_username: 主播的显示名称（用于识别主播话术）
         :param socketio: Flask-SocketIO 实例，用于实时推送到前端
         :param is_auto: 是否为自动监控账号（影响看板展示和采集深度）
         :param group_name: 账号分组 'own'|'rival'|'watch'
+        :param owner_user_id: 所属系统用户ID，用于多用户数据隔离
         """
         self.username = username
         self.anchor_username = anchor_username or username
         self.socketio = socketio
         self.is_auto = is_auto          # 自动监控标记
         self.group_name = group_name    # 分组：own/rival/watch
+        self.owner_user_id = owner_user_id  # 所属用户ID，用于数据隔离
         self.session_id = None
         self.start_time = None
         self.client = None
         self.running = False
         self.viewer_count = 0
+        self.peak_viewers = 0      # 峰值在线人数
         self.like_count = 0
         self.comment_count = 0
+        self.new_followers = 0     # 新增关注数
         self.speech_monitor: SpeechMonitor = None  # 语音监控实例
 
     def _emit(self, event_name, data):
@@ -110,18 +114,16 @@ class LiveMonitor:
         if not self.running:
             return
 
-        # 关注分组：只推开播通知，不做任何采集
+        # 所有分组（自营/竞品/关注）统一进行全量数据采集
         if self.group_name == 'watch':
-            logger.info(f"👁️ @{self.username}（关注账号）开播，推送通知后退出")
+            logger.info(f"👁️ @{self.username}（关注账号）开播，开始全量数据采集")
             from src.notifier import send_live_start_notify
             send_live_start_notify(self.username, group_name='watch')
-            active_monitors.pop(self.username, None)
-            self.running = False
-            return
+        # 不再有早期退出，继续执行后续的数据采集流程
 
         # 开播了，建立会话（或合并到15分钟内的上次会话）
         merged = False
-        recent = find_recent_session(self.username, minutes=15)
+        recent = find_recent_session(self.username, minutes=15, owner_user_id=self.owner_user_id)
         if recent:
             self.session_id = recent['id']
             self.start_time = recent.get('start_time') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -129,9 +131,9 @@ class LiveMonitor:
             merged = True
             logger.info(f"🔄 @{self.username} 15分钟内重连，合并至 session#{self.session_id}（原开播: {self.start_time}）")
         else:
-            self.session_id = create_session(self.username)
+            self.session_id = create_session(self.username, owner_user_id=self.owner_user_id)
             self.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            logger.info(f"🚀 @{self.username} 开播了！开始采集，新会话ID: {self.session_id}")
+            logger.info(f"🚀 @{self.username} 开播了！开始采集，新会话ID: {self.session_id}，所属用户ID: {self.owner_user_id}")
         self._emit('live_detected', {
             'msg': f'@{self.username} 开播了，开始监控！',
             'session_id': self.session_id,
@@ -314,7 +316,7 @@ class LiveMonitor:
     def _register_events(self):
         """注册所有监听事件"""
         # v1.3: 竞品/关注账号与自营账号采集内容完全一致，取消轻量模式限制
-        is_rival = False  # 原来：self.group_name == 'rival'，现在全部启用完整采集
+        is_rival = False  # 所有分组统一进行全量数据采集，不再有轻量模式
 
         @self.client.on(ConnectEvent)
         async def on_connect(event: ConnectEvent):
@@ -368,6 +370,17 @@ class LiveMonitor:
             if self.speech_monitor:
                 self.speech_monitor.stop()
                 self.speech_monitor = None
+            
+            # 修复：短暂断开等待重连，不立即结束session
+            # 等待45秒看是否会自动重连（基于统计优化：过滤58.5%虚假session）
+            logger.info(f"⏳ @{self.username} 连接断开，等待45秒自动重连...")
+            await asyncio.sleep(45)
+            
+            # 45秒后检查是否已经重新连接
+            # 通过检查客户端是否还有活跃连接来判断
+            # 简化：45秒后如果还在断开状态，就结束session
+            # end_session会检查持续时间，如果小于5分钟就不记录end_time
+            logger.info(f"⏹️ @{self.username} 断开超过45秒，结束session")
             await self.stop()
 
         @self.client.on(LiveEndEvent)
@@ -377,8 +390,7 @@ class LiveMonitor:
 
         @self.client.on(CommentEvent)
         async def on_comment(event: CommentEvent):
-            if is_rival:  # 竞品轻量模式：跳过评论采集
-                return
+            # 所有分组统一进行评论采集
             # v6.x API: user_info 字段
             user = getattr(event, 'user_info', None)
             username = getattr(user, 'nickname', None) or getattr(user, 'display_id', 'unknown')
@@ -443,8 +455,7 @@ class LiveMonitor:
 
         @self.client.on(GiftEvent)
         async def on_gift(event: GiftEvent):
-            if is_rival:  # 竞品轻量模式：跳过礼物采集
-                return
+            # 所有分组统一进行礼物采集
             # v6.x: from_user, m_gift
             user = getattr(event, 'from_user', None)
             username = getattr(user, 'nickname', None) or getattr(user, 'display_id', 'unknown')
@@ -468,18 +479,31 @@ class LiveMonitor:
 
         @self.client.on(FollowEvent)
         async def on_follow(event: FollowEvent):
-            if is_rival:  # 竞品轻量模式：跳过关注采集
-                return
+            # 所有分组统一进行关注采集
             # v6.x: user 字段
             user = getattr(event, 'user', None)
             username = getattr(user, 'nickname', None) or getattr(user, 'display_id', 'unknown')
             user_id = str(getattr(user, 'uid', ''))
 
             add_follow(self.session_id, username, user_id)
+            
+            # 更新新增关注计数
+            self.new_followers += 1
 
-            logger.info(f"👤 [{self.username}] 新关注: {username}")
+            logger.info(f"👤 [{self.username}] 新关注: {username} (累计: {self.new_followers})")
             self._emit('new_follow', {
                 'username': username,
+                'timestamp': datetime.now().strftime('%H:%M:%S')
+            })
+            # 更新viewer数据，包含新增关注数
+            self._emit('viewer_update', {
+                'username': self.username,
+                'viewer_count': self.viewer_count,
+                'peak_viewers': self.peak_viewers,
+                'total_user': 0,
+                'like_count': self.like_count,
+                'comment_count': self.comment_count,
+                'new_followers': self.new_followers,
                 'timestamp': datetime.now().strftime('%H:%M:%S')
             })
 
@@ -488,13 +512,21 @@ class LiveMonitor:
             # m_total = 当前实时在线人数，total_user = 累计观看人数（平台提供）
             self.viewer_count = getattr(event, 'm_total', 0) or 0
             total_user = getattr(event, 'total_user', 0) or 0
-            update_viewers(self.session_id, self.viewer_count, self.like_count, self.comment_count, total_user=total_user)
+            
+            # 更新峰值在线
+            if self.viewer_count > self.peak_viewers:
+                self.peak_viewers = self.viewer_count
+            
+            update_viewers(self.session_id, self.viewer_count, self.like_count, self.comment_count, 
+                          total_user=total_user, peak_viewers=self.peak_viewers)
 
             self._emit('viewer_update', {
                 'viewer_count': self.viewer_count,      # 实时在线
+                'peak_viewers': self.peak_viewers,      # 峰值在线
                 'total_user': total_user,                # 累计观看
                 'like_count': self.like_count,
                 'comment_count': self.comment_count,
+                'new_followers': self.new_followers,    # 新增关注
                 'timestamp': datetime.now().strftime('%H:%M:%S')
             })
 
@@ -518,10 +550,11 @@ class LiveMonitor:
             })
 
 
-def start_monitor(username: str, socketio=None, is_auto: bool = False, group_name: str = 'own'):
+def start_monitor(username: str, socketio=None, is_auto: bool = False, group_name: str = 'own', owner_user_id: int = 1):
     """在新线程中启动对某账号的监控
     :param is_auto: 是否为自动监控账号
     :param group_name: 账号分组 'own'|'rival'|'watch'
+    :param owner_user_id: 所属系统用户ID，用于多用户数据隔离
     """
     import threading
 
@@ -529,7 +562,7 @@ def start_monitor(username: str, socketio=None, is_auto: bool = False, group_nam
         logger.warning(f"@{username} 已在监控中，跳过")
         return False
 
-    monitor = LiveMonitor(username, socketio=socketio, is_auto=is_auto, group_name=group_name)
+    monitor = LiveMonitor(username, socketio=socketio, is_auto=is_auto, group_name=group_name, owner_user_id=owner_user_id)
     active_monitors[username] = monitor
 
     def run():

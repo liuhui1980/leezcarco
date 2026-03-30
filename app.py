@@ -322,6 +322,70 @@ def api_submit_feedback():
     return jsonify({'success': True, 'id': fb_id})
 
 
+@app.route('/api/feedback/with_image', methods=['POST'])
+@login_required
+def api_submit_feedback_with_image():
+    """提交带图片的反馈"""
+    u = get_current_user()
+    
+    # 检查是否有文件上传
+    if 'image' not in request.files:
+        return jsonify({'success': False, 'msg': '未选择图片文件'}), 400
+    
+    image_file = request.files['image']
+    if image_file.filename == '':
+        return jsonify({'success': False, 'msg': '未选择图片文件'}), 400
+    
+    # 检查文件类型
+    if not image_file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+        return jsonify({'success': False, 'msg': '仅支持PNG、JPG、JPEG、GIF格式'}), 400
+    
+    # 检查文件大小
+    image_file.seek(0, 2)  # 移动到文件末尾
+    file_size = image_file.tell()
+    image_file.seek(0)  # 回到文件开头
+    if file_size > 5 * 1024 * 1024:  # 5MB
+        return jsonify({'success': False, 'msg': '图片大小不能超过5MB'}), 400
+    
+    # 获取表单数据
+    fb_type = request.form.get('type', 'feature')
+    if fb_type not in ('feature', 'bug', 'other'):
+        fb_type = 'feature'
+    title = request.form.get('title', '').strip()
+    if not title:
+        return jsonify({'success': False, 'msg': '标题不能为空'}), 400
+    desc = request.form.get('desc', '').strip()
+    
+    # 保存图片
+    import os
+    from werkzeug.utils import secure_filename
+    
+    # 创建反馈图片目录
+    feedback_dir = os.path.join('static', 'feedback_images')
+    os.makedirs(feedback_dir, exist_ok=True)
+    
+    # 生成安全的文件名
+    filename = secure_filename(image_file.filename)
+    # 添加时间戳避免重复
+    import time
+    timestamp = int(time.time())
+    filename = f"{timestamp}_{filename}"
+    
+    # 保存文件
+    image_path = os.path.join(feedback_dir, filename)
+    image_file.save(image_path)
+    
+    # 在描述中添加图片链接
+    if desc:
+        desc += f"\n\n[图片附件: /static/feedback_images/{filename}]"
+    else:
+        desc = f"[图片附件: /static/feedback_images/{filename}]"
+    
+    # 保存到数据库
+    fb_id = submit_feedback(u['id'], u['username'], fb_type, title, desc)
+    return jsonify({'success': True, 'id': fb_id})
+
+
 @app.route('/api/admin/feedbacks')
 @admin_required
 def api_admin_feedbacks():
@@ -651,7 +715,7 @@ def api_start_monitor():
         return jsonify({'success': False, 'msg': '用户名不能为空'}), 400
 
     u = get_current_user()
-    result = start_monitor(username, socketio=socketio)
+    result = start_monitor(username, socketio=socketio, owner_user_id=u['id'])
     if result:
         write_action_log(u['id'], u['username'], 'monitor_start', target=username,
                          ip=request.remote_addr or '', page='实时看板')
@@ -680,14 +744,15 @@ def api_stop_monitor():
 @login_required
 def api_batch_start():
     """批量启动监控"""
+    u = get_current_user()
     data = request.get_json() or {}
     usernames = data.get('usernames', [])
     results = []
-    for u in usernames:
-        u = u.strip().lstrip('@')
-        if u:
-            ok = start_monitor(u, socketio=socketio)
-            results.append({'username': u, 'success': ok})
+    for un in usernames:
+        un = un.strip().lstrip('@')
+        if un:
+            ok = start_monitor(un, socketio=socketio, owner_user_id=u['id'])
+            results.append({'username': un, 'success': ok})
     return jsonify({'results': results})
 
 
@@ -752,6 +817,37 @@ def api_session_ai_summary(session_id):
     except Exception as e:
         logger.error(f'AI 总结失败: {e}')
         return jsonify({'success': False, 'summary': '', 'msg': str(e)})
+
+
+@app.route('/api/session/<int:session_id>/language_summary', methods=['POST'])
+@login_required
+def api_session_language_summary(session_id):
+    """语言总结性分析：英文CEFR等级+阿拉伯语地区识别"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
+    
+    req = request.get_json(force=True) or {}
+    comments = req.get('comments', [])
+    speeches = req.get('speeches', [])
+    
+    try:
+        # 导入语言分析模块
+        from src.lang_summary import analyze_language_summary
+        
+        # 进行分析
+        analysis = analyze_language_summary(comments, speeches)
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis
+        })
+    except Exception as e:
+        logger.error(f'语言分析失败: {e}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
 
 
 @app.route('/api/card/ai_summary', methods=['POST'])
@@ -1318,7 +1414,7 @@ def api_automonitor_start_all():
     for r in rows:
         un = r['username']
         group = r.get('group_name', 'own')
-        ok = start_monitor(un, socketio=socketio, is_auto=True, group_name=group)
+        ok = start_monitor(un, socketio=socketio, is_auto=True, group_name=group, owner_user_id=u['id'])
         results.append({'username': un, 'started': ok})
     return jsonify({'success': True, 'results': results})
 
@@ -1626,7 +1722,8 @@ if __name__ == '__main__':
             print(f"🔄 自动恢复 {len(rows)} 个监控任务...")
             for r in rows:
                 group = r.get('group_name', 'own')
-                start_monitor(r['username'], socketio=socketio, is_auto=True, group_name=group)
+                owner_user_id = r.get('owner_user_id', 1)
+                start_monitor(r['username'], socketio=socketio, is_auto=True, group_name=group, owner_user_id=owner_user_id)
                 time.sleep(0.5)
     threading.Thread(target=_auto_restore_monitors, daemon=True).start()
     socketio.run(app, host='0.0.0.0', port=5001, debug=False, allow_unsafe_werkzeug=True)

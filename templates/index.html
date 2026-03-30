@@ -212,6 +212,12 @@
   .dr-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
   .dr-tab { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; cursor: pointer; border: 1px solid #fde68a; background: transparent; color: #92400e; transition: all .15s; }
   .dr-tab.active { background: #f59e0b; color: #fff; border-color: #f59e0b; }
+
+  /* ── 卡片内语言分析模块（整合版） ── */
+  .language-analysis { background: linear-gradient(135deg, #eff6ff, #f0f9ff); border: 1px solid #bae6fd; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .lang-analysis-title { font-size: 10px; font-weight: 700; color: #0369a1; margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
+  .lang-analysis-title .la-dot { width: 5px; height: 5px; border-radius: 50%; background: #3b82f6; animation: pulse 1.5s infinite; }
+  .lang-bars-empty { font-size: 11px; color: var(--text3); text-align: center; padding: 4px 0; }
   .dr-tab-content { display: none; }
   .dr-tab-content.active { display: block; }
 
@@ -316,6 +322,26 @@
     <div style="margin-bottom:20px;">
       <div style="font-size:13px;font-weight:600;margin-bottom:6px;">详细描述</div>
       <textarea id="fbDesc" rows="4" maxlength="1000" placeholder="可选：描述具体场景、期望效果、复现步骤等..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:13px;resize:vertical;outline:none;box-sizing:border-box;font-family:inherit;" onfocus="this.style.borderColor='#fe2c55'" onblur="this.style.borderColor='#e5e7eb'"></textarea>
+    </div>
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">截图附件（可选）</div>
+      <div id="fbImageUpload" style="border:2px dashed #d1d5db;border-radius:8px;padding:20px;text-align:center;cursor:pointer;background:#f9fafb;transition:all .2s;" onclick="document.getElementById('fbImageInput').click()" ondrop="handleImageDrop(event)" ondragover="event.preventDefault()">
+        <div style="margin-bottom:8px;color:#6b7280;">📎 拖拽图片到此处 或 点击选择文件</div>
+        <div style="font-size:12px;color:#9ca3af;">支持 PNG、JPG、GIF，大小不超过 5MB</div>
+        <input type="file" id="fbImageInput" accept="image/*" style="display:none;" onchange="handleImageSelect(event)">
+      </div>
+      <div id="fbImagePreview" style="margin-top:10px;display:none;">
+        <div style="display:flex;align-items:center;gap:10px;background:#f3f4f6;border-radius:8px;padding:8px;">
+          <div style="width:40px;height:40px;border-radius:6px;overflow:hidden;">
+            <img id="fbPreviewImg" style="width:100%;height:100%;object-fit:cover;">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:600;color:#374151;" id="fbImageName"></div>
+            <div style="font-size:11px;color:#6b7280;" id="fbImageSize"></div>
+          </div>
+          <button onclick="removeSelectedImage()" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;padding:4px 8px;">✕</button>
+        </div>
+      </div>
     </div>
     <div style="display:flex;gap:10px;">
       <button onclick="submitFeedback()" style="flex:1;background:#fe2c55;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;" id="fbSubmitBtn">提交</button>
@@ -689,8 +715,10 @@ socket.on('new_follow', (data) => {
 socket.on('viewer_update', (data) => {
   const u = data.username; if (!monitors[u]) return;
   monitors[u].viewers = data.viewer_count;
+  monitors[u].peakViewers = data.peak_viewers || data.viewer_count; // 兼容旧数据
   monitors[u].totalUser = data.total_user || 0;
   monitors[u].likes = data.like_count;
+  monitors[u].newFollowers = data.new_followers || 0;
   // 记录历史快照（最多保留120个点，约1小时）
   const now = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   monitors[u].history = monitors[u].history || [];
@@ -710,12 +738,12 @@ socket.on('lang_stats_update', (data) => {
   const sStats = data.speech_stats || {};
 
   if (u) {
-    // 更新卡片内两个独立 Tab（方言雷达）
+    // 更新卡片内的语言分析模块
+    updateCardLanguageAnalysis(u, cStats, sStats);
+    // 同时保留旧的方言雷达更新（兼容性）
     cardDialectStats[u] = { comment: cStats, speech: sStats };
     updateCardDialectRadar(u, 'comment', cStats);
     updateCardDialectRadar(u, 'speech', sStats);
-    // 更新语言分析卡片
-    updateLangChip(u, cStats, sStats);
   }
 });
 
@@ -767,29 +795,27 @@ function createAccountCard(username, group = 'own', prependToFront = false) {
       <span>⏱ 已播：<b id="duration-${username}" style="color:var(--primary);">0m</b></span>
     </div>
     <div class="metrics-row" onclick="openMetricsModal('${username}')" style="cursor:pointer;" title="点击查看实时数据曲线">
+      <div class="metric"><div class="metric-val" id="totaluser-${username}">0</div><div class="metric-label">累计场关数</div></div>
+      <div class="metric"><div class="metric-val" id="peakviewers-${username}">0</div><div class="metric-label">峰值在线</div></div>
       <div class="metric"><div class="metric-val" id="viewers-${username}">0</div><div class="metric-label">实时在线</div></div>
-      <div class="metric"><div class="metric-val" id="totaluser-${username}">0</div><div class="metric-label">累计观看</div></div>
-      <div class="metric"><div class="metric-val" id="comments-${username}">0</div><div class="metric-label">评论数</div></div>
-      <div class="metric"><div class="metric-val" id="likes-${username}">0</div><div class="metric-label">点赞数</div></div>
-      <div style="font-size:10px;color:var(--text3);align-self:center;margin-left:auto;padding-right:4px;">📈 点击查看曲线</div>
+      <div class="metric"><div class="metric-val" id="comments-${username}">0</div><div class="metric-label">评论总数</div></div>
+      <div class="metric"><div class="metric-val" id="likes-${username}">0</div><div class="metric-label">点赞总数</div></div>
+      <div class="metric"><div class="metric-val" id="newfollowers-${username}">0</div><div class="metric-label">新增关注</div></div>
+      <div style="font-size:10px;color:var(--text3);align-self:center;margin-left:auto;padding-right:4px;">📈 点击看趋势</div>
     </div>
-    <!-- ★ 方言雷达 -->
-    <div class="dialect-radar" id="dialect-radar-${username}">
-      <div class="dialect-radar-title"><span class="dr-dot"></span>方言监测</div>
-      <div class="dr-tabs">
-        <button class="dr-tab active" onclick="switchDialectTab('${username}','comment',this)">💬 评论</button>
-        <button class="dr-tab" onclick="switchDialectTab('${username}','speech',this)">🎙️ 话术</button>
+    <!-- ★ 语言分析模块（整合到卡片内） -->
+    <div class="language-analysis" id="language-analysis-${username}">
+      <div class="lang-analysis-title"><span class="la-dot"></span>语言分析</div>
+      <!-- 主要语言占比条 -->
+      <div id="lang-bars-${username}" style="margin-bottom:10px;">
+        <div class="lang-bars-empty">等待语言数据...</div>
       </div>
-      <div class="dr-tab-content active" id="dialect-comment-${username}">
-        <div class="dialect-pills" id="dialect-pills-comment-${username}">
-          <div class="dialect-radar-empty">等待评论数据...</div>
-        </div>
-      </div>
-      <div class="dr-tab-content" id="dialect-speech-${username}">
-        <div class="dialect-pills" id="dialect-pills-speech-${username}">
-          <div class="dialect-radar-empty">等待话术数据...</div>
-        </div>
-      </div>
+      <!-- 英语水平评估 -->
+      <div id="english-level-${username}" style="display:none;margin-bottom:8px;"></div>
+      <!-- 阿拉伯语地域分布 -->
+      <div id="arabic-regions-${username}" style="display:none;margin-bottom:8px;"></div>
+      <!-- 其他语言 -->
+      <div id="other-langs-${username}" style="display:none;"></div>
     </div>
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
       <span>最新评论</span>
@@ -1080,6 +1106,120 @@ function updateLangChip(username, cStats, sStats) {
     ${arabicHtml}
     ${otherLangsHtml}
   `;
+}
+
+// 更新卡片内的语言分析模块
+function updateCardLanguageAnalysis(username, cStats, sStats) {
+  const langSection = document.getElementById(`language-analysis-${username}`);
+  if (!langSection) return;
+  
+  // 合并评论+话术统计
+  const merged = {};
+  [cStats || {}, sStats || {}].forEach(s => {
+    Object.entries(s).forEach(([k, v]) => { merged[k] = (merged[k] || 0) + v; });
+  });
+  
+  const total = Object.values(merged).reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    document.getElementById(`lang-bars-${username}`).innerHTML = 
+      '<div class="lang-bars-empty">等待语言数据...</div>';
+    document.getElementById(`english-level-${username}`).style.display = 'none';
+    document.getElementById(`arabic-regions-${username}`).style.display = 'none';
+    document.getElementById(`other-langs-${username}`).style.display = 'none';
+    return;
+  }
+  
+  // 各大语种统计
+  const arDialects = ['ar-gulf','ar-egypt','ar-levant','ar-maghreb'];
+  const arDialectTotal = arDialects.reduce((a, k) => a + (merged[k] || 0), 0);
+  const arStd = merged['ar'] || 0;
+  const arTotal = arDialectTotal + arStd;
+  const enTotal = merged['en'] || 0;
+  const zhTotal = merged['zh'] || 0;
+  
+  // 其他语言
+  const knownKeys = new Set(['zh','en','ar','ar-gulf','ar-egypt','ar-levant','ar-maghreb','other']);
+  const otherMap = {};
+  Object.entries(merged).forEach(([k, v]) => {
+    if (!knownKeys.has(k) && v > 0) otherMap[k] = v;
+  });
+  const otherTotal = (merged['other'] || 0) + Object.values(otherMap).reduce((a,b)=>a+b,0);
+  
+  // 主语言占比条
+  const langs = [
+    arTotal > 0 && { key:'ar', name:'阿拉伯语', count:arTotal, color:'#f59e0b', bg:'#fef3c7' },
+    enTotal > 0 && { key:'en', name:'英语',     count:enTotal, color:'#3b82f6', bg:'#eff6ff' },
+    zhTotal > 0 && { key:'zh', name:'中文',     count:zhTotal, color:'#10b981', bg:'#f0fdf4' },
+    otherTotal > 0 && { key:'other', name:'其他', count:otherTotal, color:'#6b7280', bg:'#f9fafb' },
+  ].filter(Boolean).sort((a,b) => b.count - a.count);
+  
+  // 创建语言占比条HTML
+  const langBarsHtml = langs.map(l => {
+    const pct = Math.round(l.count / total * 100);
+    return `<div style="margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+        <span style="color:#374151;font-weight:600;">${l.name}</span>
+        <span style="color:${l.color};font-weight:700;">${pct}% · ${l.count}条</span>
+      </div>
+      <div style="height:5px;background:#f3f4f6;border-radius:3px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:${l.color};border-radius:3px;transition:width .4s;"></div>
+      </div>
+    </div>`;
+  }).join('');
+  
+  document.getElementById(`lang-bars-${username}`).innerHTML = langBarsHtml;
+  
+  // 英语 CEFR 分析
+  const englishSection = document.getElementById(`english-level-${username}`);
+  const enInfo = inferEnglishLevel(cStats || {}, sStats || {});
+  if (enInfo) {
+    englishSection.style.display = 'block';
+    englishSection.innerHTML = `
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:6px 8px;">
+        <div style="font-size:11px;color:#0369a1;font-weight:700;margin-bottom:2px;">📚 英语水平评估（CEFR）</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="background:${enInfo.color};color:#fff;border-radius:6px;padding:2px 6px;font-size:11px;font-weight:800;">${enInfo.level}</span>
+          <span style="font-size:10px;color:#0369a1;">${enInfo.desc}</span>
+        </div>
+      </div>`;
+  } else {
+    englishSection.style.display = 'none';
+  }
+  
+  // 阿语地域分析
+  const arabicSection = document.getElementById(`arabic-regions-${username}`);
+  const arRegions = inferArabicRegion(cStats || {}, sStats || {});
+  if (arRegions && arRegions.length > 0) {
+    arabicSection.style.display = 'block';
+    const regionItems = arRegions.map(r =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+        <span style="font-size:10px;color:#374151;">${r.name}<span style="font-size:9px;color:#9ca3af;margin-left:3px;">${r.countries}</span></span>
+        <span style="font-size:11px;font-weight:700;color:${r.color};">${r.pct}%</span>
+      </div>`
+    ).join('');
+    arabicSection.innerHTML = `
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:6px 8px;">
+        <div style="font-size:11px;color:#92400e;font-weight:700;margin-bottom:2px;">🌍 阿拉伯语地域分布</div>
+        ${regionItems}
+      </div>`;
+  } else {
+    arabicSection.style.display = 'none';
+  }
+  
+  // 其他具体语种
+  const otherSection = document.getElementById(`other-langs-${username}`);
+  const topOthers = Object.entries(otherMap).sort(([,a],[,b])=>b-a).slice(0,3);
+  if (topOthers.length > 0) {
+    otherSection.style.display = 'block';
+    const otherItems = topOthers.map(([k, v]) => {
+      const meta = LANG_NAME_MAP[k] || k.toUpperCase();
+      const flag = LANG_META[k]?.flag || '🌐';
+      return `<span style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:5px;padding:1px 5px;font-size:10px;color:#374151;">${flag} ${meta} ${Math.round(v/total*100)}%</span>`;
+    }).join('');
+    otherSection.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:3px;">${otherItems}</div>`;
+  } else {
+    otherSection.style.display = 'none';
+  }
 }
 
 // 移除账号语言卡片
@@ -1374,10 +1514,12 @@ function removeAccountCard(username) {
 function updateCardMetrics(username) {
   const m = monitors[username]; if (!m) return;
   const el = id => document.getElementById(`${id}-${username}`);
-  if (el('viewers')) el('viewers').textContent = formatNum(m.viewers || 0);
   if (el('totaluser')) el('totaluser').textContent = formatNum(m.totalUser || 0);
+  if (el('peakviewers')) el('peakviewers').textContent = formatNum(m.peakViewers || 0);
+  if (el('viewers')) el('viewers').textContent = formatNum(m.viewers || 0);
   if (el('comments')) el('comments').textContent = formatNum(m.comments || 0);
   if (el('likes')) el('likes').textContent = formatNum(m.likes || 0);
+  if (el('newfollowers')) el('newfollowers').textContent = formatNum(m.newFollowers || 0);
   updateGlobalStats();
 }
 
@@ -1808,7 +1950,63 @@ function openFeedbackModal() {
 }
 function closeFeedbackModal() {
   document.getElementById('feedbackModal').style.display = 'none';
+  // 清空图片选择
+  removeSelectedImage();
 }
+
+// 图片上传处理函数
+let selectedImage = null;
+
+function handleImageDrop(event) {
+  event.preventDefault();
+  const file = event.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) {
+    previewImage(file);
+  }
+}
+
+function handleImageSelect(event) {
+  const file = event.target.files[0];
+  if (file) {
+    previewImage(file);
+  }
+}
+
+function previewImage(file) {
+  if (!file.type.startsWith('image/')) {
+    showToast('请选择图片文件', 'error');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('图片大小不能超过5MB', 'error');
+    return;
+  }
+  
+  selectedImage = file;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('fbPreviewImg').src = e.target.result;
+    document.getElementById('fbImageName').textContent = file.name;
+    document.getElementById('fbImageSize').textContent = formatFileSize(file.size);
+    document.getElementById('fbImagePreview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeSelectedImage() {
+  selectedImage = null;
+  document.getElementById('fbImageInput').value = '';
+  document.getElementById('fbImagePreview').style.display = 'none';
+  document.getElementById('fbPreviewImg').src = '';
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 async function submitFeedback() {
   const title = document.getElementById('fbTitle').value.trim();
   if (!title) { document.getElementById('fbTitle').focus(); showToast('请填写标题', 'error'); return; }
@@ -1816,17 +2014,38 @@ async function submitFeedback() {
   const desc = document.getElementById('fbDesc').value.trim();
   const btn = document.getElementById('fbSubmitBtn');
   btn.disabled = true; btn.textContent = '提交中...';
+  
   try {
-    const res = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, title, desc }) });
-    const data = await res.json();
-    if (data.success) {
-      closeFeedbackModal();
-      showToast('✅ 反馈已提交，感谢！', 'success');
+    // 如果有图片，使用 FormData 上传
+    if (selectedImage) {
+      const formData = new FormData();
+      formData.append('type', type);
+      formData.append('title', title);
+      formData.append('desc', desc);
+      formData.append('image', selectedImage);
+      
+      const res = await fetch('/api/feedback/with_image', { method:'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        closeFeedbackModal();
+        showToast('✅ 反馈已提交，感谢！', 'success');
+      } else {
+        showToast('提交失败：' + (data.msg || '未知错误'), 'error');
+      }
     } else {
-      showToast('提交失败：' + (data.msg || '未知错误'), 'error');
+      // 没有图片，使用原来的 JSON 方式
+      const res = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, title, desc }) });
+      const data = await res.json();
+      if (data.success) {
+        closeFeedbackModal();
+        showToast('✅ 反馈已提交，感谢！', 'success');
+      } else {
+        showToast('提交失败：' + (data.msg || '未知错误'), 'error');
+      }
     }
   } catch(e) {
     showToast('提交失败，请重试', 'error');
+    console.error('反馈提交错误:', e);
   } finally {
     btn.disabled = false; btn.textContent = '提交';
   }
@@ -1942,10 +2161,11 @@ async function init() {
         monitors[u].comments  = s.total_comments || 0;
         monitors[u].gifts     = s.total_gift_value || 0;
         monitors[u].sessionId = s.id;
-        if (s.start_time) {
-          monitors[u].startTime = s.start_time.slice(11,16);
+        if (s.start_time_beijing || s.start_time) {
+          const timeStr = s.start_time_beijing || s.start_time;
+          monitors[u].startTime = timeStr.slice(11,16);
           const startEl = document.getElementById(`start-time-${u}`);
-          if (startEl) startEl.textContent = s.start_time.slice(11,16);
+          if (startEl) startEl.textContent = timeStr.slice(11,16);
           const row = document.getElementById(`live-time-row-${u}`);
           if (row) row.style.display = 'flex';
           // 服务器存的是北京时间字符串，需加8小时偏移正确解析

@@ -363,8 +363,8 @@ function buildSessionRow(s, maxPeak, isLatest) {
       <div class="sr-time">
         ${isLive ? '<span class="badge-live">🔴 直播中</span>' : ''}
         ${isLatest && !isLive ? '<span style="font-size:10px;background:#eff6ff;color:#3b82f6;padding:1px 6px;border-radius:8px;font-weight:600;">最新</span>' : ''}
-        ${formatTime(s.start_time)}
-        ${!isLive ? `→ ${formatTime(s.end_time) || '未知'}` : ''}
+        ${formatTime(s.start_time_beijing || s.start_time)}
+        ${!isLive ? `→ ${formatTime(s.end_time_beijing || s.end_time) || '未知'}` : ''}
       </div>
       <div class="sr-duration">时长 ${isLive ? '直播中' : durationStr(dur)} &nbsp; ${speechBadge}</div>
       <div class="mini-bar"><div class="mini-bar-fill" style="width:${barPct}%"></div></div>

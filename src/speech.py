@@ -45,10 +45,11 @@ class SpeechMonitor:
     - 转写结果通过 on_transcript 回调传出
     """
 
-    SEGMENT_SECS = 6          # 每段音频时长（秒）
+    SEGMENT_SECS = 3          # 缩短切片间隔到3秒，确保每句话都被采集
+    OVERLAP_SECS = 0.5         # 切片重叠0.5秒，防止漏掉句尾
     WHISPER_MODEL = "large-v3" # large-v3: 支持中/英/阿拉伯语方言，约 3GB
-    MAX_CONSECUTIVE_ERRORS = 8  # 最大连续错误次数（增大容忍度）
-    RECONNECT_WAIT = 3          # 断流等待重连基础时间（秒）
+    MAX_CONSECUTIVE_ERRORS = 12 # 增大容忍度，避免频繁重连
+    RECONNECT_WAIT = 2          # 缩短重连等待时间，更快恢复
 
     def __init__(self, username: str, stream_url: str, on_transcript: Callable, socketio=None):
         """
@@ -109,15 +110,16 @@ class SpeechMonitor:
                 if tmpdir is None:
                     break
                 wav_path = os.path.join(tmpdir.name, f"seg_{seg_idx:06d}.wav")
-                success = self._pull_segment(wav_path, duration=self.SEGMENT_SECS)
+                # 使用重叠切片，确保连续采集
+                success = self._pull_segment(wav_path, duration=self.SEGMENT_SECS + self.OVERLAP_SECS)
 
                 if not success:
                     consecutive_errors += 1
                     if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
                         logger.error(f"[{self.username}] 连续 {self.MAX_CONSECUTIVE_ERRORS} 次拉流失败，语音监控停止")
                         break
-                    # 指数退避：1s → 2s → 4s → 最大 8s
-                    wait = min(self.RECONNECT_WAIT * (2 ** (consecutive_errors - 1)), 8)
+                    # 指数退避：2s → 4s → 8s → 最大 16s
+                    wait = min(self.RECONNECT_WAIT * (2 ** (consecutive_errors - 1)), 16)
                     logger.warning(f"[{self.username}] 拉流失败 ({consecutive_errors}/{self.MAX_CONSECUTIVE_ERRORS})，{wait}s 后重试")
                     time.sleep(wait)
                     continue
@@ -141,7 +143,10 @@ class SpeechMonitor:
                     })
                     speech_lang_stats.add(self.username, lang_info)
 
-                    logger.info(f"[{self.username}] [{lang_info['lang_short']}] 话术: {text[:80]}")
+                    # 详细日志：确保每句话都被记录
+                    sentence_length = len(text.strip())
+                    word_count = len(text.strip().split())
+                    logger.info(f"[{self.username}] [{lang_info['lang_short']}] {timestamp} 采集到 {sentence_length} 字符/{word_count} 词: {text[:100]}")
                     self.on_transcript(self.username, text.strip(), timestamp, lang_info)
 
                 seg_idx += 1

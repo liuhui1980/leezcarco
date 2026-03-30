@@ -5,6 +5,7 @@ import sqlite3
 import os
 import hashlib
 from datetime import datetime, timedelta
+from src.timezone_utils import current_beijing_time, to_beijing_time
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'monitor.db')
 
@@ -327,10 +328,11 @@ def create_session(username, room_id=None, owner_user_id=1):
     """创建新的直播会话"""
     conn = get_conn()
     c = conn.cursor()
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # 存储UTC时间，显示时转换为北京时间
+    now_utc = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
     c.execute(
         'INSERT INTO live_sessions (owner_user_id, username, room_id, start_time) VALUES (?, ?, ?, ?)',
-        (owner_user_id, username, room_id, now)
+        (owner_user_id, username, room_id, now_utc)
     )
     session_id = c.lastrowid
     conn.commit()
@@ -342,7 +344,33 @@ def end_session(session_id):
     """结束直播会话"""
     conn = get_conn()
     c = conn.cursor()
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    now_utc = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # 获取 session 的开始时间
+    c.execute('SELECT start_time, username FROM live_sessions WHERE id=?', (session_id,))
+    row = c.fetchone()
+    if row:
+        start_time, username = row
+        if start_time:
+            # 计算持续时间（分钟）使用UTC时间
+            c.execute('SELECT (julianday(?) - julianday(?)) * 24 * 60 as duration', (now_utc, start_time))
+            duration_row = c.fetchone()
+            if duration_row and duration_row[0] is not None:
+                duration_minutes = duration_row[0]
+                
+                # 如果持续时间小于5分钟，认为是短暂断开，不结束session
+                # 基于统计优化：58.5%的session<3分钟，大部分是网络波动导致的虚假session
+                if duration_minutes < 5.0:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"❌ session#{session_id} (@{username}) 持续时间仅{duration_minutes:.1f}分钟(<5分钟阈值)，忽略结束请求")
+                    # 不更新end_time，保持status为live，等待重连
+                    c.execute('UPDATE live_sessions SET end_time=NULL, status="live" WHERE id=?', (session_id,))
+                    conn.commit()
+                    conn.close()
+                    return
+    
+    # 正常结束
     c.execute(
         'UPDATE live_sessions SET end_time=?, status=? WHERE id=?',
         (now, 'ended', session_id)
@@ -351,18 +379,31 @@ def end_session(session_id):
     conn.close()
 
 
-def find_recent_session(username, minutes=15):
+def find_recent_session(username, minutes=15, owner_user_id=None):
     """查找该账号在最近 N 分钟内刚结束的 session（用于断线重连合并）。
+    owner_user_id=None 表示不限制所属用户（管理员用）
     返回 session 行 (dict) 或 None。"""
     conn = get_conn()
     c = conn.cursor()
     cutoff = (datetime.now() - timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
-    c.execute(
-        """SELECT * FROM live_sessions
-           WHERE username=? AND status='ended' AND end_time >= ?
-           ORDER BY id DESC LIMIT 1""",
-        (username, cutoff)
-    )
+    
+    if owner_user_id is None:
+        # 管理员查询，不限制owner_user_id
+        c.execute(
+            """SELECT * FROM live_sessions
+               WHERE username=? AND status='ended' AND end_time >= ?
+               ORDER BY id DESC LIMIT 1""",
+            (username, cutoff)
+        )
+    else:
+        # 普通用户查询，限制owner_user_id
+        c.execute(
+            """SELECT * FROM live_sessions
+               WHERE username=? AND owner_user_id=? AND status='ended' AND end_time >= ?
+               ORDER BY id DESC LIMIT 1""",
+            (username, owner_user_id, cutoff)
+        )
+    
     row = c.fetchone()
     conn.close()
     return dict(row) if row else None
@@ -423,23 +464,32 @@ def add_follow(session_id, username, user_id):
     conn.close()
 
 
-def update_viewers(session_id, viewer_count, like_count, comment_count, total_user=0):
+def update_viewers(session_id, viewer_count, like_count, comment_count, total_user=0, peak_viewers=None):
     conn = get_conn()
     c = conn.cursor()
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    # 更新快照
+    now_utc = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    # 更新快照（存储UTC时间）
     c.execute(
         'INSERT INTO metrics_snapshots (session_id, timestamp, viewer_count, like_count, comment_count) VALUES (?, ?, ?, ?, ?)',
-        (session_id, now, viewer_count, like_count, comment_count)
+        (session_id, now_utc, viewer_count, like_count, comment_count)
     )
     # 更新峰值在线 & 累计观看
     # total_user 是 TikTok 平台提供的真实累计观看人数，只要 > 0 就直接使用
     # viewer_count 是实时在线人数，不能用作累计
     real_total = total_user if total_user and total_user > 0 else 0
-    c.execute(
-        'UPDATE live_sessions SET peak_viewers=MAX(peak_viewers, ?), total_likes=?, total_viewers=MAX(total_viewers, ?) WHERE id=?',
-        (viewer_count, like_count, real_total, session_id)
-    )
+    
+    if peak_viewers is not None:
+        # 使用传入的峰值数据
+        c.execute(
+            'UPDATE live_sessions SET peak_viewers=MAX(peak_viewers, ?), total_likes=?, total_viewers=MAX(total_viewers, ?) WHERE id=?',
+            (peak_viewers, like_count, real_total, session_id)
+        )
+    else:
+        # 兼容旧代码，使用viewer_count作为峰值
+        c.execute(
+            'UPDATE live_sessions SET peak_viewers=MAX(peak_viewers, ?), total_likes=?, total_viewers=MAX(total_viewers, ?) WHERE id=?',
+            (viewer_count, like_count, real_total, session_id)
+        )
     conn.commit()
     conn.close()
 
@@ -506,6 +556,11 @@ def get_session_summary(session_id):
     snapshots = [dict(r) for r in c.fetchall()]
 
     conn.close()
+    # 将UTC时间转换为北京时间
+    session['start_time_beijing'] = to_beijing_time(session.get('start_time'))
+    session['end_time_beijing'] = to_beijing_time(session.get('end_time'))
+    # 同时保留原始UTC时间（兼容性）
+    
     return {
         'session': session,
         'comments': comments,
@@ -571,6 +626,12 @@ def get_all_sessions(limit=50, owner_user_id=None):
                 r['speech_count'] = 0
 
     conn.close()
+    
+    # 将UTC时间转换为北京时间
+    for r in rows:
+        r['start_time_beijing'] = to_beijing_time(r.get('start_time'))
+        r['end_time_beijing'] = to_beijing_time(r.get('end_time'))
+    
     return rows
 
 
