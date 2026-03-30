@@ -82,7 +82,10 @@
   .ac-status { width:8px; height:8px; border-radius:50%; background:var(--text3); flex-shrink:0; }
   .ac-status.live { background:var(--primary); animation:pulse 1.5s infinite; }
   .ac-name { font-size:14px; font-weight:600; color:var(--text); }
-  .ac-note { font-size:12px; color:var(--text3); }
+  .ac-note { font-size:12px; color:var(--text3); display:inline-flex; align-items:center; gap:4px; cursor:pointer; min-height:18px; }
+  .ac-note:hover .note-edit-hint { opacity:1; }
+  .note-edit-hint { font-size:10px; color:var(--primary); opacity:0; transition:opacity .15s; }
+  .note-input { font-size:12px; color:var(--text2); background:#fff; border:1px solid var(--primary); border-radius:4px; padding:2px 6px; outline:none; min-width:120px; max-width:200px; font-family:var(--font); }
   .ac-group { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; flex-shrink:0; }
   .tag-own { background:#d1fae5; color:#065f46; }
   .tag-rival { background:#fee2e2; color:#991b1b; }
@@ -162,15 +165,16 @@
     </div>
     <span class="version-badge" onclick="openChangelog(event)" title="点击查看版本日志">v{{ app_version }}</span>
   </a>
-  <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+  <nav class="navbar-nav" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
     <a href="/" class="nav-link">实时看板</a>
     <a href="/history" class="nav-link">历史记录</a>
-    <a href="/automonitor" class="nav-link" style="color:var(--primary);font-weight:700;">📋 自动监控</a>
+    <a href="/automonitor" class="nav-link active">📋 自动监控</a>
     <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
     <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <button class="nav-btn" onclick="openFeedbackModal()" title="提交需求或BUG">💡 反馈</button>
     <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
-    <button class="nav-btn" onclick="authLogout()">退出</button>
+    <button class="nav-btn" onclick="authLogout()" style="margin-left:2px">退出</button>
   </nav>
 </nav>
 
@@ -307,11 +311,15 @@ function renderList(list) {
     const grpLabel = groupMap[r.group_name] || r.group_name;
     const displayName = r.display_name && r.display_name !== r.username
       ? `<span style="font-size:12px;color:var(--text3);margin-left:4px;">(${r.display_name})</span>` : '';
+    const noteText = r.note || '';
     return `<div class="account-row${r.is_live?' live':''}${!r.enabled?' disabled':''}" id="row-${r.username}">
       <span class="ac-status${r.is_live?' live':''}"></span>
       <div>
-        <div class="ac-name">@${r.username}${displayName}</div>
-        ${r.note ? `<div class="ac-note">${r.note}</div>` : ''}
+        <div class="ac-name"><a href="https://www.tiktok.com/@${r.username}" target="_blank" style="color:inherit;text-decoration:none;" title="打开TikTok主页">@${r.username}</a>${displayName}</div>
+        <div class="ac-note" id="note-display-${r.username}" onclick="startEditNote('${r.username}')" title="点击编辑备注">
+          <span id="note-text-${r.username}">${noteText || '<span style="color:var(--text3);font-style:italic;">添加备注...</span>'}</span>
+          <span class="note-edit-hint">✏️</span>
+        </div>
       </div>
       <span class="ac-group ${grpCls}">${grpLabel}</span>
       ${r.is_live
@@ -393,9 +401,64 @@ async function deleteAccount(username) {
   loadList();
 }
 
-// ── 初始加载 + 30s 轮询 ──
+// ── 备注内联编辑 ──
+function startEditNote(username) {
+  const displayEl = document.getElementById(`note-display-${username}`);
+  const textEl = document.getElementById(`note-text-${username}`);
+  if (!displayEl) return;
+  // 获取当前备注文本
+  const currentNote = textEl ? (textEl.textContent || '').trim() : '';
+  const isPlaceholder = textEl && textEl.querySelector('span') !== null;
+  const noteVal = isPlaceholder ? '' : currentNote;
+  // 隐藏显示区域，显示输入框
+  displayEl.style.display = 'none';
+  const row = document.getElementById(`row-${username}`);
+  if (!row) return;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'note-input';
+  input.value = noteVal;
+  input.placeholder = '输入备注，回车保存...';
+  input.maxLength = 50;
+  // 找到 displayEl 的父节点插入 input
+  displayEl.parentNode.insertBefore(input, displayEl.nextSibling);
+  input.focus();
+  input.select();
+
+  const save = async () => {
+    const newNote = input.value.trim();
+    input.remove();
+    displayEl.style.display = '';
+    // 立即更新 UI
+    if (newNote) {
+      textEl.innerHTML = newNote;
+    } else {
+      textEl.innerHTML = '<span style="color:var(--text3);font-style:italic;">添加备注...</span>';
+    }
+    // 调用后端
+    try {
+      const res = await fetch('/api/automonitor/update_note', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ username, note: newNote })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (newNote) showToast(`备注已更新`, 'success');
+      } else {
+        showToast('备注保存失败', 'error');
+      }
+    } catch(e) { showToast('网络错误', 'error'); }
+  };
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') { input.remove(); displayEl.style.display = ''; }
+  });
+  input.addEventListener('blur', save);
+}
+
+// ── 初始加载 + 10s 轮询（提高直播状态实时性） ──
 loadList();
-setInterval(loadList, 30000);
+setInterval(loadList, 10000);
 </script>
 
 <!-- ── 版本日志弹窗 ── -->
@@ -420,6 +483,57 @@ function openChangelog(e) {
   }).catch(()=>{ document.getElementById('changelogContent').textContent='加载失败'; });
 }
 function closeChangelog() { document.getElementById('changelogModal').classList.remove('open'); }
+function openFeedbackModal() {
+  document.getElementById('feedbackModal').style.display = 'flex';
+  document.getElementById('fbTitle').value = '';
+  document.getElementById('fbDesc').value = '';
+  const radios = document.querySelectorAll('input[name="fbType"]');
+  if (radios[0]) radios[0].checked = true;
+  setTimeout(() => document.getElementById('fbTitle').focus(), 100);
+}
+function closeFeedbackModal() { document.getElementById('feedbackModal').style.display = 'none'; }
+async function submitFeedback() {
+  const title = document.getElementById('fbTitle').value.trim();
+  if (!title) { document.getElementById('fbTitle').focus(); return; }
+  const type = document.querySelector('input[name="fbType"]:checked').value;
+  const desc = document.getElementById('fbDesc').value.trim();
+  const btn = document.getElementById('fbSubmitBtn');
+  btn.disabled = true; btn.textContent = '提交中...';
+  try {
+    const res = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, title, desc }) });
+    const data = await res.json();
+    if (data.success) { closeFeedbackModal(); showToast('✅ 反馈已提交，感谢！'); } else { showToast('提交失败：' + (data.msg||''), 'error'); }
+  } catch(e) { showToast('提交失败，请重试', 'error'); }
+  finally { btn.disabled = false; btn.textContent = '提交'; }
+}
 </script>
+
+<!-- 反馈弹窗 -->
+<div id="feedbackModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;" onclick="if(event.target===this)closeFeedbackModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="font-size:18px;font-weight:800;margin-bottom:4px;">💡 提交反馈</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:20px;">需求建议 or BUG 报告，老板收到后会安排开发</div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">类型</div>
+      <div style="display:flex;gap:8px;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="feature" checked> 🚀 新需求</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="bug"> 🐛 BUG</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="other"> 💬 其他</label>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">标题 <span style="color:#ef4444;">*</span></div>
+      <input id="fbTitle" type="text" maxlength="100" placeholder="一句话概括" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:14px;outline:none;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">详细描述</div>
+      <textarea id="fbDesc" rows="4" maxlength="1000" placeholder="可选..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:13px;resize:vertical;outline:none;box-sizing:border-box;font-family:inherit;"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="submitFeedback()" style="flex:1;background:#fe2c55;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;" id="fbSubmitBtn">提交</button>
+      <button onclick="closeFeedbackModal()" style="flex:1;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;">取消</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

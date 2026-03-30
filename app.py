@@ -44,7 +44,7 @@ from src.database import (
     get_speech_summary, get_review_data, set_account_group, get_account_group,
     delete_session, delete_account_sessions,
     verify_user, create_user, get_all_users, update_user_password, delete_user,
-    set_user_status,
+    set_user_status, update_last_login,
     get_auto_monitor_list, upsert_auto_monitor, delete_auto_monitor,
     toggle_auto_monitor, get_enabled_auto_monitors,
     get_follower_snapshots, get_latest_follower_snapshot, get_all_rival_usernames,
@@ -153,6 +153,25 @@ def get_current_user():
     }
 
 
+def check_session_access(session_id):
+    """检查当前用户是否有权访问某条 live_session（管理员可访问全部）。
+    返回 (True, None) 表示有权限，返回 (False, response) 表示无权限并附带 jsonify 响应。"""
+    u = get_current_user()
+    if not u:
+        return False, (jsonify({'error': '未登录'}), 401)
+    if u['is_admin']:
+        return True, None
+    from src.database import get_conn
+    conn = get_conn()
+    row = conn.execute('SELECT owner_user_id FROM live_sessions WHERE id=?', (session_id,)).fetchone()
+    conn.close()
+    if not row:
+        return False, (jsonify({'error': '记录不存在'}), 404)
+    if row['owner_user_id'] != u['id']:
+        return False, (jsonify({'error': '无权访问'}), 403)
+    return True, None
+
+
 def login_required(f):
     """装饰器：未登录时，API 请求返回 401 JSON，页面请求重定向到登录页"""
     @wraps(f)
@@ -214,7 +233,8 @@ def api_login():
     session['user_id'] = user['id']
     session['username'] = user['username']
     session['is_admin'] = bool(user['is_admin'])
-    write_action_log(user['id'], user['username'], 'login', ip=request.remote_addr or '')
+    write_action_log(user['id'], user['username'], 'login', ip=request.remote_addr or '', page='登录页')
+    update_last_login(user['id'])
     return jsonify({'success': True, 'username': user['username'], 'is_admin': bool(user['is_admin'])})
 
 
@@ -223,7 +243,7 @@ def api_logout():
     """登出"""
     u = get_current_user()
     if u:
-        write_action_log(u['id'], u['username'], 'logout', ip=request.remote_addr or '')
+        write_action_log(u['id'], u['username'], 'logout', ip=request.remote_addr or '', page='全局')
     session.clear()
     return jsonify({'success': True})
 
@@ -393,6 +413,7 @@ def api_admin_users():
             u['is_online'] = len(online_unames) > 0
             u['online_accounts'] = list(online_unames)
             u['online_count'] = len(online_unames)
+            # last_login_at 已在 get_all_users() 中返回，直接透传
         conn.close()
     except Exception as e:
         logger.warning(f'获取用户统计失败: {e}')
@@ -551,6 +572,9 @@ def api_sessions():
 @login_required
 def api_session_detail(session_id):
     """单场直播详情"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
     summary = get_session_summary(session_id)
     if summary is None:
         return jsonify({'error': '记录不存在'}), 404
@@ -630,7 +654,7 @@ def api_start_monitor():
     result = start_monitor(username, socketio=socketio)
     if result:
         write_action_log(u['id'], u['username'], 'monitor_start', target=username,
-                         ip=request.remote_addr or '')
+                         ip=request.remote_addr or '', page='实时看板')
         return jsonify({'success': True, 'msg': f'已开始监控 @{username}'})
     else:
         return jsonify({'success': False, 'msg': f'@{username} 已在监控中或启动失败'})
@@ -646,7 +670,7 @@ def api_stop_monitor():
     result = stop_monitor(username)
     if result:
         write_action_log(u['id'], u['username'], 'monitor_stop', target=username,
-                         ip=request.remote_addr or '')
+                         ip=request.remote_addr or '', page='实时看板')
         return jsonify({'success': True, 'msg': f'已停止监控 @{username}'})
     else:
         return jsonify({'success': False, 'msg': f'@{username} 不在监控列表中'})
@@ -671,6 +695,9 @@ def api_batch_start():
 @login_required
 def api_delete_session(session_id):
     """删除一条历史记录"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
     ok = delete_session(session_id)
     return jsonify({'success': ok})
 
@@ -690,6 +717,9 @@ def api_delete_account_sessions(username):
 @login_required
 def api_session_speech(session_id):
     """单场话术全量（含翻译和关键句总结）"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
     data = get_speech_summary(session_id)
     return jsonify(data)
 
@@ -698,6 +728,9 @@ def api_session_speech(session_id):
 @login_required
 def api_session_ai_summary(session_id):
     """AI 智能总结（话术或评论），优先 Gemini → 降级 Pollinations.ai 免费 AI"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
     req = request.get_json(force=True) or {}
     summary_type = req.get('type', 'speech')  # 'speech' 或 'comment'
 
@@ -765,6 +798,9 @@ def api_card_ai_summary():
 @login_required
 def api_download_speech(session_id):
     """下载话术 Word 文档"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
     try:
         import io
         from src.word_export import export_speech_docx
@@ -793,6 +829,9 @@ def api_download_speech(session_id):
 @login_required
 def api_download_comments(session_id):
     """下载评论 Word 文档"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
     try:
         import io
         from src.word_export import export_comments_docx
@@ -822,6 +861,9 @@ def api_download_comments(session_id):
 @login_required
 def api_session_review(session_id):
     """主播复盘对比数据（本场 vs 上场 vs 近7场均值 vs 历史最佳）"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
     data = get_review_data(session_id)
     return jsonify(data)
 
@@ -1182,7 +1224,11 @@ def api_automonitor_list():
     u = get_current_user()
     uid = None if u['is_admin'] else u['id']
     rows = get_auto_monitor_list(owner_user_id=uid)
-    active_now = set(get_live_usernames())
+    # 双源判断：① active_monitors 中 session_id 非空（Monitor已连上）
+    #          ② live_sessions 表中 status='live' （DB有活跃场次，即使monitor刚启未感知到）
+    live_from_monitor = set(get_live_usernames())
+    live_from_db = {s['username'] for s in get_active_sessions()}
+    active_now = live_from_monitor | live_from_db
     for r in rows:
         r['is_live'] = r['username'] in active_now
     return jsonify({'list': rows})
@@ -1235,6 +1281,31 @@ def api_automonitor_toggle():
     enabled = bool(data.get('enabled', True))
     toggle_auto_monitor(u['id'], username, enabled)
     return jsonify({'success': True})
+
+
+@app.route('/api/automonitor/update_note', methods=['POST'])
+@login_required
+def api_automonitor_update_note():
+    """更新自动监控账号的备注"""
+    u = get_current_user()
+    data = request.get_json() or {}
+    username = (data.get('username') or '').strip().lstrip('@')
+    note = (data.get('note') or '').strip()
+    if not username:
+        return jsonify({'success': False, 'msg': '账号名不能为空'}), 400
+    from src.database import get_conn
+    conn = get_conn()
+    try:
+        conn.execute(
+            'UPDATE auto_monitor_list SET note=? WHERE owner_user_id=? AND username=?',
+            (note, u['id'], username)
+        )
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'msg': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/api/automonitor/start_all', methods=['POST'])
@@ -1396,12 +1467,68 @@ def on_request_status():
     })
 
 
+@app.route('/api/restore_state')
+@login_required
+def api_restore_state():
+    """Level-B 卡片状态恢复接口：返回所有活跃账号的完整卡片数据（含最近评论/礼物/统计）。
+    前端页面加载后调用，恢复卡片内容，使重启感知不到中断。"""
+    from src.database import get_conn
+    from src.monitor import get_monitors_snapshot
+
+    snapshot = get_monitors_snapshot()
+    result = []
+    conn = get_conn()
+    for snap in snapshot:
+        sid = snap.get('session_id')
+        u = snap.get('username', '')
+        item = dict(snap)
+
+        if sid:
+            # 最近50条评论
+            rows = conn.execute(
+                '''SELECT username, content, text_zh, lang, lang_short, timestamp
+                   FROM comments WHERE session_id=? ORDER BY id DESC LIMIT 50''',
+                (sid,)
+            ).fetchall()
+            item['recent_comments'] = [dict(r) for r in reversed(rows)]
+
+            # 最近20条礼物
+            rows = conn.execute(
+                '''SELECT username, gift_name, gift_count, gift_value, timestamp
+                   FROM gifts WHERE session_id=? ORDER BY id DESC LIMIT 20''',
+                (sid,)
+            ).fetchall()
+            item['recent_gifts'] = [dict(r) for r in reversed(rows)]
+
+            # 最近20条话术
+            rows = conn.execute(
+                '''SELECT text, text_zh, lang, dialect, timestamp
+                   FROM speech_records WHERE session_id=? ORDER BY id DESC LIMIT 20''',
+                (sid,)
+            ).fetchall()
+            item['recent_speech'] = [dict(r) for r in reversed(rows)]
+
+            # 礼物汇总
+            row = conn.execute(
+                'SELECT COALESCE(SUM(gift_value),0) as total FROM gifts WHERE session_id=?',
+                (sid,)
+            ).fetchone()
+            item['gift_total'] = round(row['total'], 2) if row else 0
+
+        result.append(item)
+    conn.close()
+    return jsonify({'accounts': result})
+
+
 # ==================== 主播评分卡 API ====================
 
 @app.route('/api/session/<int:session_id>/score')
 @login_required
 def api_session_score(session_id):
     """返回单场直播的主播评分卡"""
+    ok, err = check_session_access(session_id)
+    if not ok:
+        return err
     score = calc_anchor_score(session_id)
     if not score:
         return jsonify({'error': '场次不存在'}), 404

@@ -331,15 +331,16 @@
     </div>
     <span class="version-badge" onclick="openChangelog(event)" title="点击查看版本日志">v{{ app_version }}</span>
   </a>
-  <nav style="display:flex;gap:4px;align-items:center;">
+  <nav class="navbar-nav" style="display:flex;gap:4px;align-items:center;">
     <a href="/" class="nav-link">实时看板</a>
     <a href="/history" class="nav-link">历史记录</a>
     <a href="/automonitor" class="nav-link">📋 自动监控</a>
     <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
     <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <button class="nav-btn" onclick="openFeedbackModal()" title="提交需求或BUG">💡 反馈</button>
     <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
-    <button onclick="authLogout()" style="font-size:13px;background:#f5f6fa;border:1px solid #e8eaef;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:2px">退出</button>
+    <button class="nav-btn" onclick="authLogout()" style="margin-left:2px">退出</button>
   </nav>
 </nav>
 <div class="main">
@@ -663,6 +664,20 @@ function renderMainData(data) {
   const s = data.session;
   _sessionData = s;
   document.getElementById('pageTitle').textContent = `直播复盘 — @${s.username}`;
+  // 加账号主页链接
+  const existingLink = document.getElementById('accountHomeLink');
+  if (!existingLink) {
+    const link = document.createElement('a');
+    link.id = 'accountHomeLink';
+    link.href = `https://www.tiktok.com/@${s.username}`;
+    link.target = '_blank';
+    link.title = '打开TikTok主页';
+    link.style.cssText = 'font-size:12px;color:var(--info);text-decoration:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;margin-left:8px;';
+    link.textContent = '🔗 TikTok主页';
+    document.getElementById('pageTitle').after(link);
+  } else {
+    existingLink.href = `https://www.tiktok.com/@${s.username}`;
+  }
 
   // 时长（用字符串替换空格为T，兼容Safari的ISO格式解析）
   let dur = '-';
@@ -1399,6 +1414,58 @@ function openChangelog(e) {
   }).catch(()=>{ document.getElementById('changelogContent').textContent='加载失败'; });
 }
 function closeChangelog() { document.getElementById('changelogModal').classList.remove('open'); }
+</script>
+
+<!-- ── 反馈弹窗 ── -->
+<div id="feedbackModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;" onclick="if(event.target===this)closeFeedbackModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="font-size:17px;font-weight:700;">💡 反馈 / 需求 / BUG</h3>
+      <button onclick="closeFeedbackModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9ca3af;">✕</button>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">类型</label>
+      <select id="fbType" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:14px;outline:none;">
+        <option value="bug">🐛 Bug 反馈</option>
+        <option value="feature">✨ 功能需求</option>
+        <option value="improvement">🔧 体验改进</option>
+        <option value="other">💬 其他</option>
+      </select>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">标题</label>
+      <input id="fbTitle" type="text" placeholder="一句话描述问题或需求" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:14px;outline:none;" />
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">详细描述</label>
+      <textarea id="fbDesc" rows="4" placeholder="可描述复现步骤、期望效果等..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:14px;outline:none;resize:vertical;"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeFeedbackModal()" style="flex:1;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;">取消</button>
+      <button onclick="submitFeedback()" style="flex:1;background:#fe2c55;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;" id="fbSubmitBtn">提交</button>
+    </div>
+  </div>
+</div>
+<script>
+function openFeedbackModal() {
+  const m = document.getElementById('feedbackModal');
+  m.style.display = 'flex';
+  document.getElementById('fbTitle').value = '';
+  document.getElementById('fbDesc').value = '';
+}
+function closeFeedbackModal() { document.getElementById('feedbackModal').style.display = 'none'; }
+async function submitFeedback() {
+  const type = document.getElementById('fbType').value;
+  const title = document.getElementById('fbTitle').value.trim();
+  const desc = document.getElementById('fbDesc').value.trim();
+  if (!title) { alert('请填写标题'); return; }
+  const btn = document.getElementById('fbSubmitBtn');
+  btn.disabled = true; btn.textContent = '提交中...';
+  const res = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, title, desc }) });
+  btn.disabled = false; btn.textContent = '提交';
+  const data = await res.json();
+  if (data.success) { closeFeedbackModal(); alert('✅ 反馈已提交，感谢！'); } else { alert('提交失败：' + (data.msg||'')); }
+}
 </script>
 </body>
 </html>

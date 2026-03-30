@@ -189,6 +189,7 @@
     <a href="/rivals" class="nav-link active">⚔️ 竞品分析</a>
     <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link" id="adminNavLink" style="display:none">👑 用户管理</a>
+    <button class="nav-btn" onclick="openFeedbackModal()" title="提交需求或BUG">💡 反馈</button>
     <span id="navUserBadge" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
     <button class="nav-btn" onclick="authLogout()" style="margin-left:2px">退出</button>
   </nav>
@@ -365,7 +366,7 @@ function renderRivals(rivals) {
     return `<div class="rival-item" id="rival-${r.username}">
       <div class="rival-avatar">${initial}</div>
       <div class="rival-info">
-        <div class="rival-name">${liveDot}@${r.username}${r.display_name !== r.username ? ` <span style="font-size:11px;color:var(--text3);font-weight:400;">(${r.display_name})</span>` : ''}</div>
+        <div class="rival-name">${liveDot}<a href="https://www.tiktok.com/@${r.username}" target="_blank" style="color:inherit;text-decoration:none;" title="打开TikTok主页">@${r.username}</a>${r.display_name !== r.username ? ` <span style="font-size:11px;color:var(--text3);font-weight:400;">(${r.display_name})</span>` : ''}</div>
         <div class="rival-stats">${statsText}</div>
       </div>
       <div class="rival-actions">
@@ -490,7 +491,7 @@ function renderLeaderboard(data) {
       const barW = Math.round((a[m.key]||0)/max*100);
       return `<div class="lb-row">
         <div class="lb-rank ${rankClass}">${i+1}</div>
-        <div class="lb-name">@${a.username} ${typeTag}</div>
+        <div class="lb-name"><a href="https://www.tiktok.com/@${a.username}" target="_blank" style="color:inherit;text-decoration:none;">@${a.username}</a> ${typeTag}</div>
         <div class="lb-bar-wrap"><div class="lb-bar-bg"><div class="lb-bar-fill ${a._type}" style="width:${barW}%"></div></div></div>
         <div class="lb-val" style="color:${a._type==='own'?'var(--own)':'var(--rival)'}">${val}</div>
       </div>`;
@@ -522,7 +523,7 @@ function renderCompareCards(data) {
       : `${a.avg_duration||0}m`;
     return `<div class="compare-card ${a._type}">
       <div class="compare-card-header">
-        <div class="compare-card-name ${a._type}">@${a.username}</div>
+        <div class="compare-card-name ${a._type}"><a href="https://www.tiktok.com/@${a.username}" target="_blank" style="color:inherit;text-decoration:none;">@${a.username}</a></div>
         <span class="compare-type-tag ${typeTagCls}">${typeLabel} · ${a.session_count}场</span>
       </div>
       <div class="compare-metrics">
@@ -562,7 +563,7 @@ function renderLiveSection(liveRivals) {
       const note = s._isAvg ? '<div style="font-size:10px;color:var(--text3);margin-top:6px;">* 竞品未被监控，显示历史场均</div>' : '';
       return `<div class="compare-card ${s._type}">
         <div class="compare-card-header">
-          <div class="compare-card-name ${s._type}">@${s.username} ${s._type==='own'?'🔴':''}</div>
+          <div class="compare-card-name ${s._type}"><a href="https://www.tiktok.com/@${s.username}" target="_blank" style="color:inherit;text-decoration:none;">@${s.username}</a> ${s._type==='own'?'🔴':''}</div>
           <span class="compare-type-tag ${typeTagCls}">${typeLabel}</span>
         </div>
         <div class="compare-metrics">
@@ -612,7 +613,7 @@ async function loadRecommend() {
     listEl.innerHTML = recs.map(r => `
       <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:8px;border:1px solid var(--border2);margin-bottom:8px;">
         <div style="flex:1;">
-          <div style="font-size:14px;font-weight:600;">@${r.username}</div>
+          <div style="font-size:14px;font-weight:600;"><a href="https://www.tiktok.com/@${r.username}" target="_blank" style="color:inherit;text-decoration:none;">@${r.username}</a></div>
           <div style="font-size:12px;color:var(--text3);margin-top:2px;">${r.reason}</div>
         </div>
         <button class="btn btn-sm" style="background:var(--rival-bg,#fff0f0);color:var(--rival,#dc2626);border:1px solid #fecaca;"
@@ -719,6 +720,34 @@ async function authLogout() {
 }
 </script>
 
+<!-- ── 反馈弹窗 ── -->
+<div id="feedbackModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;" onclick="if(event.target===this)closeFeedbackModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="font-size:18px;font-weight:800;margin-bottom:4px;">💡 提交反馈</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:20px;">需求建议 or BUG 报告，老板收到后会安排开发</div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">类型</div>
+      <div style="display:flex;gap:8px;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="feature" checked> 🚀 新需求</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="bug"> 🐛 BUG</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="other"> 💬 其他</label>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">标题 <span style="color:#ef4444;">*</span></div>
+      <input id="fbTitle" type="text" maxlength="100" placeholder="一句话概括" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:14px;outline:none;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">详细描述</div>
+      <textarea id="fbDesc" rows="4" maxlength="1000" placeholder="可选..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:13px;resize:vertical;outline:none;box-sizing:border-box;font-family:inherit;"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="submitFeedback()" style="flex:1;background:#fe2c55;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;" id="fbSubmitBtn">提交</button>
+      <button onclick="closeFeedbackModal()" style="flex:1;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;">取消</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── 版本日志弹窗 ── -->
 <div class="changelog-modal" id="changelogModal" onclick="if(event.target===this)closeChangelog()">
   <div class="changelog-box">
@@ -740,6 +769,29 @@ function openChangelog(e) {
   }).catch(()=>{ document.getElementById('changelogContent').textContent='加载失败'; });
 }
 function closeChangelog() { document.getElementById('changelogModal').classList.remove('open'); }
+function openFeedbackModal() {
+  document.getElementById('feedbackModal').style.display = 'flex';
+  document.getElementById('fbTitle').value = '';
+  document.getElementById('fbDesc').value = '';
+  const radios = document.querySelectorAll('input[name="fbType"]');
+  if (radios[0]) radios[0].checked = true;
+  setTimeout(() => document.getElementById('fbTitle').focus(), 100);
+}
+function closeFeedbackModal() { document.getElementById('feedbackModal').style.display = 'none'; }
+async function submitFeedback() {
+  const title = document.getElementById('fbTitle').value.trim();
+  if (!title) { document.getElementById('fbTitle').focus(); return; }
+  const type = document.querySelector('input[name="fbType"]:checked').value;
+  const desc = document.getElementById('fbDesc').value.trim();
+  const btn = document.getElementById('fbSubmitBtn');
+  btn.disabled = true; btn.textContent = '提交中...';
+  try {
+    const res = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, title, desc }) });
+    const data = await res.json();
+    if (data.success) { closeFeedbackModal(); } else { alert('提交失败：' + (data.msg||'')); }
+  } catch(e) { alert('提交失败，请重试'); }
+  finally { btn.disabled = false; btn.textContent = '提交'; }
+}
 </script>
 </body>
 </html>

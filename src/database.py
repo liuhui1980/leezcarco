@@ -4,7 +4,7 @@
 import sqlite3
 import os
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'monitor.db')
 
@@ -41,7 +41,8 @@ def init_db():
             is_admin INTEGER DEFAULT 0,
             real_name TEXT DEFAULT '',
             status TEXT DEFAULT 'active',
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            last_login_at TEXT DEFAULT NULL
         )
     ''')
 
@@ -207,6 +208,7 @@ def init_db():
             target TEXT DEFAULT '',
             detail TEXT DEFAULT '',
             ip TEXT DEFAULT '',
+            page TEXT DEFAULT '',
             created_at TEXT NOT NULL
         )
     ''')
@@ -262,6 +264,12 @@ def _migrate_columns(conn):
             conn.commit()
         except Exception:
             pass
+    if 'last_login_at' not in user_cols:
+        try:
+            c.execute("ALTER TABLE sys_users ADD COLUMN last_login_at TEXT DEFAULT NULL")
+            conn.commit()
+        except Exception:
+            pass
     # comments 表加 text_zh / lang / lang_short 字段（旧数据库兼容）
     c.execute("PRAGMA table_info(comments)")
     comment_cols = {row['name'] for row in c.fetchall()}
@@ -272,6 +280,15 @@ def _migrate_columns(conn):
                 conn.commit()
             except Exception:
                 pass
+    # user_action_logs 加 page 字段（旧数据库兼容）
+    c.execute("PRAGMA table_info(user_action_logs)")
+    log_cols = {row['name'] for row in c.fetchall()}
+    if 'page' not in log_cols:
+        try:
+            c.execute("ALTER TABLE user_action_logs ADD COLUMN page TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            pass
 
 
 def _ensure_default_admin(conn):
@@ -329,6 +346,34 @@ def end_session(session_id):
     c.execute(
         'UPDATE live_sessions SET end_time=?, status=? WHERE id=?',
         (now, 'ended', session_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def find_recent_session(username, minutes=15):
+    """查找该账号在最近 N 分钟内刚结束的 session（用于断线重连合并）。
+    返回 session 行 (dict) 或 None。"""
+    conn = get_conn()
+    c = conn.cursor()
+    cutoff = (datetime.now() - timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
+    c.execute(
+        """SELECT * FROM live_sessions
+           WHERE username=? AND status='ended' AND end_time >= ?
+           ORDER BY id DESC LIMIT 1""",
+        (username, cutoff)
+    )
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def reactivate_session(session_id):
+    """重新激活一个已结束的 session（断线重连，清除 end_time，改回 live 状态）。"""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE live_sessions SET end_time=NULL, status='live' WHERE id=?",
+        (session_id,)
     )
     conn.commit()
     conn.close()
@@ -835,10 +880,20 @@ def get_all_users():
     """管理员：获取所有系统用户列表"""
     conn = get_conn()
     c = conn.cursor()
-    c.execute('SELECT id, username, is_admin, real_name, status, created_at FROM sys_users ORDER BY id')
+    c.execute('SELECT id, username, is_admin, real_name, status, created_at, last_login_at FROM sys_users ORDER BY id')
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows
+
+
+def update_last_login(user_id):
+    """更新用户最后登录时间"""
+    conn = get_conn()
+    c = conn.cursor()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute('UPDATE sys_users SET last_login_at=? WHERE id=?', (now, user_id))
+    conn.commit()
+    conn.close()
 
 
 def set_user_status(user_id, status):
@@ -1380,15 +1435,19 @@ def delete_feedback(fb_id):
 
 # ── 用户操作日志 ──
 
-def write_action_log(user_id: int, username: str, action: str, target: str = '', detail: str = '', ip: str = ''):
-    """记录用户操作日志"""
+def write_action_log(user_id: int, username: str, action: str, target: str = '', detail: str = '', ip: str = '', page: str = ''):
+    """记录用户操作日志，并自动裁剪至每用户最近200条"""
     conn = get_conn()
     c = conn.cursor()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     c.execute(
-        'INSERT INTO user_action_logs (user_id, username, action, target, detail, ip, created_at) VALUES (?,?,?,?,?,?,?)',
-        (user_id, username, action, target, detail, ip, now)
+        'INSERT INTO user_action_logs (user_id, username, action, target, detail, ip, page, created_at) VALUES (?,?,?,?,?,?,?,?)',
+        (user_id, username, action, target, detail, ip, page, now)
     )
+    # 裁剪：每个 user_id 只保留最新 200 条
+    c.execute('''DELETE FROM user_action_logs WHERE user_id=? AND id NOT IN (
+        SELECT id FROM user_action_logs WHERE user_id=? ORDER BY id DESC LIMIT 200
+    )''', (user_id, user_id))
     conn.commit()
     conn.close()
 

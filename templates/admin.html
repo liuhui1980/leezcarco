@@ -90,7 +90,31 @@
   .msg-bar.error { background: #fef2f2; color: #dc2626; }
   .msg-bar.success { background: #f0fdf4; color: #16a34a; }
 
-  /* 重置密码模态 */
+  .navbar-wordmark { display: flex; flex-direction: column; line-height: 1; }
+  .navbar-sub { font-size: 10px; color: var(--text3); font-weight: 500; margin-top: 1px; }
+  /* 版本徽章 */
+  .version-badge { font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;padding:2px 7px;cursor:pointer;transition:all .15s;user-select:none;letter-spacing:.3px;white-space:nowrap; }
+  .version-badge:hover { background:#e5e7eb;color:#374151; }
+  .changelog-modal { display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center; }
+  .changelog-modal.open { display:flex; }
+  .changelog-box { background:#fff;border-radius:16px;width:560px;max-width:92vw;max-height:75vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2); }
+  .changelog-header { padding:18px 22px 14px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center; }
+  .changelog-header h3 { font-size:15px;font-weight:700;color:#1a1d2e; }
+  .changelog-header button { background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1; }
+  .changelog-content { padding:16px 22px;overflow-y:auto;flex:1;font-size:13px;line-height:1.7;color:#374151; }
+  .changelog-content h2 { font-size:14px;font-weight:700;color:#fe2c55;margin:12px 0 4px; }
+  .changelog-content h3 { font-size:13px;font-weight:600;color:#1a1d2e;margin:8px 0 4px; }
+  .changelog-content li { margin-left:16px; }
+  /* 展开行 */
+  .log-expand-row td { padding: 0 !important; border-bottom: 1px solid var(--border) !important; }
+  .log-expand-inner { overflow: hidden; max-height: 0; transition: max-height .25s ease; }
+  .log-expand-inner.open { max-height: 500px; }
+  .log-expand-table { width: 100%; border-collapse: collapse; background: #f8fafc; }
+  .log-expand-table td { padding: 7px 14px; font-size: 12px; color: var(--text2); border-bottom: 1px solid #f0f1f5; }
+  .log-expand-table tr:last-child td { border-bottom: none; }
+  .expand-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--text3); padding: 0 4px; transition: transform .2s; display: inline-block; }
+  .expand-btn.open { transform: rotate(90deg); }
+  @media(max-width:640px) { .navbar-sub, .version-badge { display:none; } }
   .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; align-items: center; justify-content: center; }
   .overlay.show { display: flex; }
   .modal { background: var(--surface); border-radius: var(--radius); padding: 28px; width: 360px; box-shadow: 0 8px 40px rgba(0,0,0,.15); }
@@ -114,21 +138,27 @@
 </head>
 <body>
 <nav class="navbar">
-  <a href="/" class="navbar-brand">
+  <a class="navbar-brand" href="/">
     <div class="navbar-logo">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.79a4.85 4.85 0 01-1.01-.1z" fill="white"/></svg>
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.51a8.16 8.16 0 004.77 1.52V7.58a4.85 4.85 0 01-1-.89z"/></svg>
     </div>
-    <span class="navbar-name">Tik<span>Tok</span> 监测</span>
+    <div class="navbar-wordmark">
+      <div class="navbar-name">Tuke<span>carco</span></div>
+      <div class="navbar-sub">TikTok 直播监测系统</div>
+    </div>
+    <span class="version-badge" onclick="openChangelog(event)" title="点击查看版本日志">v{{ app_version }}</span>
   </a>
-  <div class="navbar-nav">
-    <a href="/" class="nav-link">📊 看板</a>
-    <a href="/history" class="nav-link">📋 历史</a>
-    <a href="/rivals" class="nav-link">⚔️ 竞品</a>
+  <nav class="navbar-nav">
+    <a href="/" class="nav-link">实时看板</a>
+    <a href="/history" class="nav-link">历史记录</a>
+    <a href="/automonitor" class="nav-link">📋 自动监控</a>
+    <a href="/rivals" class="nav-link">⚔️ 竞品分析</a>
+    <a href="/compare" class="nav-link">📊 自营对比</a>
     <a href="/admin" class="nav-link active">👑 用户管理</a>
-    <span class="user-badge" id="navUsername">加载中</span>
-    <span class="admin-badge">管理员</span>
-    <button class="nav-btn" onclick="logout()">退出</button>
-  </div>
+    <button class="nav-btn" onclick="openFeedbackModal()" title="提交需求或BUG">💡 反馈</button>
+    <span id="navUsername" style="font-size:12px;background:#fff0f3;color:#fe2c55;border-radius:20px;padding:3px 10px;font-weight:600;margin-left:4px"></span>
+    <button class="nav-btn" onclick="logout()" style="margin-left:2px">退出</button>
+  </nav>
 </nav>
 
 <div class="main">
@@ -164,11 +194,11 @@
       <table class="user-table">
         <thead>
           <tr>
-            <th>ID</th><th>用户名 / 使用情况</th><th>真实姓名</th><th>在线</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th>
+            <th>ID</th><th>用户名 / 使用情况</th><th>真实姓名</th><th>在线</th><th>角色</th><th>状态</th><th>注册时间</th><th>最后登录</th><th>操作</th>
           </tr>
         </thead>
         <tbody id="userList">
-          <tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">加载中…</td></tr>
+          <tr><td colspan="9" style="text-align:center;color:var(--text3);padding:24px">加载中…</td></tr>
         </tbody>
       </table>
     </div>
@@ -246,7 +276,7 @@
   <!-- 用户操作日志 -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">📋 用户操作日志 <span style="font-size:12px;color:var(--text3);font-weight:400;">追溯每个用户的行为记录</span></div>
+      <div class="card-title">📋 用户操作日志 <span id="unreadLogBadge" style="display:none;font-size:11px;background:#fe2c55;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px;font-weight:600;vertical-align:middle;"></span><span style="font-size:12px;color:var(--text3);font-weight:400;">追溯每个用户的行为记录</span></div>
       <div style="display:flex;gap:8px;align-items:center;">
         <select id="logUserFilter" onchange="loadActionLogs()" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;">
           <option value="">全部用户</option>
@@ -257,10 +287,10 @@
     <div class="card-body" style="padding:0;max-height:400px;overflow-y:auto;">
       <table class="fb-table">
         <thead>
-          <tr><th style="width:50px">ID</th><th style="width:90px">用户</th><th style="width:100px">动作</th><th>目标账号</th><th style="width:80px">IP</th><th style="width:130px">时间</th></tr>
+          <tr><th style="width:50px">ID</th><th style="width:90px">用户</th><th style="width:80px">页面</th><th style="width:100px">动作</th><th>目标账号</th><th style="width:80px">IP</th><th style="width:130px">时间</th></tr>
         </thead>
         <tbody id="actionLogList">
-          <tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">加载中…</td></tr>
+          <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">加载中…</td></tr>
         </tbody>
       </table>
     </div>
@@ -285,10 +315,48 @@
   </div>
 </div>
 
+<!-- 反馈弹窗 -->
+<div id="feedbackModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;" onclick="if(event.target===this)closeFeedbackModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="font-size:18px;font-weight:800;margin-bottom:4px;">💡 提交反馈</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:20px;">需求建议 or BUG 报告</div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">类型</div>
+      <div style="display:flex;gap:8px;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="feature" checked> 🚀 新需求</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="bug"> 🐛 BUG</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;"><input type="radio" name="fbType" value="other"> 💬 其他</label>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">标题 <span style="color:#ef4444;">*</span></div>
+      <input id="fbTitle" type="text" maxlength="100" placeholder="一句话概括" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:14px;outline:none;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">详细描述</div>
+      <textarea id="fbDesc" rows="4" maxlength="1000" placeholder="可选：描述场景、期望效果..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;font-size:13px;resize:vertical;outline:none;box-sizing:border-box;font-family:inherit;"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="submitFeedback()" style="flex:1;background:#fe2c55;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;" id="fbSubmitBtn">提交</button>
+      <button onclick="closeFeedbackModal()" style="flex:1;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 版本日志弹窗 -->
+<div class="changelog-modal" id="changelogModal" onclick="if(event.target===this)closeChangelog()">
+  <div class="changelog-box">
+    <div class="changelog-header">
+      <h3>📋 版本日志</h3>
+      <button onclick="closeChangelog()">✕</button>
+    </div>
+    <div class="changelog-content" id="changelogContent">加载中...</div>
+  </div>
+</div>
+
 <script src="/static/js/auth-interceptor.js"></script>
 <script>
 let _resetUserId = null;
-
 // 初始化
 (async () => {
   const res = await fetch('/api/auth/me');
@@ -312,6 +380,54 @@ let _resetUserId = null;
   } catch(e) {}
 })();
 
+// ── 展开/折叠用户操作日志 ──
+const ACTION_LABEL = {
+  login: '🔐 登录', logout: '🚪 登出',
+  monitor_start: '▶️ 开始监控', monitor_stop: '⏹ 停止监控',
+};
+const _openLogs = new Set();
+
+async function toggleUserLogs(uid) {
+  const expand = document.getElementById(`logexpand-${uid}`);
+  const btn = document.getElementById(`expbtn-${uid}`);
+  const isOpen = _openLogs.has(uid);
+  if (isOpen) {
+    expand.classList.remove('open');
+    btn.classList.remove('open');
+    _openLogs.delete(uid);
+    return;
+  }
+  expand.classList.add('open');
+  btn.classList.add('open');
+  _openLogs.add(uid);
+  // 加载日志
+  try {
+    const r = await fetch(`/api/admin/action_logs?user_id=${uid}&limit=20`);
+    const d = await r.json();
+    const logs = d.logs || [];
+    const table = document.getElementById(`loginner-${uid}`);
+    const countEl = document.getElementById(`logcount-${uid}`);
+    if (!logs.length) {
+      table.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:12px;">暂无操作记录</td></tr>';
+      return;
+    }
+    countEl.textContent = `共 ${logs.length} 条`;
+    table.innerHTML = logs.map(l => {
+      const act = ACTION_LABEL[l.action] || l.action;
+      const rowBg = l.action === 'monitor_start' ? 'background:#f0fdf4;' : (l.action === 'monitor_stop' ? 'background:#fff7ed;' : '');
+      return `<tr style="${rowBg}">
+        <td style="width:50px;color:var(--text3);">#${l.id}</td>
+        <td style="width:110px;">${act}</td>
+        <td style="font-family:monospace;">${l.target ? '@' + escHtml(l.target) : '-'}</td>
+        <td style="width:80px;">${escHtml(l.ip || '-')}</td>
+        <td style="width:130px;">${(l.created_at||'').slice(0,16)}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById(`loginner-${uid}`).innerHTML = '<tr><td colspan="5" style="color:#ef4444;padding:12px;">加载失败</td></tr>';
+  }
+}
+
 async function loadUsers() {
   const res = await fetch('/api/admin/users');
   const data = await res.json();
@@ -321,7 +437,7 @@ async function loadUsers() {
   const pendingCountEl = document.getElementById('pendingCount');
 
   if (!data.users || !data.users.length) {
-    tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">暂无用户</td></tr>';
+    tb.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:24px">暂无用户</td></tr>';
     pendingCard.style.display = 'none';
     return;
   }
@@ -357,7 +473,8 @@ async function loadUsers() {
     return `<span class="badge">${s}</span>`;
   };
 
-  tb.innerHTML = activeUsers.map(u => {
+  const rows = [];
+  activeUsers.forEach(u => {
     // 在线状态
     const onlineDot = u.is_online
       ? `<span class="online-dot" title="当前有活跃监控"></span><span style="font-size:11px;color:#10b981;font-weight:700;">在线</span>${u.online_accounts?.length ? `<div style="font-size:10px;color:#10b981;margin-top:2px;">监控中：${u.online_accounts.slice(0,3).map(a=>'@'+a).join('  ')}</div>` : ''}`
@@ -373,13 +490,18 @@ async function loadUsers() {
         <span title="总场次">🎬 累计 ${u.session_count || 0} 场</span>
         ${todayBadge}
         <span title="监控账号数">👤 ${u.account_count || 0} 个账号</span>
-        <span title="账号组数">📋 ${u.group_account_count || 0} 个分组</span>
         ${u.last_active ? `<span title="最后活跃时间" style="color:var(--text3);">最近：${(u.last_active||'').slice(0,16)}</span>` : '<span style="color:#d1d5db;">尚未监控</span>'}
       </div>`;
 
-    return `
-    <tr>
-      <td style="color:var(--text3);font-size:12px;">${u.id}</td>
+    // 最后登录时间
+    const lastLogin = u.last_login_at ? (u.last_login_at||'').slice(0,16) : '<span style="color:#d1d5db;">从未登录</span>';
+
+    rows.push(`
+    <tr id="urow-${u.id}">
+      <td style="color:var(--text3);font-size:12px;">
+        ${u.id}
+        <button class="expand-btn" id="expbtn-${u.id}" onclick="toggleUserLogs(${u.id})" title="展开操作日志">▶</button>
+      </td>
       <td>
         <strong style="font-size:14px;">${u.username}</strong>
         ${usageInfo}
@@ -389,6 +511,7 @@ async function loadUsers() {
       <td><span class="badge ${u.is_admin ? 'badge-admin' : 'badge-user'}">${u.is_admin ? '👑 管理员' : '用户'}</span></td>
       <td>${statusBadge(u.status || 'active')}</td>
       <td style="color:var(--text2);font-size:12px;">${(u.created_at||'').slice(0,10) || '-'}</td>
+      <td style="color:var(--text2);font-size:12px;">${lastLogin}</td>
       <td>
         ${!u.is_admin ? `
           <button class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;margin-right:4px" onclick="openReset(${u.id},'${u.username}')">重置密码</button>
@@ -400,7 +523,21 @@ async function loadUsers() {
         ` : '<span style="color:var(--text3);font-size:12px;">—</span>'}
       </td>
     </tr>
-  `}).join('');
+    <tr class="log-expand-row" id="logrow-${u.id}">
+      <td colspan="9">
+        <div class="log-expand-inner" id="logexpand-${u.id}">
+          <div style="padding:8px 14px 4px;font-size:11px;color:var(--text3);display:flex;justify-content:space-between;align-items:center;">
+            <span>📋 最近操作日志（最多20条）</span>
+            <span id="logcount-${u.id}"></span>
+          </div>
+          <table class="log-expand-table" id="loginner-${u.id}">
+            <tr><td colspan="5" style="text-align:center;color:var(--text3);padding:12px;">加载中...</td></tr>
+          </table>
+        </div>
+      </td>
+    </tr>`);
+  });
+  tb.innerHTML = rows.join('');
 }
 
 async function createUser() {
@@ -600,42 +737,102 @@ function copyAllFeedbacks() {
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-const ACTION_LABEL = {
-  login: '🔐 登录', logout: '🚪 登出',
-  monitor_start: '▶️ 开始监控', monitor_stop: '⏹ 停止监控',
-};
-
 async function loadActionLogs() {
   const userId = document.getElementById('logUserFilter').value;
-  const url = userId ? `/api/admin/action_logs?user_id=${userId}&limit=300` : '/api/admin/action_logs?limit=300';
+  const url = userId ? `/api/admin/action_logs?user_id=${userId}&limit=50` : '/api/admin/action_logs?limit=50';
   const tbody = document.getElementById('actionLogList');
-  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">加载中…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">加载中…</td></tr>';
   try {
     const res = await fetch(url);
     const data = await res.json();
     const logs = data.logs || [];
     if (!logs.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">暂无日志</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">暂无日志</td></tr>';
       return;
+    }
+    // 未读标红：以 localStorage 存储上次查看时的最大 id
+    const lastSeenKey = 'adminLog_lastSeenId';
+    const lastSeenId = parseInt(localStorage.getItem(lastSeenKey) || '0');
+    const maxId = Math.max(...logs.map(l => l.id));
+    const unreadCount = logs.filter(l => l.id > lastSeenId).length;
+    // 更新未读角标
+    const badge = document.getElementById('unreadLogBadge');
+    if (badge) {
+      if (unreadCount > 0) { badge.style.display = ''; badge.textContent = `${unreadCount} 未读`; }
+      else { badge.style.display = 'none'; }
     }
     tbody.innerHTML = logs.map(l => {
       const actionLabel = ACTION_LABEL[l.action] || l.action;
-      const isLogin = l.action === 'login' || l.action === 'logout';
+      const isUnread = l.id > lastSeenId;
       const isStart = l.action === 'monitor_start';
-      const rowBg = isStart ? 'background:#f0fdf4;' : (l.action === 'monitor_stop' ? 'background:#fff7ed;' : '');
-      return `<tr style="${rowBg}">
-        <td style="color:var(--text3);font-size:12px;">#${l.id}</td>
+      let rowStyle = '';
+      if (isUnread) {
+        rowStyle = 'background:#fff1f2;border-left:3px solid #fe2c55;';
+      } else if (isStart) {
+        rowStyle = 'background:#f0fdf4;';
+      } else if (l.action === 'monitor_stop') {
+        rowStyle = 'background:#fff7ed;';
+      }
+      const unreadDot = isUnread ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#fe2c55;margin-right:4px;vertical-align:middle;"></span>' : '';
+      const targetLink = l.target
+        ? `<a href="https://www.tiktok.com/@${escHtml(l.target)}" target="_blank" style="color:var(--info);text-decoration:none;font-family:monospace;">@${escHtml(l.target)}</a>`
+        : '-';
+      return `<tr style="${rowStyle}">
+        <td style="color:var(--text3);font-size:12px;">${unreadDot}#${l.id}</td>
         <td style="font-weight:600;color:var(--text);">${escHtml(l.user_display || l.username)}</td>
+        <td style="font-size:12px;color:var(--text2);">${escHtml(l.page || '-')}</td>
         <td>${actionLabel}</td>
-        <td style="font-family:monospace;color:var(--info);">${l.target ? '@' + escHtml(l.target) : '-'}</td>
+        <td>${targetLink}</td>
         <td style="font-size:12px;color:var(--text3);">${escHtml(l.ip || '-')}</td>
         <td style="font-size:12px;color:var(--text3);">${(l.created_at||'').slice(0,16)}</td>
       </tr>`;
     }).join('');
+    // 更新最后查看 id（延迟2秒，给用户时间看到红色）
+    setTimeout(() => localStorage.setItem(lastSeenKey, maxId), 2000);
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#ef4444;padding:20px">加载失败</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">加载失败</td></tr>';
   }
 }
+
+// ── 反馈弹窗 ──
+function openFeedbackModal() {
+  document.getElementById('feedbackModal').style.display = 'flex';
+  document.getElementById('fbTitle').value = '';
+  document.getElementById('fbDesc').value = '';
+  const radios = document.querySelectorAll('input[name="fbType"]');
+  if (radios[0]) radios[0].checked = true;
+  setTimeout(() => document.getElementById('fbTitle').focus(), 100);
+}
+function closeFeedbackModal() {
+  document.getElementById('feedbackModal').style.display = 'none';
+}
+async function submitFeedback() {
+  const title = document.getElementById('fbTitle').value.trim();
+  if (!title) { document.getElementById('fbTitle').focus(); return; }
+  const type = document.querySelector('input[name="fbType"]:checked').value;
+  const desc = document.getElementById('fbDesc').value.trim();
+  const btn = document.getElementById('fbSubmitBtn');
+  btn.disabled = true; btn.textContent = '提交中...';
+  try {
+    const res = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, title, desc }) });
+    const data = await res.json();
+    if (data.success) { closeFeedbackModal(); alert('✅ 反馈已提交，感谢！'); }
+    else { alert('提交失败：' + (data.msg || '')); }
+  } catch(e) { alert('提交失败，请重试'); }
+  finally { btn.disabled = false; btn.textContent = '提交'; }
+}
+
+// ── 版本日志 ──
+function openChangelog(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  document.getElementById('changelogModal').classList.add('open');
+  fetch('/api/version').then(r=>r.json()).then(d=>{
+    let html = (d.changelog||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    html = html.replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^- (.+)$/gm,'<li>$1</li>');
+    document.getElementById('changelogContent').innerHTML = html;
+  }).catch(()=>{ document.getElementById('changelogContent').textContent='加载失败'; });
+}
+function closeChangelog() { document.getElementById('changelogModal').classList.remove('open'); }
 </script>
 </body>
 </html>

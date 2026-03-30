@@ -12,7 +12,7 @@ from TikTokLive.events import (
     ConnectEvent, DisconnectEvent, LiveEndEvent
 )
 from src.database import (
-    create_session, end_session,
+    create_session, end_session, find_recent_session, reactivate_session,
     add_comment, add_gift, add_follow, update_viewers,
     get_session_summary, add_speech
 )
@@ -69,7 +69,7 @@ class LiveMonitor:
         check_client = TikTokLiveClient(unique_id=self.username)
         wait_secs = 0
         max_wait = 7200  # 2小时
-        poll_interval = 30  # 每30秒检查一次
+        poll_interval = 60  # 每60秒检查一次
 
         while self.running:
             try:
@@ -119,16 +119,26 @@ class LiveMonitor:
             self.running = False
             return
 
-        # 开播了，建立会话开始采集
-        self.session_id = create_session(self.username)
-        self.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        logger.info(f"🚀 @{self.username} 开播了！开始采集，会话ID: {self.session_id}")
+        # 开播了，建立会话（或合并到15分钟内的上次会话）
+        merged = False
+        recent = find_recent_session(self.username, minutes=15)
+        if recent:
+            self.session_id = recent['id']
+            self.start_time = recent.get('start_time') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            reactivate_session(self.session_id)
+            merged = True
+            logger.info(f"🔄 @{self.username} 15分钟内重连，合并至 session#{self.session_id}（原开播: {self.start_time}）")
+        else:
+            self.session_id = create_session(self.username)
+            self.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            logger.info(f"🚀 @{self.username} 开播了！开始采集，新会话ID: {self.session_id}")
         self._emit('live_detected', {
             'msg': f'@{self.username} 开播了，开始监控！',
             'session_id': self.session_id,
             'start_time': self.start_time,
             'is_auto': self.is_auto,
             'group_name': self.group_name,
+            'merged': merged,  # 前端可用此标记提示"重连中"
         })
 
         # 自动监控账号开播 → 推微信通知
@@ -303,8 +313,8 @@ class LiveMonitor:
 
     def _register_events(self):
         """注册所有监听事件"""
-        # 竞品账号只采 viewer 数据，跳过评论/礼物/话术（轻量模式）
-        is_rival = self.group_name == 'rival'
+        # v1.3: 竞品/关注账号与自营账号采集内容完全一致，取消轻量模式限制
+        is_rival = False  # 原来：self.group_name == 'rival'，现在全部启用完整采集
 
         @self.client.on(ConnectEvent)
         async def on_connect(event: ConnectEvent):

@@ -175,6 +175,14 @@
   /* 拖拽状态 */
   .account-card.dragging { opacity: 0.45; transform: scale(0.97); box-shadow: none; cursor: grabbing; }
   .account-card.drag-over { border: 2px dashed var(--primary); background: var(--primary-bg); }
+  /* 账号错误状态：红色边框高亮 */
+  .account-card.card-has-error { border-color: #dc2626; box-shadow: 0 0 0 2px rgba(220,38,38,.15); }
+  /* 卡片内嵌错误提示横条 */
+  .card-error-bar { display: flex; align-items: center; gap: 6px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 7px 10px; margin-bottom: 8px; font-size: 12px; color: #dc2626; line-height: 1.4; }
+  .card-error-icon { font-size: 14px; flex-shrink: 0; }
+  .card-error-msg { flex: 1; font-weight: 500; }
+  .card-error-close { flex-shrink: 0; background: #dc2626; color: #fff; border: none; border-radius: 4px; padding: 3px 8px; font-size: 11px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+  .card-error-close:hover { background: #b91c1c; }
   .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .card-username { font-size: 13px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card-username a:hover { text-decoration: underline !important; opacity: .85; }
@@ -494,8 +502,71 @@ socket.on('status_update', (data) => {
   });
 
   updateGlobalStats();
+
+  // Level-B 恢复：异步拉取完整卡片数据（评论/礼物/话术列表）
+  if ((data.active_accounts || []).length > 0) {
+    _restoreCardContents();
+  }
 });
 
+async function _restoreCardContents() {
+  try {
+    const res = await fetch('/api/restore_state');
+    if (!res.ok) return;
+    const d = await res.json();
+    (d.accounts || []).forEach(item => {
+      const u = item.username;
+      if (!monitors[u]) return;
+
+      // 恢复礼物总额到指标显示（通过 monitors 数据）
+      if (item.gift_total != null) {
+        monitors[u].gifts = item.gift_total;
+        updateCardMetrics(u);
+      }
+
+      // 恢复最近评论列表（加入到评论框，时间顺序从旧到新）
+      const commentBox = document.getElementById(`comments-box-${u}`);
+      if (commentBox && item.recent_comments && item.recent_comments.length) {
+        commentBox.innerHTML = ''; // 清空 "等待数据" 占位
+        // 从旧到新插入（最新的在顶部，所以反向）
+        [...item.recent_comments].reverse().forEach(c => {
+          const fallback = typeof detectLang === 'function' ? detectLang(c.content) : {lang:'other', css_class:'lang-other', lang_display:''};
+          const lang = c.lang || fallback.lang;
+          const cssClass = fallback.css_class || 'lang-other';
+          const lang_display = fallback.lang_display || '';
+          const label = typeof langLabel === 'function' ? langLabel(lang, lang_display) : '';
+          const zhLine = (c.text_zh && c.text_zh !== c.content)
+            ? `<div style="font-size:10px;color:var(--text2);margin-top:2px;padding:2px 5px;background:#f9fafb;border-radius:3px;border-left:2px solid var(--border);">中：${escHtml(c.text_zh)}</div>` : '';
+          const div = document.createElement('div');
+          div.className = 'comment-item';
+          div.innerHTML = `<span class="comment-user">${escHtml(c.username)}</span><span class="comment-lang ${cssClass}" title="${lang_display}">${label}</span><span class="comment-time">${(c.timestamp||'').slice(11,19)}</span><div class="comment-content comment-text">${escHtml(c.content)}${zhLine}</div>`;
+          commentBox.insertBefore(div, commentBox.firstChild);
+        });
+      }
+
+      // 恢复最近话术（语音转写）
+      const speechBox = document.getElementById(`speech-box-${u}`);
+      if (speechBox && item.recent_speech && item.recent_speech.length) {
+        speechBox.innerHTML = '';
+        item.recent_speech.forEach(s => {
+          const zhText = s.text_zh && s.text_zh !== s.text ? `<div class="speech-zh">${escHtml(s.text_zh)}</div>` : '';
+          const div = document.createElement('div');
+          div.className = 'speech-item';
+          div.innerHTML = `<div class="speech-meta"><span class="speech-time">${(s.timestamp||'').slice(11,16)}</span></div><div class="speech-text">${escHtml(s.text||'')}</div>${zhText}`;
+          speechBox.appendChild(div);
+        });
+        speechBox.scrollTop = speechBox.scrollHeight;
+      }
+    });
+  } catch(e) {
+    console.warn('[restore_state] 恢复失败:', e);
+  }
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 socket.on('connected', (data) => {
   const u = data.username;
   if (!monitors[u]) createAccountCard(u, 'own');
@@ -581,15 +652,17 @@ socket.on('monitor_error', (data) => {
   const u = data.username;
   // 只有卡片还在监控列表里才处理（防止重复触发）
   if (!monitors[u]) return;
-  setBadge(u, '出错', 'error');
   showToast(`❌ ${data.msg}`, 'error');
-  // 精确匹配：用户不存在 → 3秒后移除卡片
-  // 注意：'长时间未开播' 也触发 monitor_error，但不应移除卡片（改为显示超时状态即可）
+
   if (data.msg && (data.msg.includes('不存在') || data.msg.includes('not found'))) {
-    setTimeout(() => removeAccountCard(u), 3000);
+    // 账号不存在：卡片变红色"账号不存在"状态，显示错误提示，让用户手动关闭
+    setBadge(u, '账号不存在', 'error');
+    showCardError(u, `用户名 @${u} 不存在，请检查是否输入正确`);
   } else if (data.msg && data.msg.includes('长时间未开播')) {
     // 超时等待：显示超时标记但保留卡片，让用户决定是否手动关闭
     setBadge(u, '等待超时', 'error');
+  } else {
+    setBadge(u, '出错', 'error');
   }
 });
 
@@ -683,7 +756,7 @@ function createAccountCard(username, group = 'own', prependToFront = false) {
   const groupTag = groupTagMap[group] || '';
   card.innerHTML = `
     <div class="card-header">
-      <div class="card-username"><a href="https://www.tiktok.com/@${username}/live" target="_blank" style="color:inherit;text-decoration:none;" title="打开TikTok直播间">@${username}</a>${groupTag}</div>
+      <div class="card-username"><a href="https://www.tiktok.com/@${username}" target="_blank" style="color:inherit;text-decoration:none;" title="打开TikTok主页">@${username}</a>${groupTag}</div>
       <div style="display:flex;align-items:center;gap:6px;">
         <span class="offline-badge" id="badge-${username}">连接中...</span>
         <button class="btn btn-danger btn-sm" onclick="stopMonitor('${username}')">✕</button>
@@ -900,7 +973,7 @@ function updateLangChip(username, cStats, sStats) {
   if (total === 0) {
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <span style="font-size:14px;font-weight:700;color:#1a1d2e;">@${username}</span>
+        <span style="font-size:14px;font-weight:700;color:#1a1d2e;"><a href="https://www.tiktok.com/@${username}" target="_blank" style="color:inherit;text-decoration:none;">@${username}</a></span>
         <span style="width:8px;height:8px;border-radius:50%;background:${isLive?'#10b981':'#d1d5db'};display:inline-block;"></span>
       </div>
       <div style="font-size:12px;color:#9ca3af;text-align:center;padding:8px 0;">等待语言数据...</div>`;
@@ -994,7 +1067,7 @@ function updateLangChip(username, cStats, sStats) {
   card.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
       <div>
-        <span style="font-size:14px;font-weight:700;color:#1a1d2e;">@${username}</span>
+        <span style="font-size:14px;font-weight:700;color:#1a1d2e;"><a href="https://www.tiktok.com/@${username}" target="_blank" style="color:inherit;text-decoration:none;">@${username}</a></span>
         ${dominant ? `<span style="font-size:11px;color:${dominant.color};background:${dominant.bg};border-radius:5px;padding:1px 7px;margin-left:6px;font-weight:600;">${dominant.name} ${dominantPct}%主导</span>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
@@ -1257,6 +1330,32 @@ function onCardDrop(e) {
   }
   return false;
 }
+// ── 卡片错误状态展示（不删卡片，显示红色提示条让用户手动关闭）──
+function showCardError(username, msg) {
+  const card = document.getElementById(`card-${username}`);
+  if (!card) return;
+  // 如果已有错误条则更新文字
+  let bar = card.querySelector('.card-error-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'card-error-bar';
+    bar.innerHTML = `
+      <span class="card-error-icon">⚠️</span>
+      <span class="card-error-msg"></span>
+      <button class="card-error-close" onclick="removeAccountCard('${username}')" title="关闭卡片">✕ 关闭</button>
+    `;
+    // 插入到卡片顶部（header 下方）
+    const header = card.querySelector('.card-header');
+    if (header && header.nextSibling) {
+      card.insertBefore(bar, header.nextSibling);
+    } else {
+      card.prepend(bar);
+    }
+  }
+  bar.querySelector('.card-error-msg').textContent = msg;
+  card.classList.add('card-has-error');
+}
+
 // ────────────────────────────────────────────────────────────
 
 function removeAccountCard(username) {
@@ -1510,7 +1609,9 @@ async function startMonitor() {
     const data = await res.json();
     if (!data.success) {
       showToast(data.msg || '启动失败', 'error');
-      removeAccountCard(username);
+      // 不删卡片，改为显示错误状态让用户确认
+      setBadge(username, '启动失败', 'error');
+      showCardError(username, data.msg || '启动失败，请检查用户名后重试');
     } else {
       showToast(`✅ @${username} 监控已启动，正在检测直播状态...`, 'success');
       // 后台异步检测状态（不阻塞UI）
@@ -1519,7 +1620,8 @@ async function startMonitor() {
     }
   } catch(e) {
     showToast('网络错误，请重试', 'error');
-    removeAccountCard(username);
+    setBadge(username, '连接失败', 'error');
+    showCardError(username, '网络连接失败，请检查网络后重试');
   } finally {
     btn.textContent = '开始监控'; btn.disabled = false;
   }
@@ -1540,10 +1642,12 @@ async function _checkLiveAsync(username) {
     if (!monitors[username]) return; // 已被用户手动停止
     // 只有明确收到 success:true 且 exists:false 才认为账号不存在，避免误判
     if (checkData.success === true && checkData.exists === false) {
-      showToast(`❌ 用户 @${username} 不存在，已停止监控`, 'error');
+      showToast(`❌ 用户 @${username} 不存在，请检查用户名`, 'error');
       // 停止后端监控
       await fetch('/api/monitor/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username}) });
-      removeAccountCard(username);
+      // 不删卡片，改为显示错误状态
+      setBadge(username, '账号不存在', 'error');
+      showCardError(username, `用户名 @${username} 不存在，请检查是否输入正确`);
       return;
     }
     if (checkData.is_live) {
