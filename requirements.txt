@@ -26,6 +26,10 @@ openpyxl==3.1.5
 
 # 语言检测
 langdetect==1.0.9
+langid==1.1.6
+
+# 时区处理
+pytz==2025.2
 
 # 事件循环（SocketIO 需要）
 eventlet==0.35.2
