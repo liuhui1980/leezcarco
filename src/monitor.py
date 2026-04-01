@@ -53,6 +53,7 @@ class LiveMonitor:
         self.running = False
         self.viewer_count = 0
         self.peak_viewers = 0      # 峰值在线人数
+        self.total_user = 0        # 累计观看人数（来自平台）
         self.like_count = 0
         self.comment_count = 0
         self.new_followers = 0     # 新增关注数
@@ -553,6 +554,8 @@ class LiveMonitor:
             # m_total = 当前实时在线人数，total_user = 累计观看人数（平台提供）
             self.viewer_count = getattr(event, 'm_total', 0) or 0
             total_user = getattr(event, 'total_user', 0) or 0
+            if total_user:
+                self.total_user = total_user
             
             # 更新峰值在线
             if self.viewer_count > self.peak_viewers:
@@ -664,8 +667,11 @@ def get_monitors_snapshot():
             'session_id': monitor.session_id,
             'start_time': monitor.start_time,
             'viewer_count': monitor.viewer_count,
+            'peak_viewers': monitor.peak_viewers,
+            'total_user': monitor.total_user or 0,
             'like_count': monitor.like_count,
             'comment_count': monitor.comment_count,
+            'new_followers': monitor.new_followers or 0,
             'is_live': monitor.session_id is not None,  # session_id 存在说明已开播
             'is_auto': monitor.is_auto,     # 是否为自动监控账号
             'group_name': monitor.group_name,  # 分组标识

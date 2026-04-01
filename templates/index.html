@@ -485,16 +485,21 @@ socket.on('status_update', (data) => {
   (data.monitors_snapshot || []).forEach(s => { snapMap[s.username] = s; });
 
   (data.active_accounts || []).forEach(u => {
-    if (!monitors[u]) createAccountCard(u, 'own');
-
     const snap = snapMap[u];
+    const group = (snap && snap.group_name) ? snap.group_name : 'own';
+    if (!monitors[u]) createAccountCard(u, group);
+
     if (snap) {
-      // 恢复实时数据
-      monitors[u].viewers   = snap.viewer_count  || 0;
-      monitors[u].likes     = snap.like_count     || 0;
-      monitors[u].comments  = snap.comment_count  || 0;
-      monitors[u].sessionId = snap.session_id     || null;
-      monitors[u].startTime = snap.start_time     || null;
+      // 恢复实时数据（全量指标）
+      monitors[u].viewers       = snap.viewer_count  || 0;
+      monitors[u].peakViewers   = snap.peak_viewers  || 0;
+      monitors[u].totalUser     = snap.total_user    || 0;
+      monitors[u].likes         = snap.like_count     || 0;
+      monitors[u].comments      = snap.comment_count  || 0;
+      monitors[u].newFollowers  = snap.new_followers  || 0;
+      monitors[u].sessionId     = snap.session_id     || null;
+      monitors[u].startTime     = snap.start_time     || null;
+      updateCardMetrics(u);
 
         // 恢复开播时间显示
       if (snap.start_time) {
@@ -568,6 +573,8 @@ async function _restoreCardContents() {
           div.innerHTML = `<span class="comment-user">${escHtml(c.username)}</span><span class="comment-lang ${cssClass}" title="${lang_display}">${label}</span><span class="comment-time">${(c.timestamp||'').slice(11,19)}</span><div class="comment-content comment-text">${escHtml(c.content)}${zhLine}</div>`;
           commentBox.insertBefore(div, commentBox.firstChild);
         });
+        // 恢复后立即生成评论摘要
+        updateCommentSummary(u);
       }
 
       // 恢复语言分析模块
@@ -733,10 +740,12 @@ socket.on('new_follow', (data) => {
 socket.on('viewer_update', (data) => {
   const u = data.username; if (!monitors[u]) return;
   monitors[u].viewers = data.viewer_count;
-  monitors[u].peakViewers = data.peak_viewers || data.viewer_count; // 兼容旧数据
+  monitors[u].peakViewers = data.peak_viewers || data.viewer_count;
   monitors[u].totalUser = data.total_user || 0;
   monitors[u].likes = data.like_count;
   monitors[u].newFollowers = data.new_followers || 0;
+  // 同步评论数（防止中途打开页面时漏计数）
+  if (data.comment_count !== undefined) monitors[u].comments = data.comment_count;
   // 记录历史快照（最多保留120个点，约1小时）
   const now = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   monitors[u].history = monitors[u].history || [];
@@ -2202,10 +2211,14 @@ async function init() {
       const s = sessionMap[u];
       if (s) {
         // 用数据库中的实时数据直接恢复卡片，避免停在"恢复中"
-        monitors[u].viewers   = s.peak_viewers || 0;
-        monitors[u].comments  = s.total_comments || 0;
-        monitors[u].gifts     = s.total_gift_value || 0;
-        monitors[u].sessionId = s.id;
+        monitors[u].viewers       = s.peak_viewers || 0;  // 数据库无实时在线，用峰值近似
+        monitors[u].peakViewers   = s.peak_viewers || 0;
+        monitors[u].totalUser     = s.total_viewers || 0;
+        monitors[u].comments      = s.total_comments || 0;
+        monitors[u].likes         = s.total_likes || 0;
+        monitors[u].newFollowers  = s.new_followers || 0;
+        monitors[u].gifts         = s.total_gift_value || 0;
+        monitors[u].sessionId     = s.id;
         if (s.start_time_beijing || s.start_time) {
           const timeStr = s.start_time_beijing || s.start_time;
           monitors[u].startTime = timeStr.slice(11,16);
@@ -2235,6 +2248,8 @@ async function init() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanedList)); } catch(e) {}
 
   updateGlobalStats();
+  // ★ 恢复已有直播的评论/话术/摘要
+  if (activeAccounts.length > 0) _restoreCardContents();
   // ★ 并行执行：账号下拉列表加载 + 自动看板卡片开启，互不阻塞
   Promise.all([loadAccountList(), _autoOpenLiveCards()]);
 }
