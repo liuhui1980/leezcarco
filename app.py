@@ -618,7 +618,8 @@ def api_status():
     """系统状态"""
     return jsonify({
         'active_accounts': get_active_usernames(),
-        'active_sessions': get_active_sessions()
+        'active_sessions': get_active_sessions(),
+        'monitors_snapshot': get_monitors_snapshot(),  # 含 is_auto / is_live 字段
     })
 
 
@@ -715,6 +716,25 @@ def api_start_monitor():
         return jsonify({'success': False, 'msg': '用户名不能为空'}), 400
 
     u = get_current_user()
+
+    # 检查账号是否已在自动监控中（等待开播状态）
+    from src.monitor import active_monitors as _active_monitors
+    if username in _active_monitors:
+        mon = _active_monitors[username]
+        if mon.is_auto:
+            # 自动监控账号已在后台轮询，通知前端直接显示卡片
+            is_live = mon.session_id is not None
+            return jsonify({
+                'success': True,
+                'already_auto': True,   # 前端据此不重复启动，直接显示卡片
+                'is_live': is_live,
+                'group_name': mon.group_name,
+                'session_id': mon.session_id,
+                'msg': f'@{username} 已在自动监控中，{"正在直播" if is_live else "等待开播"}'
+            })
+        # 非自动监控但已在监控中，提示重复
+        return jsonify({'success': False, 'msg': f'@{username} 已在监控中'})
+
     result = start_monitor(username, socketio=socketio, owner_user_id=u['id'])
     if result:
         write_action_log(u['id'], u['username'], 'monitor_start', target=username,
@@ -983,6 +1003,24 @@ def api_accounts():
     ]
     result.sort(key=lambda x: (0 if x['is_live'] else 1, x['username']))
     return jsonify(result)
+
+
+@app.route('/api/account/groups')
+@login_required
+def api_account_groups():
+    """返回当前用户的所有账号分组映射 {username: group_name}
+    前端用此替代 localStorage.accountGroups，确保分组标签来源可靠"""
+    u = get_current_user()
+    from src.database import get_conn
+    conn = get_conn()
+    c = conn.cursor()
+    if u['is_admin']:
+        c.execute('SELECT username, group_name FROM account_groups')
+    else:
+        c.execute('SELECT username, group_name FROM account_groups WHERE owner_user_id=?', (u['id'],))
+    rows = c.fetchall()
+    conn.close()
+    return jsonify({r['username']: r['group_name'] for r in rows})
 
 
 @app.route('/api/account/group', methods=['POST'])
@@ -1603,6 +1641,19 @@ def api_restore_state():
                 (sid,)
             ).fetchall()
             item['recent_speech'] = [dict(r) for r in reversed(rows)]
+
+            # 语言统计（评论 + 话术）- 用于恢复语言分析模块
+            crows = conn.execute(
+                '''SELECT lang, COUNT(*) as cnt FROM comments WHERE session_id=? AND lang IS NOT NULL GROUP BY lang''',
+                (sid,)
+            ).fetchall()
+            item['comment_stats'] = {r['lang']: r['cnt'] for r in crows}
+
+            srows = conn.execute(
+                '''SELECT lang, COUNT(*) as cnt FROM speech_records WHERE session_id=? AND lang IS NOT NULL GROUP BY lang''',
+                (sid,)
+            ).fetchall()
+            item['speech_stats'] = {r['lang']: r['cnt'] for r in srows}
 
             # 礼物汇总
             row = conn.execute(

@@ -499,7 +499,7 @@
     </div>
     <div class="panel">
       <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-        <span>💬 评论记录（最新 100 条）</span>
+        <span>💬 评论记录（全部 <span id="commentCountBadge">-</span> 条）</span>
         <div style="display:flex;gap:6px;">
           <a href="#" onclick="downloadDoc('comment');return false;" style="font-size:12px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:6px;padding:5px 12px;text-decoration:none;font-weight:600;">📥 下载 Word</a>
           <button onclick="requestAiSummary('comment', event)" style="font-size:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600;">✨ AI 总结评论</button>
@@ -704,7 +704,7 @@ function renderMainData(data) {
   const endParts   = fmtDateTimeParts(s.end_time);
   const dataMetrics = [
     {val: fmt(s.peak_viewers),                         label: '峰值在线'},
-    {val: fmt(s.total_viewers),                        label: '累计观看'},
+    {val: fmt(s.total_viewers),                        label: '累计观看', note: '平台推送值，实际可能略高'},
     {val: fmt(s.total_comments),                       label: '总评论数'},
     {val: fmt(s.total_likes),                          label: '总点赞数'},
     {val: fmt(s.new_followers),                        label: '新增关注'},
@@ -735,7 +735,7 @@ function renderMainData(data) {
   </div>`;
   document.getElementById('metricsRow').innerHTML =
     timeCard + dataMetrics.map(m =>
-      `<div class="metric-card"><div class="metric-val">${m.val}</div><div class="metric-label">${m.label}</div></div>`
+      `<div class="metric-card"><div class="metric-val">${m.val}</div><div class="metric-label">${m.label}</div>${m.note ? `<div style="font-size:10px;color:#94a3b8;margin-top:2px;">※${m.note}</div>` : ''}</div>`
     ).join('');
 
   // 趋势图
@@ -784,6 +784,9 @@ function renderMainData(data) {
 
   // 评论记录
   const comments = data.comments || [];
+  // 动态更新评论数量徽章
+  const commentBadge = document.getElementById('commentCountBadge');
+  if (commentBadge) commentBadge.textContent = comments.length;
   document.querySelector('#commentTable tbody').innerHTML = comments.length
     ? comments.map(c => {
         const langBadge = c.lang
@@ -833,10 +836,21 @@ function renderSpeechData(sp) {
   document.getElementById('speechPanel').style.display = '';
   document.getElementById('speechCount').textContent = `${sp.records.length} 条话术`;
 
-  // 关键句摘要
+  // 关键句摘要（支持 {text, text_zh} 对象或旧字符串格式）
   const summary = sp.summary || [];
   document.getElementById('summaryList').innerHTML = summary.length
-    ? summary.map((s,i) => `<li class="summary-item"><span class="summary-num">${i+1}</span><span>${escHtml(s)}</span></li>`).join('')
+    ? summary.map((s, i) => {
+        const origText = typeof s === 'object' ? (s.text || '') : String(s);
+        const zhText = typeof s === 'object' ? (s.text_zh || '') : '';
+        const hasZh = zhText && zhText.trim() && zhText.trim() !== origText;
+        return `<li class="summary-item">
+          <span class="summary-num">${i+1}</span>
+          <span>
+            <div style="line-height:1.5;">${escHtml(origText)}</div>
+            ${hasZh ? `<div style="font-size:12px;color:#64748b;margin-top:2px;">🌐 ${escHtml(zhText)}</div>` : ''}
+          </span>
+        </li>`;
+      }).join('')
     : '<li class="summary-item" style="color:var(--text3);">暂无摘要</li>';
 
   // 关键词词频气泡图
@@ -899,10 +913,10 @@ function renderSpeechData(sp) {
   // 第四步：渲染话术分析
   try { renderSpeechData(sp); } catch(e) { console.error('[renderSpeechData]', e); }
   
-  // 第五步：语言总结性分析
+  // 第五步：语言总结性分析（仅基于主播话术）
   try { 
-    if (data && data.comments && sp && sp.records) {
-      analyzeLanguageSummary(sessionId, data.comments, sp.records);
+    if (sp && sp.records) {
+      analyzeLanguageSummary(sessionId, sp.records);
     }
   } catch(e) { console.error('[analyzeLanguageSummary]', e); }
 })();
@@ -932,8 +946,69 @@ const LANG_INFO = {
   'zh': { name:'中文', flag:'🇨🇳' },
   'en': { name:'英语', flag:'🇺🇸' },
   'ar': { name:'阿拉伯语', flag:'🌍' },
+  'fr': { name:'法语', flag:'🇫🇷' },
+  'es': { name:'西班牙语', flag:'🇪🇸' },
+  'de': { name:'德语', flag:'🇩🇪' },
+  'pt': { name:'葡萄牙语', flag:'🇵🇹' },
+  'it': { name:'意大利语', flag:'🇮🇹' },
+  'ru': { name:'俄语', flag:'🇷🇺' },
+  'ja': { name:'日语', flag:'🇯🇵' },
+  'ko': { name:'韩语', flag:'🇰🇷' },
+  'tr': { name:'土耳其语', flag:'🇹🇷' },
+  'hi': { name:'印地语', flag:'🇮🇳' },
+  'id': { name:'印尼语', flag:'🇮🇩' },
+  'ms': { name:'马来语', flag:'🇲🇾' },
+  'th': { name:'泰语', flag:'🇹🇭' },
+  'vi': { name:'越南语', flag:'🇻🇳' },
+  'pl': { name:'波兰语', flag:'🇵🇱' },
+  'nl': { name:'荷兰语', flag:'🇳🇱' },
+  'sv': { name:'瑞典语', flag:'🇸🇪' },
+  'da': { name:'丹麦语', flag:'🇩🇰' },
+  'no': { name:'挪威语', flag:'🇳🇴' },
+  'fi': { name:'芬兰语', flag:'🇫🇮' },
+  'cs': { name:'捷克语', flag:'🇨🇿' },
+  'ro': { name:'罗马尼亚语', flag:'🇷🇴' },
+  'hu': { name:'匈牙利语', flag:'🇭🇺' },
+  'uk': { name:'乌克兰语', flag:'🇺🇦' },
+  'he': { name:'希伯来语', flag:'🇮🇱' },
+  'fa': { name:'波斯语', flag:'🇮🇷' },
+  'ur': { name:'乌尔都语', flag:'🇵🇰' },
+  'bn': { name:'孟加拉语', flag:'🇧🇩' },
+  'ta': { name:'泰米尔语', flag:'🇱🇰' },
+  'tl': { name:'菲律宾语', flag:'🇵🇭' },
   'other': { name:'其他', flag:'🌐' },
 };
+
+// 简化版前端英文CEFR评估
+function inferEnglishLevelFromTexts(texts) {
+  const combined = texts.join(' ').toLowerCase();
+  const cefrKw = {
+    'C2': ['idiosyncratic','serendipitous','ubiquitous','quintessential','ephemeral','ineffable','paradigmatic','hermeneutic','dialectical'],
+    'C1': ['notwithstanding','conversely','paradoxically','simultaneously','sophisticated','comprehensive','meticulous','rigorous','nuanced','conceptual'],
+    'B2': ['according to','as a result','consequently','furthermore','in addition','nevertheless','nonetheless','significant','considerable','crucial','fundamental'],
+    'B1': ['in my opinion','because','however','therefore','for example','experience','important','difficult','interesting','problem','solution','agree','disagree'],
+    'A2': ['i like','i want','i need','can i','could you','every day','usually','sometimes','family','friend','home','work','price'],
+    'A1': ['hello','hi','thank you','please','sorry','yes','no','goodbye','how are you','i am','what is']
+  };
+  const scores = {};
+  let total = 0;
+  for (const [lv, kws] of Object.entries(cefrKw)) {
+    let s = 0;
+    for (const kw of kws) { const re = new RegExp('\\b' + kw.replace(/[-\/\\^$*+?.()|[\]{}]/g,'\\$&') + '\\b','gi'); s += (combined.match(re)||[]).length; }
+    scores[lv] = s; total += s;
+  }
+  if (total === 0) return { level:'A1', explanation:'基础词汇，初学者水平' };
+  const best = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0];
+  const explanations = {
+    'A1':'初学者水平，使用基本日常用语',
+    'A2':'初级水平，能进行简单日常交流',
+    'B1':'中级水平，能处理常见工作/生活场景',
+    'B2':'中高级水平，能进行专业领域讨论',
+    'C1':'高级水平，流利自然，处理复杂话题',
+    'C2':'精通水平，接近母语者表达'
+  };
+  return { level: best[0], explanation: explanations[best[0]] || '' };
+}
 
 function renderDialectAnalysis(comments) {
   const panel = document.getElementById('dialectPanel');
@@ -967,13 +1042,35 @@ function renderDialectAnalysis(comments) {
 
   const arTotal = langCounts['ar'] || 0;
 
-  // 顶部摘要卡片：各语言占比
-  const topLangs = Object.entries(langCounts).sort((a,b)=>b[1]-a[1]);
-  summaryEl.innerHTML = topLangs.map(([lang, cnt], idx) => {
-    const info = LANG_INFO[lang] || { name:lang, flag:'🌐' };
+  // 顶部摘要卡片：各语言占比 - 小比例语言(<3%且非主要)合并为「其他」
+  const sortedLangs = Object.entries(langCounts).sort((a,b)=>b[1]-a[1]);
+  const MINOR_THRESHOLD = 0.03; // 3%以下合并
+  const mainLangs = [];
+  let otherCount = 0;
+  const otherLangNames = [];
+  sortedLangs.forEach(([lang, cnt], idx) => {
+    const pct = cnt / total;
+    if (idx === 0 || pct >= MINOR_THRESHOLD) {
+      mainLangs.push([lang, cnt]);
+    } else {
+      otherCount += cnt;
+      const info = LANG_INFO[lang] || { name: lang, flag: '🌐' };
+      otherLangNames.push(info.name);
+    }
+  });
+  if (otherCount > 0) mainLangs.push(['_other_merged', otherCount]);
+
+  summaryEl.innerHTML = mainLangs.map(([lang, cnt], idx) => {
+    let info, title = '';
+    if (lang === '_other_merged') {
+      info = { name:'其他', flag:'🌐' };
+      title = `title="包含: ${otherLangNames.join('、')}"`;
+    } else {
+      info = LANG_INFO[lang] || { name:lang, flag:'🌐' };
+    }
     const pct = Math.round(cnt/total*100);
     const isDominant = idx === 0;
-    return `<div class="dialect-summary-card${isDominant?' dominant':''}">
+    return `<div class="dialect-summary-card${isDominant?' dominant':''}" ${title}>
       <div class="flag">${info.flag}</div>
       <div class="name">${info.name}</div>
       <div class="count">${cnt}</div>
@@ -1199,19 +1296,52 @@ function renderSpeechDialectAnalysis(records) {
   badgeEl.textContent = `共 ${total} 条话术`;
 
   const arTotal = langCounts['ar'] || 0;
+  const enTotal = langCounts['en'] || 0;
 
-  // 顶部语言摘要卡片
-  const topLangs = Object.entries(langCounts).sort((a,b)=>b[1]-a[1]);
-  summaryEl.innerHTML = topLangs.map(([lang, cnt], idx) => {
-    const info = LANG_INFO[lang] || { name:lang, flag:'🌐' };
+  // 顶部语言摘要卡片 - 小比例合并
+  const sortedSpLangs = Object.entries(langCounts).sort((a,b)=>b[1]-a[1]);
+  const MINOR_SP = 0.03;
+  const mainSpLangs = [];
+  let otherSpCount = 0;
+  const otherSpNames = [];
+  sortedSpLangs.forEach(([lang, cnt], idx) => {
+    if (idx === 0 || cnt / total >= MINOR_SP) mainSpLangs.push([lang, cnt]);
+    else { otherSpCount += cnt; otherSpNames.push((LANG_INFO[lang]||{name:lang}).name); }
+  });
+  if (otherSpCount > 0) mainSpLangs.push(['_other_merged', otherSpCount]);
+
+  summaryEl.innerHTML = mainSpLangs.map(([lang, cnt], idx) => {
+    let info, title = '';
+    if (lang === '_other_merged') {
+      info = { name:'其他', flag:'🌐' };
+      title = `title="包含: ${otherSpNames.join('、')}"`;
+    } else {
+      info = LANG_INFO[lang] || { name:lang, flag:'🌐' };
+    }
     const pct = Math.round(cnt/total*100);
-    return `<div class="dialect-summary-card${idx===0?' dominant':''}">
+    return `<div class="dialect-summary-card${idx===0?' dominant':''}" ${title}>
       <div class="flag">${info.flag}</div>
       <div class="name">${info.name}</div>
       <div class="count">${cnt}</div>
       <div class="pct">${pct}%</div>
     </div>`;
   }).join('');
+
+  // 英文CEFR水平评估（主播说英语才显示）
+  if (enTotal > 0) {
+    const enTexts = records.filter(r => r.lang && r.lang.startsWith('en')).map(r => r.text || '');
+    const enLevel = inferEnglishLevelFromTexts(enTexts);
+    const levelColors = {'A1':'#22c55e','A2':'#3b82f6','B1':'#f59e0b','B2':'#f97316','C1':'#ef4444','C2':'#8b5cf6'};
+    const lc = levelColors[enLevel.level] || '#9ca3af';
+    barEl.insertAdjacentHTML('beforebegin', `
+      <div style="margin-bottom:14px;border-left:3px solid ${lc};padding-left:12px;background:#f8fafc;border-radius:0 8px 8px 0;padding:10px 12px;padding-left:15px;">
+        <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:4px;">
+          🇬🇧 主播英语水平评估
+          <span style="background:${lc};color:white;font-size:11px;padding:2px 8px;border-radius:12px;margin-left:6px;">${enLevel.level}</span>
+        </div>
+        <div style="font-size:12px;color:#475569;">${enLevel.explanation}（基于 ${enTotal} 条英语话术）</div>
+      </div>`);
+  }
 
   // 阿拉伯语方言进度条
   if (arTotal > 0) {
@@ -1487,35 +1617,28 @@ async function submitFeedback() {
 }
 
 // 语言总结性分析
-async function analyzeLanguageSummary(sessionId, comments, speeches) {
+async function analyzeLanguageSummary(sessionId, speeches) {
   const panel = document.getElementById('languageSummaryPanel');
   const loading = document.getElementById('languageSummaryLoading');
   const result = document.getElementById('languageSummaryResult');
   
   if (!panel) return;
   
-  // 显示面板
-  panel.style.display = '';
-  
-  // 确保参数不为空
-  const safeComments = comments || [];
   const safeSpeeches = speeches || [];
   
-  // 如果没有足够的数据，隐藏面板
-  if (safeComments.length === 0 && safeSpeeches.length === 0) {
+  // 没有话术数据时，隐藏面板
+  if (safeSpeeches.length === 0) {
     panel.style.display = 'none';
     return;
   }
   
+  // 显示面板
+  panel.style.display = '';
+  
   try {
-    // 准备数据
+    // 准备数据：只传话术，不传评论
     const payload = {
-      comments: safeComments.map(c => ({
-        content: c.content || '',
-        lang: c.lang || '',
-        lang_short: c.lang_short || '',
-        is_anchor: c.is_anchor || 0
-      })),
+      comments: [],
       speeches: safeSpeeches.map(s => ({
         text: s.text || '',
         lang: s.lang || '',
@@ -1535,14 +1658,15 @@ async function analyzeLanguageSummary(sessionId, comments, speeches) {
       throw new Error(`API错误: ${response.status}`);
     }
     
-    const analysis = await response.json();
+    const resp = await response.json();
     
     // 隐藏加载，显示结果
     loading.style.display = 'none';
     result.style.display = 'block';
     
-    // 渲染分析结果
-    renderLanguageAnalysis(analysis);
+    // 渲染分析结果（API返回 {success, analysis}，取内层analysis）
+    const analysisData = (resp && resp.analysis) ? resp.analysis : resp;
+    renderLanguageAnalysis(analysisData);
     
   } catch (error) {
     console.error('语言分析失败:', error);
@@ -1559,27 +1683,31 @@ function renderLanguageAnalysis(analysis) {
   
   let html = '';
   
-  // 总体统计
+  // 话术总体统计（仅主播话术，不含评论）
   if (analysis.overall_stats) {
     const stats = analysis.overall_stats;
+    // 如果话术为0，直接显示无数据提示
+    if (stats.total_speeches === 0) {
+      html += `<div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px;">
+        🎙️ 本场无主播话术数据，无法进行语言分析
+      </div>`;
+      result.innerHTML = html;
+      return;
+    }
     html += `<div style="margin-bottom:20px;">
-      <h4 style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:8px;">📊 语言总体统计</h4>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:13px;">
-        <div style="background:#f8fafc;padding:8px;border-radius:6px;">
-          <div style="color:#64748b;">评论总数</div>
-          <div style="font-weight:700;color:#1e293b;">${stats.total_comments}</div>
+      <h4 style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:8px;">🎙️ 主播话术语言统计</h4>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:13px;">
+        <div style="background:#f8fafc;padding:8px;border-radius:6px;text-align:center;">
+          <div style="color:#64748b;">话术总条数</div>
+          <div style="font-weight:700;color:#1e293b;font-size:18px;">${stats.total_speeches}</div>
         </div>
-        <div style="background:#f8fafc;padding:8px;border-radius:6px;">
-          <div style="color:#64748b;">话术总数</div>
-          <div style="font-weight:700;color:#1e293b;">${stats.total_speeches}</div>
+        <div style="background:#f0fdf4;padding:8px;border-radius:6px;text-align:center;">
+          <div style="color:#64748b;">英语条数</div>
+          <div style="font-weight:700;color:#16a34a;font-size:18px;">${stats.english_count}</div>
         </div>
-        <div style="background:#f8fafc;padding:8px;border-radius:6px;">
-          <div style="color:#64748b;">英语内容</div>
-          <div style="font-weight:700;color:#1e293b;">${stats.english_count}</div>
-        </div>
-        <div style="background:#f8fafc;padding:8px;border-radius:6px;">
-          <div style="color:#64748b;">阿拉伯语</div>
-          <div style="font-weight:700;color:#1e293b;">${stats.arabic_count}</div>
+        <div style="background:#fff7ed;padding:8px;border-radius:6px;text-align:center;">
+          <div style="color:#64748b;">阿拉伯语条数</div>
+          <div style="font-weight:700;color:#ea580c;font-size:18px;">${stats.arabic_count}</div>
         </div>
       </div>
     </div>`;

@@ -257,31 +257,15 @@ def identify_arabic_region(texts: List[str]) -> Dict:
 def analyze_language_summary(comments: List[Dict], speeches: List[Dict]) -> Dict:
     """
     对整场直播进行总结性语言分析
+    注意：只分析主播话术（speeches），评论数据完全忽略
     """
-    # 分离不同语言的文本
+    # 分离不同语言的文本（仅来自话术）
     english_texts = []
     arabic_texts = []
     chinese_texts = []
     other_texts = []
     
-    # 处理评论
-    for comment in comments:
-        text = comment.get('content', '')
-        lang = comment.get('lang', '')
-        
-        if not text or not lang:
-            continue
-            
-        if lang.startswith('en'):
-            english_texts.append(text)
-        elif lang.startswith('ar'):
-            arabic_texts.append(text)
-        elif lang == 'zh':
-            chinese_texts.append(text)
-        else:
-            other_texts.append(text)
-    
-    # 处理话术
+    # 只处理话术，完全忽略评论
     for speech in speeches:
         text = speech.get('text', '')
         lang = speech.get('lang', '')
@@ -298,10 +282,25 @@ def analyze_language_summary(comments: List[Dict], speeches: List[Dict]) -> Dict
         else:
             other_texts.append(text)
     
+    # 话术为空时，直接返回无数据
+    if not speeches:
+        return {
+            'overall_stats': {
+                'total_speeches': 0,
+                'english_count': 0,
+                'arabic_count': 0,
+                'chinese_count': 0,
+                'other_count': 0
+            },
+            'english_analysis': None,
+            'arabic_analysis': None,
+            'chinese_analysis': None,
+            'summary': '本场无主播话术数据，无法进行语言分析'
+        }
+    
     # 分析结果
     analysis = {
         'overall_stats': {
-            'total_comments': len(comments),
             'total_speeches': len(speeches),
             'english_count': len(english_texts),
             'arabic_count': len(arabic_texts),

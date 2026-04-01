@@ -308,31 +308,66 @@ def _ensure_default_admin(conn):
 
 def _fix_zombie_sessions():
     """服务启动时自动将未正常结束的 live 记录修复为 ended。
-    end_time 使用当前时间而非 start_time，避免时长记录为 0。
+    end_time 统一使用北京时间（与 start_time / end_session 保持一致）。
+    同时检测并修复时区混用遗留的异常时长记录（如 >12小时 的脏数据）。
     """
     conn = get_conn()
     c = conn.cursor()
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    now_bj = current_beijing_time()
+
+    # 1. 修复 status=live 且 end_time 为 NULL 的孤儿 session（服务崩溃/重启遗留）
     c.execute(
         "UPDATE live_sessions SET status='ended', end_time=? WHERE status='live' AND end_time IS NULL",
-        (now,)
+        (now_bj,)
     )
     fixed = c.rowcount
     conn.commit()
-    conn.close()
     if fixed:
-        print(f"🔧 自动修复 {fixed} 条未结束的直播记录（status: live -> ended，end_time={now}）")
+        print(f"🔧 自动修复 {fixed} 条未结束的直播记录（status: live → ended，end_time={now_bj}）")
+
+    # 2. 修复时区混用导致的异常时长（end_time - start_time > 8小时的已结束记录）
+    #    根因：旧版 start_time 存UTC，end_time 存北京时间，差8小时导致时长虚高
+    c.execute(
+        """SELECT id, start_time, end_time FROM live_sessions
+           WHERE status='ended' AND start_time IS NOT NULL AND end_time IS NOT NULL"""
+    )
+    rows = c.fetchall()
+    fixed_tz = 0
+    for row in rows:
+        sid, st_str, et_str = row
+        try:
+            from datetime import datetime as _dt
+            st = _dt.strptime(st_str, '%Y-%m-%d %H:%M:%S')
+            et = _dt.strptime(et_str, '%Y-%m-%d %H:%M:%S')
+            duration_h = (et - st).total_seconds() / 3600.0
+            # 超过8小时的已结束session判定为时区混用脏数据，将 start_time 修正（+8小时）
+            if duration_h > 8.0:
+                corrected_st = st + timedelta(hours=8)
+                new_duration = (et - corrected_st).total_seconds() / 3600.0
+                # 修正后时长仍然合理（<8小时）才执行修正
+                if 0 < new_duration < 8.0:
+                    c.execute(
+                        "UPDATE live_sessions SET start_time=? WHERE id=?",
+                        (corrected_st.strftime('%Y-%m-%d %H:%M:%S'), sid)
+                    )
+                    fixed_tz += 1
+        except Exception:
+            pass
+    conn.commit()
+    conn.close()
+    if fixed_tz:
+        print(f"🔧 自动修正 {fixed_tz} 条时区混用导致的异常时长记录（start_time +8小时修正）")
 
 
 def create_session(username, room_id=None, owner_user_id=1):
     """创建新的直播会话"""
     conn = get_conn()
     c = conn.cursor()
-    # 存储UTC时间，显示时转换为北京时间
-    now_utc = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    # 统一使用北京时间，与 end_session 保持一致，避免时区混用导致时长计算错误
+    now_bj = current_beijing_time()
     c.execute(
         'INSERT INTO live_sessions (owner_user_id, username, room_id, start_time) VALUES (?, ?, ?, ?)',
-        (owner_user_id, username, room_id, now_utc)
+        (owner_user_id, username, room_id, now_bj)
     )
     session_id = c.lastrowid
     conn.commit()
@@ -342,9 +377,11 @@ def create_session(username, room_id=None, owner_user_id=1):
 
 def end_session(session_id):
     """结束直播会话"""
+    import logging as _logging
+    _logger = _logging.getLogger(__name__)
     conn = get_conn()
     c = conn.cursor()
-    now_utc = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    now_bj = current_beijing_time()  # 使用北京时间，与start_time保持一致
     
     # 获取 session 的开始时间
     c.execute('SELECT start_time, username FROM live_sessions WHERE id=?', (session_id,))
@@ -352,28 +389,29 @@ def end_session(session_id):
     if row:
         start_time, username = row
         if start_time:
-            # 计算持续时间（分钟）使用UTC时间
-            c.execute('SELECT (julianday(?) - julianday(?)) * 24 * 60 as duration', (now_utc, start_time))
-            duration_row = c.fetchone()
-            if duration_row and duration_row[0] is not None:
-                duration_minutes = duration_row[0]
+            try:
+                # 计算持续时间（分钟）
+                from datetime import datetime as _dt
+                st = _dt.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+                et = _dt.strptime(now_bj, '%Y-%m-%d %H:%M:%S')
+                duration_minutes = (et - st).total_seconds() / 60.0
                 
                 # 如果持续时间小于5分钟，认为是短暂断开，不结束session
                 # 基于统计优化：58.5%的session<3分钟，大部分是网络波动导致的虚假session
                 if duration_minutes < 5.0:
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.warning(f"❌ session#{session_id} (@{username}) 持续时间仅{duration_minutes:.1f}分钟(<5分钟阈值)，忽略结束请求")
+                    _logger.warning(f"❌ session#{session_id} (@{username}) 持续时间仅{duration_minutes:.1f}分钟(<5分钟阈值)，忽略结束请求")
                     # 不更新end_time，保持status为live，等待重连
                     c.execute('UPDATE live_sessions SET end_time=NULL, status="live" WHERE id=?', (session_id,))
                     conn.commit()
                     conn.close()
                     return
+            except Exception as _e:
+                _logger.warning(f"[end_session] 计算持续时间失败: {_e}")
     
     # 正常结束
     c.execute(
         'UPDATE live_sessions SET end_time=?, status=? WHERE id=?',
-        (now, 'ended', session_id)
+        (now_bj, 'ended', session_id)
     )
     conn.commit()
     conn.close()
@@ -515,8 +553,8 @@ def get_session_summary(session_id):
         return None
     session = dict(row)
 
-    # 获取评论列表（含语言检测）
-    c.execute('SELECT * FROM comments WHERE session_id=? ORDER BY timestamp DESC LIMIT 100', (session_id,))
+    # 获取评论列表（含语言检测）——全部评论，不限制条数
+    c.execute('SELECT * FROM comments WHERE session_id=? ORDER BY timestamp DESC', (session_id,))
     comments_raw = [dict(r) for r in c.fetchall()]
 
     # 对评论做语言检测（纯本地，不走网络）
@@ -526,6 +564,9 @@ def get_session_summary(session_id):
         from concurrent.futures import ThreadPoolExecutor
 
         def _detect_one(cm):
+            # 已存有语言标记的评论跳过检测（监控时已实时存入）
+            if cm.get('lang') and cm['lang'] != 'other':
+                return cm
             if not cm.get('is_anchor') and cm.get('content'):
                 li = detect_language(cm['content'])
                 cm['lang']       = li.get('lang', 'other')
@@ -537,9 +578,19 @@ def get_session_summary(session_id):
                     cm['text_zh'] = ''
             return cm
 
-        # 最多 8 线程并发（评论量通常 ≤100，8线程足够）
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            comments = list(pool.map(_detect_one, comments_raw))
+        # 只对无语言标记的评论做检测，已标记的直接跳过
+        need_detect = [cm for cm in comments_raw if not cm.get('lang') or cm['lang'] == 'other']
+        already_done = [cm for cm in comments_raw if cm.get('lang') and cm['lang'] != 'other']
+
+        if need_detect:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                detected = list(pool.map(_detect_one, need_detect))
+        else:
+            detected = []
+
+        comments = already_done + detected
+        # 按 id 排序还原原始顺序
+        comments.sort(key=lambda x: x.get('id', 0))
     except Exception:
         comments = comments_raw
 
@@ -556,10 +607,10 @@ def get_session_summary(session_id):
     snapshots = [dict(r) for r in c.fetchall()]
 
     conn.close()
-    # 将UTC时间转换为北京时间
-    session['start_time_beijing'] = to_beijing_time(session.get('start_time'))
-    session['end_time_beijing'] = to_beijing_time(session.get('end_time'))
-    # 同时保留原始UTC时间（兼容性）
+    # start_time / end_time 已存储为北京时间，直接赋值，不再做时区转换
+    session['start_time_beijing'] = session.get('start_time')
+    session['end_time_beijing'] = session.get('end_time')
+    # 同时保留原始字段（兼容性）
     
     return {
         'session': session,
@@ -627,10 +678,10 @@ def get_all_sessions(limit=50, owner_user_id=None):
 
     conn.close()
     
-    # 将UTC时间转换为北京时间
+    # start_time / end_time 已存储为北京时间，直接赋值作为 _beijing 字段
     for r in rows:
-        r['start_time_beijing'] = to_beijing_time(r.get('start_time'))
-        r['end_time_beijing'] = to_beijing_time(r.get('end_time'))
+        r['start_time_beijing'] = r.get('start_time')
+        r['end_time_beijing'] = r.get('end_time')
     
     return rows
 
@@ -773,16 +824,28 @@ def get_speech_summary(session_id):
         words_in_s = [w.lower() for w in word_pat.findall(s)]
         return sum(word_freq.get(w, 0) for w in words_in_s)
 
+    # 建立 text -> text_zh 映射（用于关键句附带翻译）
+    text_to_zh = {}
+    for r in records:
+        t = r.get('text', '').strip()
+        tz = r.get('text_zh', '') or ''
+        if t and tz and tz.strip() and tz.strip() != t:
+            text_to_zh[t] = tz.strip()
+
     seen = set()
     scored = []
-    for t in all_texts:
-        t_stripped = t.strip()
+    for r in records:
+        t_stripped = (r.get('text') or '').strip()
         if len(t_stripped) < 8 or t_stripped in seen:
             continue
         seen.add(t_stripped)
         scored.append((score_sentence(t_stripped), t_stripped))
     scored.sort(key=lambda x: -x[0])
-    summary = [s for _, s in scored[:10]]
+    # summary 改为列表of dict: {text, text_zh}，前端可展示原文+翻译
+    summary = [
+        {'text': s, 'text_zh': text_to_zh.get(s, '')}
+        for _, s in scored[:10]
+    ]
 
     return {'records': records, 'summary': summary, 'keywords': keywords}
 

@@ -565,33 +565,42 @@ if (_urlU) {
 
 // 先获取实时监控状态，再加载历史记录，确保直播中状态准确
 async function initPage() {
-  try {
-    // 获取正在监控的账号列表
-    const statusRes = await fetch('/api/status');
-    if (statusRes.ok) {
-      const statusData = await statusRes.json();
-      activeUsernames = new Set(statusData.active_accounts || []);
-    }
-  } catch(e) {}
+  // ★ 并行发起两个请求，减少等待时间
+  const [statusRes, sessionsRes] = await Promise.allSettled([
+    fetch('/api/status'),
+    fetch('/api/sessions')
+  ]);
 
-  try {
-    const groups = JSON.parse(localStorage.getItem('accountGroups') || '{}');
-    const res = await fetch('/api/sessions');
-    const sessions = await res.json();
-    allSessions = sessions.map(s => ({ ...s, _group: groups[s.username] || 'own' }));
-    renderAccounts();
-    // 填充热力图账号选择器
-    const users = [...new Set(allSessions.map(s=>s.username))].sort();
-    const sel = document.getElementById('heatmapUserFilter');
-    users.forEach(u => {
-      const opt = document.createElement('option');
-      opt.value = u; opt.textContent = '@'+u;
-      sel.appendChild(opt);
-    });
-    // 加载热力图
-    loadHeatmap();
-  } catch(e) {
-    document.getElementById('accountsList').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div>加载失败，请刷新重试</div></div>';
+  // 处理状态接口
+  if (statusRes.status === 'fulfilled' && statusRes.value.ok) {
+    try {
+      const statusData = await statusRes.value.json();
+      activeUsernames = new Set(statusData.active_accounts || []);
+    } catch(e) {}
+  }
+
+  // 处理历史记录接口
+  if (sessionsRes.status === 'fulfilled' && sessionsRes.value.ok) {
+    // 从后端获取分组映射（替代 localStorage.accountGroups）
+    let groups = {};
+    try {
+      const groupsRes = await fetch('/api/account/groups');
+      if (groupsRes.ok) groups = await groupsRes.json();
+    } catch(e) { console.warn('获取分组映射失败，使用默认值'); }
+    try {
+      const sessions = await sessionsRes.value.json();
+      allSessions = sessions.map(s => ({ ...s, _group: groups[s.username] || 'own' }));
+      renderAccounts();
+      // 填充热力图账号选择器
+      const users = [...new Set(allSessions.map(s=>s.username))].sort();
+      const sel = document.getElementById('heatmapUserFilter');
+      users.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u; opt.textContent = '@'+u;
+        sel.appendChild(opt);
+      });
+      if (users.length > 0) renderHeatmap(users[0]);
+    } catch(e) { console.error('历史记录加载失败:', e); }
   }
 }
 

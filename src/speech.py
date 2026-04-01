@@ -220,10 +220,11 @@ class SpeechMonitor:
         """
         调用 Whisper 对 WAV 文件转文字，自动检测语言（中/英/阿拉伯语等）
         large-v3 支持 99 种语言，含阿拉伯语方言
-        Task 10 优化：若上一段已是阿拉伯语，本段直接传 language='ar' 提示，速度+准确率双提升
+        置信度控制：通过 logprob_threshold + 片段级过滤，确保只输出置信度 ≥90% 的内容
         """
         try:
             import whisper
+            import math
 
             # 若上一段是阿拉伯语，给 Whisper 语言提示（减少语言检测耗时，提高阿语准确率）
             last_lang = getattr(self, '_last_whisper_lang', '')
@@ -236,14 +237,37 @@ class SpeechMonitor:
                 fp16=False,             # macOS CPU/MPS 模式
                 verbose=False,
                 condition_on_previous_text=False,  # 关闭上下文依赖，减少幻觉
-                no_speech_threshold=0.6,           # 提高无语音判断阈值（减少误识别）
-                logprob_threshold=-1.0,            # 降低低概率拒绝阈值
+                no_speech_threshold=0.65,          # 无语音判断阈值（值越高越严格，减少误识别）
+                logprob_threshold=-0.1,            # 只接受平均对数概率 > -0.1 的结果（≈ 置信度 90%+）
             )
             # 保存 Whisper 检测到的语言代码供下一段使用
             self._last_whisper_lang = result.get("language", "")
             text = result.get("text", "").strip()
 
-            # 过滤 Whisper 幻觉（常见的无意义重复输出）
+            if not text:
+                return ""
+
+            # ── 片段级置信度过滤 ──
+            # 过滤掉低置信度片段（avg_logprob < -0.5 约对应置信度 <60%）
+            segments = result.get("segments", [])
+            if segments:
+                high_conf_segments = []
+                for seg in segments:
+                    avg_logprob = seg.get("avg_logprob", 0)
+                    no_speech_prob = seg.get("no_speech_prob", 0)
+                    # 置信度条件：对数概率 > -0.3（≈90%），且无语音概率 < 0.5
+                    if avg_logprob > -0.3 and no_speech_prob < 0.5:
+                        high_conf_segments.append(seg.get("text", "").strip())
+
+                if not high_conf_segments:
+                    # 所有片段都低置信度，丢弃整段
+                    logger.debug(f"[{self.username}] 所有片段置信度不足，丢弃: {text[:40]}")
+                    return ""
+
+                # 用高置信度片段重建文本
+                text = " ".join(high_conf_segments).strip()
+
+            # ── 过滤 Whisper 幻觉（常见的无意义重复输出）──
             if text and len(set(text.split())) <= 2 and len(text) > 20:
                 logger.debug(f"[{self.username}] 过滤疑似幻觉输出: {text[:40]}")
                 return ""

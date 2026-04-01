@@ -570,6 +570,11 @@ async function _restoreCardContents() {
         });
       }
 
+      // 恢复语言分析模块
+      if (item.comment_stats || item.speech_stats) {
+        updateCardLanguageAnalysis(u, item.comment_stats || {}, item.speech_stats || {});
+      }
+
       // 恢复最近话术（语音转写）
       const speechBox = document.getElementById(`speech-box-${u}`);
       if (speechBox && item.recent_speech && item.recent_speech.length) {
@@ -582,6 +587,19 @@ async function _restoreCardContents() {
           speechBox.appendChild(div);
         });
         speechBox.scrollTop = speechBox.scrollHeight;
+        // 恢复话术摘要显示
+        const summaryEl = document.getElementById(`speech-summary-text-${u}`);
+        if (summaryEl) summaryEl.textContent = `${item.recent_speech.length}段 · 已恢复历史话术`;
+        // 恢复语音状态标签
+        const statusEl = document.getElementById(`speech-status-${u}`);
+        if (statusEl) { statusEl.textContent = '语音采集中...'; statusEl.style.color = ''; }
+      } else {
+        // 话术为空时，根据是否直播中给出提示
+        const statusEl = document.getElementById(`speech-status-${u}`);
+        if (statusEl && monitors[u] && monitors[u].isLive) {
+          statusEl.textContent = '等待语音数据...';
+          statusEl.style.color = '#9ca3af';
+        }
       }
     });
   } catch(e) {
@@ -795,7 +813,7 @@ function createAccountCard(username, group = 'own', prependToFront = false) {
       <span>⏱ 已播：<b id="duration-${username}" style="color:var(--primary);">0m</b></span>
     </div>
     <div class="metrics-row" onclick="openMetricsModal('${username}')" style="cursor:pointer;" title="点击查看实时数据曲线">
-      <div class="metric"><div class="metric-val" id="totaluser-${username}">0</div><div class="metric-label">累计场关数</div></div>
+      <div class="metric"><div class="metric-val" id="totaluser-${username}">0</div><div class="metric-label">累计观看</div></div>
       <div class="metric"><div class="metric-val" id="peakviewers-${username}">0</div><div class="metric-label">峰值在线</div></div>
       <div class="metric"><div class="metric-val" id="viewers-${username}">0</div><div class="metric-label">实时在线</div></div>
       <div class="metric"><div class="metric-val" id="comments-${username}">0</div><div class="metric-label">评论总数</div></div>
@@ -1736,9 +1754,11 @@ async function startMonitor() {
   btn.textContent = '启动中...'; btn.disabled = true;
 
   try {
-    const groups = JSON.parse(localStorage.getItem('accountGroups') || '{}');
-    groups[username] = group;
-    localStorage.setItem('accountGroups', JSON.stringify(groups));
+    // 同步分组到后端（替代 localStorage）
+    fetch('/api/account/group', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username, group})
+    }).catch(() => {});
   } catch(e) {}
 
   try {
@@ -1749,7 +1769,17 @@ async function startMonitor() {
       body:JSON.stringify({username})
     });
     const data = await res.json();
-    if (!data.success) {
+    if (data.already_auto) {
+      // 账号已在自动监控中，直接显示正确状态
+      if (data.is_live) {
+        showToast(`🔴 @${username} 已在自动监控中且正在直播`, 'success');
+        setBadge(username, '直播中', 'live');
+      } else {
+        showToast(`⏳ @${username} 已在自动监控中，等待开播`, 'info');
+        setBadge(username, '等待开播', 'waiting');
+      }
+      loadAccountList();
+    } else if (!data.success) {
       showToast(data.msg || '启动失败', 'error');
       // 不删卡片，改为显示错误状态让用户确认
       setBadge(username, '启动失败', 'error');
@@ -2143,16 +2173,31 @@ async function init() {
   } catch(e) {}
 
   const savedList = loadMonitorList();
-  const groups = (() => { try { return JSON.parse(localStorage.getItem('accountGroups') || '{}'); } catch(e) { return {}; } })();
+  // 从后端获取分组映射（替代 localStorage.accountGroups）
+  let groups = {};
+  try {
+    const groupsRes = await fetch('/api/account/groups');
+    if (groupsRes.ok) groups = await groupsRes.json();
+  } catch(e) { console.warn('获取分组映射失败'); }
 
   // 只恢复后端真正在运行的账号，避免页面显示空数据的僵尸卡片
   const activeSessions = statusData.active_sessions || [];
   const sessionMap = {};
   activeSessions.forEach(s => { sessionMap[s.username] = s; });
 
+  // 构建快照 map：is_auto / is_live / group_name
+  const snapshotMap = {};
+  (statusData.monitors_snapshot || []).forEach(snap => {
+    snapshotMap[snap.username] = snap;
+  });
+
   activeAccounts.forEach(u => {
     if (!monitors[u]) {
-      const g = groups[u] || (savedList.find(s => s.username === u) || {}).group || 'own';
+      const snap = snapshotMap[u] || {};
+      // 自动监控且未开播 → 不在看板显示，等 live_detected 事件再创卡片
+      if (snap.is_auto && !snap.is_live) return;
+
+      const g = snap.group_name || groups[u] || (savedList.find(s => s.username === u) || {}).group || 'own';
       createAccountCard(u, g);
       const s = sessionMap[u];
       if (s) {
@@ -2190,10 +2235,8 @@ async function init() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanedList)); } catch(e) {}
 
   updateGlobalStats();
-  await loadAccountList();
-
-  // ★ 新增：自动打开正在直播的账号卡片
-  _autoOpenLiveCards();
+  // ★ 并行执行：账号下拉列表加载 + 自动看板卡片开启，互不阻塞
+  Promise.all([loadAccountList(), _autoOpenLiveCards()]);
 }
 
 // 自动开卡片：从自动监控列表找正在直播但尚未在看板的账号，自动启动监控

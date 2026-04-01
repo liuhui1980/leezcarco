@@ -114,13 +114,56 @@ class LiveMonitor:
         if not self.running:
             return
 
-        # 所有分组（自营/竞品/关注）统一进行全量数据采集
+        # ── watch（关注）账号：仅开播检测 + 微信通知，不采集数据 ──
         if self.group_name == 'watch':
-            logger.info(f"👁️ @{self.username}（关注账号）开播，开始全量数据采集")
-            from src.notifier import send_live_start_notify
-            send_live_start_notify(self.username, group_name='watch')
-        # 不再有早期退出，继续执行后续的数据采集流程
+            logger.info(f"👁️ @{self.username}（关注账号）开播，仅推送通知，不采集数据")
+            try:
+                from src.notifier import send_live_start_notify
+                send_live_start_notify(self.username, group_name='watch')
+            except Exception as _ne:
+                logger.warning(f"[{self.username}] 开播通知发送失败: {_ne}")
 
+            # 创建一个轻量 session 记录（用于开播检测），然后持续轮询直播状态
+            merged = False
+            recent = find_recent_session(self.username, minutes=15, owner_user_id=self.owner_user_id)
+            if recent:
+                self.session_id = recent['id']
+                self.start_time = recent.get('start_time') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                reactivate_session(self.session_id)
+                merged = True
+                logger.info(f"🔄 @{self.username}（关注）15分钟内重连，合并至 session#{self.session_id}")
+            else:
+                self.session_id = create_session(self.username, owner_user_id=self.owner_user_id)
+                self.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                logger.info(f"👁️ @{self.username}（关注）开播记录已创建，session#{self.session_id}")
+
+            self._emit('live_detected', {
+                'msg': f'@{self.username} 开播了（关注账号，仅通知）',
+                'session_id': self.session_id,
+                'start_time': self.start_time,
+                'is_auto': self.is_auto,
+                'group_name': self.group_name,
+                'merged': merged,
+            })
+
+            # 持续轮询直播状态，直到下播
+            poll_client = TikTokLiveClient(unique_id=self.username)
+            while self.running:
+                try:
+                    await asyncio.sleep(60)  # 每60秒检查一次
+                    still_live = await poll_client.is_live()
+                    if not still_live:
+                        logger.info(f"👁️ @{self.username}（关注账号）已下播")
+                        await self.stop()
+                        return
+                except Exception:
+                    pass  # 检测失败不退出，继续轮询
+
+            # running 被外部设为 False
+            await self.stop()
+            return
+
+        # ── own / rival 账号：全量数据采集 ──
         # 开播了，建立会话（或合并到15分钟内的上次会话）
         merged = False
         recent = find_recent_session(self.username, minutes=15, owner_user_id=self.owner_user_id)
@@ -286,9 +329,7 @@ class LiveMonitor:
                     lang_display=lang_info.get('lang_display', '未知'),
                     dialect=lang_info.get('dialect'),
                 )
-            # 同时也存到 comments 表（兼容旧逻辑）
-            if self.session_id:
-                add_comment(self.session_id, f'[主播]{self.username}', '', text, is_anchor=1)
+            # 注：话术仅存入 speech_records 表，不再重复写入 comments 表
 
             # 推送到前端（含翻译）
             self._emit('new_speech', {
@@ -314,9 +355,9 @@ class LiveMonitor:
         threading.Thread(target=_do_translate_and_store, daemon=True).start()
 
     def _register_events(self):
-        """注册所有监听事件"""
-        # v1.3: 竞品/关注账号与自营账号采集内容完全一致，取消轻量模式限制
-        is_rival = False  # 所有分组统一进行全量数据采集，不再有轻量模式
+        """注册所有监听事件（own/rival 全量采集，watch 不走此流程）"""
+        # own/rival 全量采集，watch 账号在 start() 中已提前返回
+        is_rival = False  # 保留变量兼容性，实际不再使用轻量模式
 
         @self.client.on(ConnectEvent)
         async def on_connect(event: ConnectEvent):
@@ -626,5 +667,7 @@ def get_monitors_snapshot():
             'like_count': monitor.like_count,
             'comment_count': monitor.comment_count,
             'is_live': monitor.session_id is not None,  # session_id 存在说明已开播
+            'is_auto': monitor.is_auto,     # 是否为自动监控账号
+            'group_name': monitor.group_name,  # 分组标识
         })
     return result
