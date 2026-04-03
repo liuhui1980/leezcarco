@@ -307,15 +307,16 @@ def _ensure_default_admin(conn):
 
 
 def _fix_zombie_sessions():
-    """服务启动时自动将未正常结束的 live 记录修复为 ended。
-    end_time 统一使用北京时间（与 start_time / end_session 保持一致）。
-    同时检测并修复时区混用遗留的异常时长记录（如 >12小时 的脏数据）。
+    """服务启动时修复异常直播记录：
+    1. 修复孤儿 session（status=live 但实际未在监控的）
+    2. 合并同账号短时间内的重复 session（解决网络波动导致的碎片记录）
+    3. 修复时区混用导致的异常时长
     """
     conn = get_conn()
     c = conn.cursor()
     now_bj = current_beijing_time()
 
-    # 1. 修复 status=live 且 end_time 为 NULL 的孤儿 session（服务崩溃/重启遗留）
+    # ── 1. 修复 status=live 且 end_time 为 NULL 的孤儿 session ──
     c.execute(
         "UPDATE live_sessions SET status='ended', end_time=? WHERE status='live' AND end_time IS NULL",
         (now_bj,)
@@ -325,8 +326,57 @@ def _fix_zombie_sessions():
     if fixed:
         print(f"🔧 自动修复 {fixed} 条未结束的直播记录（status: live → ended，end_time={now_bj}）")
 
-    # 2. 修复时区混用导致的异常时长（end_time - start_time > 8小时的已结束记录）
-    #    根因：旧版 start_time 存UTC，end_time 存北京时间，差8小时导致时长虚高
+    # ── 2. 合并同账号短时间内的重复 session ──
+    #    查找同账号、start_time 在 30 分钟内的已结束记录，保留最早的一条（有实际数据的），
+    #    将其余的关联数据迁移过来后删除
+    c.execute("""
+        SELECT username, owner_user_id, MIN(start_time) as min_st, MAX(start_time) as max_st, COUNT(*) as cnt
+        FROM live_sessions
+        WHERE status='ended' AND start_time IS NOT NULL AND end_time IS NOT NULL
+        GROUP BY username, owner_user_id
+        HAVING cnt > 1 AND CAST((julianday(MAX(start_time)) - julianday(MIN(start_time))) * 1440 AS INTEGER) < 30
+    """)
+    merge_groups = c.fetchall()
+    merged_count = 0
+    for group in merge_groups:
+        uname, owner_id = group['username'], group['owner_user_id']
+        # 获取该组所有 session（按 id 升序）
+        c.execute("""
+            SELECT id FROM live_sessions
+            WHERE username=? AND owner_user_id=? AND status='ended'
+              AND start_time IS NOT NULL AND end_time IS NOT NULL
+            ORDER BY start_time ASC, id ASC
+        """, (uname, owner_id))
+        session_ids = [r['id'] for r in c.fetchall()]
+        if len(session_ids) < 2:
+            continue
+        keep_id = session_ids[0]
+        merge_ids = session_ids[1:]
+        # 汇总指标（取最大值）
+        for col in ('peak_viewers', 'total_comments', 'total_likes', 'total_gifts', 'total_gift_value', 'new_followers', 'total_viewers'):
+            c.execute(f"SELECT MAX({col}) FROM live_sessions WHERE id IN ({','.join('?'*len(session_ids))})", session_ids)
+            max_val = c.fetchone()[0] or 0
+            c.execute(f"UPDATE live_sessions SET {col}=? WHERE id=?", (max_val, keep_id))
+        # 更新 end_time 为最晚的
+        c.execute(f"SELECT MAX(end_time) FROM live_sessions WHERE id IN ({','.join('?'*len(session_ids))})", session_ids)
+        max_end = c.fetchone()[0]
+        if max_end:
+            c.execute("UPDATE live_sessions SET end_time=? WHERE id=?", (max_end, keep_id))
+        conn.commit()
+        # 迁移关联数据到保留的 session
+        for table in ('comments', 'gifts', 'follows', 'speech_records', 'metrics_snapshots'):
+            for mid in merge_ids:
+                c.execute(f"UPDATE {table} SET session_id=? WHERE session_id=?", (keep_id, mid))
+        conn.commit()
+        # 删除被合并的 session
+        for mid in merge_ids:
+            c.execute("DELETE FROM live_sessions WHERE id=?", (mid,))
+        conn.commit()
+        merged_count += len(merge_ids)
+    if merged_count:
+        print(f"🔧 合并 {merged_count} 条同账号重复 session 记录")
+
+    # ── 3. 修复时区混用导致的异常时长（end_time - start_time > 8小时的已结束记录）──
     c.execute(
         """SELECT id, start_time, end_time FROM live_sessions
            WHERE status='ended' AND start_time IS NOT NULL AND end_time IS NOT NULL"""
@@ -418,15 +468,37 @@ def end_session(session_id):
 
 
 def find_recent_session(username, minutes=15, owner_user_id=None):
-    """查找该账号在最近 N 分钟内刚结束的 session（用于断线重连合并）。
+    """查找该账号最近可合并的 session（用于断线重连合并）。
+    优先查找 status='live' 的活跃 session（被 end_session 5分钟保护机制保留的），
+    其次查找 status='ended' 且 end_time 在 N 分钟内的记录。
     owner_user_id=None 表示不限制所属用户（管理员用）
     返回 session 行 (dict) 或 None。"""
     conn = get_conn()
     c = conn.cursor()
-    cutoff = (datetime.now() - timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
-    
+
+    # 第一步：优先查 status='live' 的记录（正在进行的或被5分钟保护机制保留的）
     if owner_user_id is None:
-        # 管理员查询，不限制owner_user_id
+        c.execute(
+            """SELECT * FROM live_sessions
+               WHERE username=? AND status='live'
+               ORDER BY id DESC LIMIT 1""",
+            (username,)
+        )
+    else:
+        c.execute(
+            """SELECT * FROM live_sessions
+               WHERE username=? AND owner_user_id=? AND status='live'
+               ORDER BY id DESC LIMIT 1""",
+            (username, owner_user_id)
+        )
+    row = c.fetchone()
+    if row:
+        conn.close()
+        return dict(row)
+
+    # 第二步：没找到 live 的，查 ended 且 end_time 在 N 分钟内的
+    cutoff = (datetime.now() - timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
+    if owner_user_id is None:
         c.execute(
             """SELECT * FROM live_sessions
                WHERE username=? AND status='ended' AND end_time >= ?
@@ -434,14 +506,13 @@ def find_recent_session(username, minutes=15, owner_user_id=None):
             (username, cutoff)
         )
     else:
-        # 普通用户查询，限制owner_user_id
         c.execute(
             """SELECT * FROM live_sessions
                WHERE username=? AND owner_user_id=? AND status='ended' AND end_time >= ?
                ORDER BY id DESC LIMIT 1""",
             (username, owner_user_id, cutoff)
         )
-    
+
     row = c.fetchone()
     conn.close()
     return dict(row) if row else None
