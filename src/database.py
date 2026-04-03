@@ -426,7 +426,7 @@ def create_session(username, room_id=None, owner_user_id=1):
 
 
 def end_session(session_id):
-    """结束直播会话"""
+    """结束直播会话。返回 True 表示成功结束，False 表示被拒绝（<5分钟保护）。"""
     import logging as _logging
     _logger = _logging.getLogger(__name__)
     conn = get_conn()
@@ -454,7 +454,7 @@ def end_session(session_id):
                     c.execute('UPDATE live_sessions SET end_time=NULL, status="live" WHERE id=?', (session_id,))
                     conn.commit()
                     conn.close()
-                    return
+                    return False
             except Exception as _e:
                 _logger.warning(f"[end_session] 计算持续时间失败: {_e}")
     
@@ -465,6 +465,7 @@ def end_session(session_id):
     )
     conn.commit()
     conn.close()
+    return True
 
 
 def find_recent_session(username, minutes=15, owner_user_id=None):

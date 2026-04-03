@@ -214,7 +214,8 @@ class LiveMonitor:
             self.client = TikTokLiveClient(
                 unique_id=self.username,
                 web_proxy=web_proxy,
-                ws_proxy=ws_proxy
+                ws_proxy=ws_proxy,
+                web_kwargs={'httpx_kwargs': {'timeout': httpx.Timeout(30.0, connect=15.0)}},
             )
 
             # 配置 TikTok session（解决 WebSocket 需要登录的问题）
@@ -229,8 +230,53 @@ class LiveMonitor:
             self._register_events()
             await self.client.connect()  # connect() 会阻塞直到断开
         except Exception as e:
-            logger.error(f"❌ 监控 @{self.username} 出错: {e}")
-            await self.stop(error=str(e))
+            import traceback
+            err_msg = str(e)
+            logger.error(f"❌ 监控 @{self.username} 出错: {err_msg}\n{traceback.format_exc()}")
+
+            # 连接失败时区分处理：
+            # - 如果是网络/代理临时问题（超时、SSL等），等待后重试而不是直接退出
+            # - 如果是用户不存在等致命错误，直接退出
+            is_fatal = ('NotFound' in type(e).__name__ or 'not found' in err_msg.lower()
+                        or 'does not exist' in err_msg.lower())
+            if is_fatal:
+                await self.stop(error=err_msg)
+                return
+
+            logger.warning(f"🔄 @{self.username} 连接失败（网络/代理问题），30秒后重试...")
+            self._emit('monitor_error', {
+                'msg': f'@{self.username} 连接暂时中断，正在重连...',
+                'retrying': True,
+            })
+            await asyncio.sleep(30)
+
+            # 重试连接（最多3次）
+            for attempt in range(1, 4):
+                if not self.running:
+                    return
+                logger.info(f"🔄 @{self.username} 重试连接 ({attempt}/3)...")
+                try:
+                    # 重新创建 client
+                    self.client = TikTokLiveClient(
+                        unique_id=self.username,
+                        web_proxy=web_proxy,
+                        ws_proxy=ws_proxy,
+                        web_kwargs={'httpx_kwargs': {'timeout': httpx.Timeout(30.0, connect=15.0)}},
+                    )
+                    session_id_val = getattr(cfg, 'TIKTOK_SESSION_ID', '').strip()
+                    target_idc_val = getattr(cfg, 'TIKTOK_TARGET_IDC', '').strip()
+                    if session_id_val:
+                        self.client.web.set_session(session_id=session_id_val, tt_target_idc=target_idc_val or None)
+                    self._register_events()
+                    await self.client.connect()
+                    return  # 连接成功，正常退出重试循环
+                except Exception as retry_err:
+                    logger.warning(f"❌ @{self.username} 重试 {attempt}/3 失败: {retry_err}")
+                    if attempt < 3:
+                        await asyncio.sleep(30)
+                    else:
+                        logger.error(f"❌ @{self.username} 3次重试均失败，放弃本次监控")
+                        await self.stop(error=f"连接失败(重试3次): {retry_err}")
 
     @staticmethod
     def _proxy_available() -> bool:
@@ -266,30 +312,34 @@ class LiveMonitor:
                 pass
 
         if self.session_id:
-            end_session(self.session_id)
+            ended = end_session(self.session_id)
             logger.info(f"⏹️ 停止监控 @{self.username}")
 
-            # 生成报告
-            try:
-                summary = get_session_summary(self.session_id)
-                report_path = generate_excel_report(summary, self.username)
-                logger.info(f"📊 报告已生成: {report_path}")
-
-                # 微信推送
+            if ended:
+                # 只有 session 真正结束时才生成报告和推送
+                # 生成报告
                 try:
-                    send_wechat_notify(summary, self.username, report_path)
-                except Exception as notify_err:
-                    logger.warning(f"微信推送失败: {notify_err}")
+                    summary = get_session_summary(self.session_id)
+                    report_path = generate_excel_report(summary, self.username)
+                    logger.info(f"📊 报告已生成: {report_path}")
 
-                # 推送结束事件到前端
-                self._emit('live_ended', {
-                    'session_id': self.session_id,
-                    'report_path': report_path,
-                    'summary': summary.get('session', {}),
-                    'end_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                })
-            except Exception as e:
-                logger.error(f"生成报告失败: {e}")
+                    # 微信推送
+                    try:
+                        send_wechat_notify(summary, self.username, report_path)
+                    except Exception as notify_err:
+                        logger.warning(f"微信推送失败: {notify_err}")
+
+                    # 推送结束事件到前端
+                    self._emit('live_ended', {
+                        'session_id': self.session_id,
+                        'report_path': report_path,
+                        'summary': summary.get('session', {}),
+                        'end_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    })
+                except Exception as e:
+                    logger.error(f"生成报告失败: {e}")
+            else:
+                logger.info(f"🔄 @{self.username} session 被5分钟保护保留，等待重连...")
 
         # 从活跃列表移除（统一由此处移除，stop_monitor 不再重复 pop）
         active_monitors.pop(self.username, None)
