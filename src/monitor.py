@@ -567,7 +567,7 @@ class LiveMonitor:
             self._emit('viewer_update', {
                 'viewer_count': self.viewer_count,      # 实时在线
                 'peak_viewers': self.peak_viewers,      # 峰值在线
-                'total_user': total_user,                # 累计观看
+                'total_user': self.total_user,           # 累计观看（持久化最大值，避免当次事件为0时覆盖）
                 'like_count': self.like_count,
                 'comment_count': self.comment_count,
                 'new_followers': self.new_followers,    # 新增关注

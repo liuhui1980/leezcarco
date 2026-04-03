@@ -242,6 +242,12 @@
 
   <!-- ★ 开播时段热力图 -->
   <div id="heatmapSection" style="margin-top:24px;display:none;">
+    <!-- 时段过滤提示条（点击热力图格子后显示） -->
+    <div id="heatmapFilterBar" style="display:none;align-items:center;gap:10px;background:#fff0f3;border:1px solid #fecdd3;border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:13px;">
+      <span style="color:#fe2c55;font-weight:600;">🔍 时段筛选：</span>
+      <span id="heatmapFilterText" style="color:#1a1d2e;flex:1;"></span>
+      <button onclick="heatmapCellClick(heatmapFilter?.weekday, heatmapFilter?.hour)" style="background:#fe2c55;color:#fff;border:none;border-radius:5px;padding:3px 10px;font-size:12px;cursor:pointer;font-weight:600;">✕ 清除筛选</button>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
       <div style="font-size:15px;font-weight:700;color:var(--text);">🕐 开播时段分析</div>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -312,6 +318,9 @@ function formatDate(t) {
 }
 
 // ── 获取过滤后账号列表 ──
+// 热力图时段过滤状态（null 表示不过滤）
+let heatmapFilter = null; // { weekday: 0-6, hour: 0-23 }
+
 function getFilteredAccountGroups() {
   const filterUser = document.getElementById('filterUser').value.trim().toLowerCase();
   const filterGroup = document.getElementById('filterGroup').value;
@@ -321,6 +330,17 @@ function getFilteredAccountGroups() {
   allSessions.forEach(s => {
     if (filterUser && !s.username.toLowerCase().includes(filterUser)) return;
     if (filterGroup && s._group !== filterGroup) return;
+    // 热力图时段过滤
+    if (heatmapFilter) {
+      const timeStr = s.start_time_beijing || s.start_time;
+      if (!timeStr) return;
+      const d = new Date(timeStr.replace(' ', 'T'));
+      // getDay(): 0=周日,1=周一...6=周六；热力图 wd: 0=周一...6=周日
+      const jsDay = d.getDay();
+      const wd = jsDay === 0 ? 6 : jsDay - 1;
+      const h = d.getHours();
+      if (wd !== heatmapFilter.weekday || h !== heatmapFilter.hour) return;
+    }
     if (!grouped[s.username]) grouped[s.username] = [];
     grouped[s.username].push(s);
   });
@@ -402,11 +422,12 @@ function buildAccountCard(username, sessions) {
   // 可删除的场次：非直播中的
   const endedCount = sessions.filter(s => !isUserLive(s.username) || s.status !== 'live').length;
 
-  // 最新场摘要行
+  // 最新场摘要行（优先使用 start_time_beijing 字段，避免8小时偏差）
+  const latestTime = latest ? (latest.start_time_beijing || latest.start_time) : null;
   const latestLine = latest ? `
     <div class="ac-latest">
       <span class="${isLive?'badge-live':'badge-ended'}">${isLive?'🔴 直播中':'最近一场'}</span>
-      <span class="ac-latest-time">${formatTime(latest.start_time)}</span>
+      <span class="ac-latest-time">${formatTime(latestTime)}</span>
       <div class="ac-latest-metrics">
         <span class="ac-latest-m">峰值 <strong>${formatNum(latest.peak_viewers)}</strong></span>
         <span class="ac-latest-m">评论 <strong>${formatNum(latest.total_comments)}</strong></span>
@@ -427,7 +448,7 @@ function buildAccountCard(username, sessions) {
           ${groupTag}
           ${isLive ? '<span class="badge-live">直播中</span>' : ''}
         </div>
-        <div class="ac-meta">共 ${totalSessions} 场记录 · 最近开播 ${formatDate(latest?.start_time)}</div>
+        <div class="ac-meta">共 ${totalSessions} 场记录 · 最近开播 ${formatDate(latest ? (latest.start_time_beijing || latest.start_time) : null)}</div>
       </div>
       <div class="ac-stats">
         <div class="ac-stat"><div class="ac-stat-val">${totalSessions}</div><div class="ac-stat-label">总场次</div></div>
@@ -619,6 +640,33 @@ async function loadHeatmap() {
   } catch(e) {}
 }
 
+// 热力图格子点击：按时段过滤历史记录
+function heatmapCellClick(weekday, hour) {
+  if (heatmapFilter && heatmapFilter.weekday === weekday && heatmapFilter.hour === hour) {
+    // 再次点击同一格子：取消过滤
+    heatmapFilter = null;
+  } else {
+    heatmapFilter = { weekday, hour };
+  }
+  // 重新渲染热力图（更新选中态）和历史列表
+  loadHeatmap();
+  renderAccounts();
+  // 更新时段过滤提示条
+  const bar = document.getElementById('heatmapFilterBar');
+  if (bar) {
+    if (heatmapFilter) {
+      bar.style.display = 'flex';
+      bar.querySelector('#heatmapFilterText').textContent =
+        `已筛选：${WEEKDAY_NAMES[heatmapFilter.weekday]} ${heatmapFilter.hour}:00-${heatmapFilter.hour+1}:00 的直播`;
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+  // 滚动到历史列表顶部
+  const list = document.getElementById('accountsList');
+  if (list) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderHeatmap(data) {
   const section = document.getElementById('heatmapSection');
   const grid = document.getElementById('heatmapGrid');
@@ -662,8 +710,12 @@ function renderHeatmap(data) {
       const ratio = val / maxVal;
       const colorIdx = val === 0 ? 0 : Math.min(Math.ceil(ratio * 6), 6);
       const bg = HOUR_COLORS[colorIdx];
-      const title = val > 0 ? `${WEEKDAY_NAMES[wd]} ${h}:00 均值${val}人` : '';
-      html += `<div title="${title}" style="background:${bg};border-radius:3px;cursor:${val>0?'pointer':'default'};aspect-ratio:1;" onclick="${val>0?`document.getElementById('filterUser').value='';renderAccounts()`:''}">&nbsp;</div>`;
+      const title = val > 0 ? `${WEEKDAY_NAMES[wd]} ${h}:00 均值${val}人 · 点击筛选该时段` : '';
+      // 选中态：加粗边框
+      const isSelected = heatmapFilter && heatmapFilter.weekday === wd && heatmapFilter.hour === h;
+      const border = isSelected ? 'border:2px solid #fe2c55;' : '';
+      const cursor = val > 0 ? 'pointer' : 'default';
+      html += `<div title="${title}" style="background:${bg};border-radius:3px;cursor:${cursor};aspect-ratio:1;${border}" onclick="${val>0?`heatmapCellClick(${wd},${h})`:''}">&nbsp;</div>`;
     }
   }
   grid.innerHTML = html;

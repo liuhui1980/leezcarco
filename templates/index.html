@@ -358,7 +358,7 @@
       <button onclick="closeMetricsModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9ca3af;line-height:1;">✕</button>
     </div>
     <!-- 指标卡 -->
-    <div id="mmMetrics" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;"></div>
+    <div id="mmMetrics" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;"></div>
     <!-- 曲线图 -->
     <div style="position:relative;height:220px;margin-bottom:4px;">
       <canvas id="mmChart"></canvas>
@@ -584,28 +584,34 @@ async function _restoreCardContents() {
 
       // 恢复最近话术（语音转写）
       const speechBox = document.getElementById(`speech-box-${u}`);
-      if (speechBox && item.recent_speech && item.recent_speech.length) {
-        speechBox.innerHTML = '';
-        item.recent_speech.forEach(s => {
-          const zhText = s.text_zh && s.text_zh !== s.text ? `<div class="speech-zh">${escHtml(s.text_zh)}</div>` : '';
-          const div = document.createElement('div');
-          div.className = 'speech-item';
-          div.innerHTML = `<div class="speech-meta"><span class="speech-time">${(s.timestamp||'').slice(11,16)}</span></div><div class="speech-text">${escHtml(s.text||'')}</div>${zhText}`;
-          speechBox.appendChild(div);
-        });
-        speechBox.scrollTop = speechBox.scrollHeight;
-        // 恢复话术摘要显示
-        const summaryEl = document.getElementById(`speech-summary-text-${u}`);
-        if (summaryEl) summaryEl.textContent = `${item.recent_speech.length}段 · 已恢复历史话术`;
-        // 恢复语音状态标签
-        const statusEl = document.getElementById(`speech-status-${u}`);
-        if (statusEl) { statusEl.textContent = '语音采集中...'; statusEl.style.color = ''; }
-      } else {
-        // 话术为空时，根据是否直播中给出提示
-        const statusEl = document.getElementById(`speech-status-${u}`);
-        if (statusEl && monitors[u] && monitors[u].isLive) {
-          statusEl.textContent = '等待语音数据...';
-          statusEl.style.color = '#9ca3af';
+      if (speechBox) {
+        if (item.recent_speech && item.recent_speech.length) {
+          speechBox.innerHTML = '';
+          item.recent_speech.forEach(s => {
+            const zhText = s.text_zh && s.text_zh !== s.text ? `<div class="speech-zh">${escHtml(s.text_zh)}</div>` : '';
+            const div = document.createElement('div');
+            div.className = 'speech-item';
+            div.innerHTML = `<div class="speech-meta"><span class="speech-time">${(s.timestamp||'').slice(11,16)}</span></div><div class="speech-text">${escHtml(s.text||'')}</div>${zhText}`;
+            speechBox.appendChild(div);
+          });
+          speechBox.scrollTop = speechBox.scrollHeight;
+          // 恢复话术摘要显示
+          const summaryEl = document.getElementById(`speech-summary-text-${u}`);
+          if (summaryEl) summaryEl.textContent = `${item.recent_speech.length}段 · 已恢复历史话术`;
+          // 恢复语音状态标签
+          const statusEl = document.getElementById(`speech-status-${u}`);
+          if (statusEl) { statusEl.textContent = '语音采集中...'; statusEl.style.color = ''; }
+        } else {
+          // 话术为空：无论如何清除占位文字，改为根据直播状态显示合适提示
+          speechBox.innerHTML = '';
+          const statusEl = document.getElementById(`speech-status-${u}`);
+          if (monitors[u] && monitors[u].isLive) {
+            speechBox.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding-top:28px;">语音采集中，稍后显示...</div>';
+            if (statusEl) { statusEl.textContent = '语音采集中...'; statusEl.style.color = ''; }
+          } else {
+            speechBox.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding-top:28px;">暂无话术数据</div>';
+            if (statusEl) { statusEl.textContent = '等待语音数据...'; statusEl.style.color = '#9ca3af'; }
+          }
         }
       }
     });
@@ -629,6 +635,14 @@ socket.on('connected', (data) => {
   startCardAiSummaryTimer(u);
   const statusEl = document.getElementById(`speech-status-${u}`);
   if (statusEl) statusEl.textContent = '语音采集中...';
+  // 清空话术框初始占位文字，改为"采集中"提示
+  const speechBox = document.getElementById(`speech-box-${u}`);
+  if (speechBox) {
+    const placeholder = speechBox.querySelector('[style*="text-align:center"]') || speechBox.querySelector('[style*="text-align: center"]');
+    if (placeholder && speechBox.children.length === 1) {
+      speechBox.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding-top:28px;">语音采集中，稍后显示...</div>';
+    }
+  }
   // 更新直播链接（如果后端未携带则用默认 /live 链接）
   const liveUrl = data.live_url || `https://www.tiktok.com/@${u}/live`;
   const nameEl = document.querySelector(`#card-${u} .card-username a`);
@@ -733,7 +747,9 @@ socket.on('new_gift', (data) => {
 
 socket.on('new_follow', (data) => {
   const u = data.username; if (!monitors[u]) return;
-  monitors[u].followers = (monitors[u].followers || 0) + 1;
+  // 统一使用 newFollowers 字段，与 viewer_update 和 updateCardMetrics 保持一致
+  monitors[u].newFollowers = (monitors[u].newFollowers || 0) + 1;
+  updateCardMetrics(u);
   updateGlobalStats();
 });
 
@@ -741,9 +757,11 @@ socket.on('viewer_update', (data) => {
   const u = data.username; if (!monitors[u]) return;
   monitors[u].viewers = data.viewer_count;
   monitors[u].peakViewers = data.peak_viewers || data.viewer_count;
-  monitors[u].totalUser = data.total_user || 0;
+  // total_user 只在有正值时更新，避免用0覆盖已有累计值（后端已修复，前端做双重保险）
+  if (data.total_user) monitors[u].totalUser = data.total_user;
   monitors[u].likes = data.like_count;
-  monitors[u].newFollowers = data.new_followers || 0;
+  // new_followers 统一写入 newFollowers 字段（与 new_follow 事件和 updateCardMetrics 一致）
+  if (data.new_followers !== undefined) monitors[u].newFollowers = data.new_followers;
   // 同步评论数（防止中途打开页面时漏计数）
   if (data.comment_count !== undefined) monitors[u].comments = data.comment_count;
   // 记录历史快照（最多保留120个点，约1小时）
@@ -1736,7 +1754,7 @@ function updateGlobalStats() {
     totalTU += m.totalUser || 0;
     totalC += m.comments || 0;
     totalG += m.gifts || 0;
-    totalF += m.followers || 0;
+    totalF += m.newFollowers || 0;  // 统一使用 newFollowers 字段
   });
   document.getElementById('statLive').textContent = Object.keys(monitors).length;
   document.getElementById('statViewers').textContent = formatNum(totalV);
@@ -2103,12 +2121,14 @@ function openMetricsModal(username) {
   document.getElementById('mmLiveLink').href = `https://www.tiktok.com/@${username}/live`;
   document.getElementById('mmReviewLink').href = m.sessionId ? `/session/${m.sessionId}` : '#';
   document.getElementById('mmReviewLink').style.opacity = m.sessionId ? '1' : '0.4';
-  // 指标卡
+  // 指标卡（6项，与卡片保持一致）
   const metrics = [
-    { label:'实时在线', val: formatNum(m.viewers||0), color:'#fe2c55' },
-    { label:'累计观看', val: formatNum(m.totalUser||0), color:'#3b82f6' },
-    { label:'评论数',   val: formatNum(m.comments||0), color:'#10b981' },
-    { label:'礼物收入', val: `$${(m.gifts||0).toFixed(1)}`, color:'#f59e0b' },
+    { label:'累计观看', val: formatNum(m.totalUser||0),   color:'#3b82f6' },
+    { label:'峰值在线', val: formatNum(m.peakViewers||0), color:'#8b5cf6' },
+    { label:'实时在线', val: formatNum(m.viewers||0),     color:'#fe2c55' },
+    { label:'评论数',   val: formatNum(m.comments||0),    color:'#10b981' },
+    { label:'点赞数',   val: formatNum(m.likes||0),       color:'#f59e0b' },
+    { label:'新增关注', val: formatNum(m.newFollowers||0),color:'#ec4899' },
   ];
   document.getElementById('mmMetrics').innerHTML = metrics.map(x =>
     `<div style="background:#f8f9fb;border-radius:10px;padding:12px;text-align:center;">
