@@ -13,9 +13,6 @@ TikTokLive==6.6.5
 httpx[socks]==0.28.1
 requests==2.32.5
 
-# 语音识别（Whisper）
-openai-whisper==20250625
-
 # PyTorch（CPU 基础版；NVIDIA GPU 环境下替换为 CUDA 版本）
 # CUDA 版安装命令：
 #   pip install torch --index-url https://download.pytorch.org/whl/cu121

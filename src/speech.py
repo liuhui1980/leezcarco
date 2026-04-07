@@ -1,6 +1,6 @@
 """
 主播语音转文字模块
-流程：TikTok HLS 流 → ffmpeg 切片(6秒 WAV) → Whisper large-v3 转文字 + 语言/方言识别 → 回调
+流程：TikTok HLS 流 → ffmpeg 切片 (6 秒 WAV) → 远程 ASR API 转文字 + 语言/方言识别 → 回调
 """
 import asyncio
 import logging
@@ -12,42 +12,22 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+from src.asr_api import get_asr_client
 from src.lang_detect import detect_speech_language, speech_lang_stats
 
 logger = logging.getLogger(__name__)
-
-# Whisper 模型（延迟加载，第一次使用时才下载）
-_whisper_model = None
-_whisper_lock = threading.Lock()
-
-
-def get_whisper_model(model_size: str = "large-v3"):
-    """懒加载 Whisper 模型（large-v3 约 3GB，首次自动下载）"""
-    global _whisper_model
-    with _whisper_lock:
-        if _whisper_model is None:
-            logger.info(f"加载 Whisper 模型: {model_size}（首次运行会自动下载约 3GB，请稍候）")
-            try:
-                import whisper
-                _whisper_model = whisper.load_model(model_size)
-                logger.info(f"Whisper {model_size} 模型加载完成")
-            except Exception as e:
-                logger.error(f"Whisper 模型加载失败: {e}")
-                raise
-    return _whisper_model
 
 
 class SpeechMonitor:
     """
     针对单个直播账号的语音监控
     - 从直播 HLS/FLV 流中持续拉取音频
-    - 每 SEGMENT_SECS 秒切一段，送入 Whisper 转文字
+    - 每 SEGMENT_SECS 秒切一段，送入 ASR API 转文字
     - 转写结果通过 on_transcript 回调传出
     """
 
-    SEGMENT_SECS = 3          # 缩短切片间隔到3秒，确保每句话都被采集
-    OVERLAP_SECS = 0.5         # 切片重叠0.5秒，防止漏掉句尾
-    WHISPER_MODEL = "large-v3" # large-v3: 支持中/英/阿拉伯语方言，约 3GB
+    SEGMENT_SECS = 3          # 缩短切片间隔到 3 秒，确保每句话都被采集
+    OVERLAP_SECS = 0.5         # 切片重叠 0.5 秒，防止漏掉句尾
     MAX_CONSECUTIVE_ERRORS = 12 # 增大容忍度，避免频繁重连
     RECONNECT_WAIT = 2          # 缩短重连等待时间，更快恢复
 
@@ -65,6 +45,7 @@ class SpeechMonitor:
         self.running = False
         self._thread: Optional[threading.Thread] = None
         self._tmpdir: Optional[tempfile.TemporaryDirectory] = None
+        self._asr_client = get_asr_client()
 
     def start(self):
         """启动语音监控线程"""
@@ -79,7 +60,7 @@ class SpeechMonitor:
             name=f"speech-{self.username}"
         )
         self._thread.start()
-        logger.info(f"[{self.username}] 语音监控已启动，流地址: {self.stream_url[:60]}...")
+        logger.info(f"[{self.username}] 语音监控已启动，流地址：{self.stream_url[:60]}...")
 
     def stop(self):
         """停止语音监控"""
@@ -94,12 +75,6 @@ class SpeechMonitor:
 
     def _run_loop(self):
         """主循环：持续拉流切片 → 转文字"""
-        try:
-            model = get_whisper_model(self.WHISPER_MODEL)
-        except Exception as e:
-            logger.error(f"[{self.username}] 无法加载 Whisper，语音监控退出: {e}")
-            return
-
         seg_idx = 0
         consecutive_errors = 0
 
@@ -125,7 +100,7 @@ class SpeechMonitor:
                     continue
 
                 consecutive_errors = 0  # 重置错误计数
-                text = self._transcribe(model, wav_path)
+                text = self._transcribe(wav_path)
 
                 # 清理临时文件
                 try:
@@ -139,27 +114,27 @@ class SpeechMonitor:
                     # 语言/方言识别
                     lang_info = detect_speech_language({
                         "text": text.strip(),
-                        "language": getattr(self, '_last_whisper_lang', '')
+                        "language": getattr(self, '_last_speech_lang', '')
                     })
                     speech_lang_stats.add(self.username, lang_info)
 
                     # 详细日志：确保每句话都被记录
                     sentence_length = len(text.strip())
                     word_count = len(text.strip().split())
-                    logger.info(f"[{self.username}] [{lang_info['lang_short']}] {timestamp} 采集到 {sentence_length} 字符/{word_count} 词: {text[:100]}")
+                    logger.info(f"[{self.username}] [{lang_info['lang_short']}] {timestamp} 采集到 {sentence_length} 字符/{word_count} 词：{text[:100]}")
                     self.on_transcript(self.username, text.strip(), timestamp, lang_info)
 
                 seg_idx += 1
 
             except Exception as e:
-                logger.error(f"[{self.username}] 语音处理异常: {e}")
+                logger.error(f"[{self.username}] 语音处理异常：{e}")
                 consecutive_errors += 1
                 time.sleep(2)
 
     def _pull_segment(self, output_path: str, duration: int) -> bool:
         """
         用 ffmpeg 从直播流中拉取一段音频并保存为 WAV
-        - 单声道 16kHz 16bit（Whisper 最佳输入格式）
+        - 单声道 16kHz 16bit（ASR API 最佳输入格式）
         - 自动读取 config.py 中的代理配置，TikTok CDN 需要走代理才能访问
         """
         # 读取代理配置（仅取 HTTP 代理，ffmpeg -http_proxy 不支持 socks5）
@@ -202,79 +177,40 @@ class SpeechMonitor:
             )
             if result.returncode != 0:
                 err_msg = result.stderr.decode(errors='replace')[:300]
-                logger.debug(f"[{self.username}] ffmpeg 错误: {err_msg}")
+                logger.debug(f"[{self.username}] ffmpeg 错误：{err_msg}")
                 return False
             # 检查文件是否有内容
             exists = os.path.exists(output_path) and os.path.getsize(output_path) > 1000
             if exists:
-                logger.debug(f"[{self.username}] 拉流成功，文件大小: {os.path.getsize(output_path)} bytes")
+                logger.debug(f"[{self.username}] 拉流成功，文件大小：{os.path.getsize(output_path)} bytes")
             return exists
         except subprocess.TimeoutExpired:
             logger.warning(f"[{self.username}] ffmpeg 拉流超时（超过 {duration+20}s）")
             return False
         except Exception as e:
-            logger.error(f"[{self.username}] ffmpeg 异常: {e}")
+            logger.error(f"[{self.username}] ffmpeg 异常：{e}")
             return False
 
-    def _transcribe(self, model, wav_path: str) -> str:
+    def _transcribe(self, wav_path: str) -> str:
         """
-        调用 Whisper 对 WAV 文件转文字，自动检测语言（中/英/阿拉伯语等）
-        large-v3 支持 99 种语言，含阿拉伯语方言
-        置信度控制：通过 logprob_threshold + 片段级过滤，确保只输出置信度 ≥90% 的内容
+        调用远程 ASR API 对 WAV 文件转文字
+        自动检测语言（中/英/阿拉伯语等）
         """
         try:
-            import whisper
-            import math
-
-            # 若上一段是阿拉伯语，给 Whisper 语言提示（减少语言检测耗时，提高阿语准确率）
-            last_lang = getattr(self, '_last_whisper_lang', '')
-            hint_lang = 'ar' if last_lang in ('ar', 'arabic') else None
-
-            result = model.transcribe(
-                wav_path,
-                language=hint_lang,     # None = 自动检测，'ar' = 阿语提示
-                task="transcribe",      # transcribe = 保留原语言
-                fp16=False,             # macOS CPU/MPS 模式
-                verbose=False,
-                condition_on_previous_text=False,  # 关闭上下文依赖，减少幻觉
-                no_speech_threshold=0.65,          # 无语音判断阈值（值越高越严格，减少误识别）
-                logprob_threshold=-0.1,            # 只接受平均对数概率 > -0.1 的结果（≈ 置信度 90%+）
-            )
-            # 保存 Whisper 检测到的语言代码供下一段使用
-            self._last_whisper_lang = result.get("language", "")
+            result = self._asr_client.transcribe(wav_path)
             text = result.get("text", "").strip()
 
             if not text:
                 return ""
 
-            # ── 片段级置信度过滤 ──
-            # 过滤掉低置信度片段（avg_logprob < -0.5 约对应置信度 <60%）
-            segments = result.get("segments", [])
-            if segments:
-                high_conf_segments = []
-                for seg in segments:
-                    avg_logprob = seg.get("avg_logprob", 0)
-                    no_speech_prob = seg.get("no_speech_prob", 0)
-                    # 置信度条件：对数概率 > -0.3（≈90%），且无语音概率 < 0.5
-                    if avg_logprob > -0.3 and no_speech_prob < 0.5:
-                        high_conf_segments.append(seg.get("text", "").strip())
-
-                if not high_conf_segments:
-                    # 所有片段都低置信度，丢弃整段
-                    logger.debug(f"[{self.username}] 所有片段置信度不足，丢弃: {text[:40]}")
-                    return ""
-
-                # 用高置信度片段重建文本
-                text = " ".join(high_conf_segments).strip()
-
-            # ── 过滤 Whisper 幻觉（常见的无意义重复输出）──
-            if text and len(set(text.split())) <= 2 and len(text) > 20:
-                logger.debug(f"[{self.username}] 过滤疑似幻觉输出: {text[:40]}")
+            # 过滤疑似幻觉输出（常见的无意义重复）
+            if len(set(text.split())) <= 2 and len(text) > 20:
+                logger.debug(f"[{self.username}] 过滤疑似幻觉输出：{text[:40]}")
                 return ""
 
             return text
         except Exception as e:
-            logger.error(f"[{self.username}] Whisper 转写失败: {e}")
+            logger.error(f"[{self.username}] ASR API 转写失败：{e}")
             return ""
 
 
@@ -292,7 +228,7 @@ async def get_stream_url_from_client(client) -> Optional[str]:
         # room_info 返回的就是 data 字段内容，stream_url 是顶层键
         stream_url_obj = room_info.get('stream_url', {})
         if not stream_url_obj:
-            logger.warning("[方案A] room_info 中 stream_url 为空")
+            logger.warning("[方案 A] room_info 中 stream_url 为空")
         else:
             stream_data_raw = (
                 stream_url_obj
@@ -308,15 +244,15 @@ async def get_stream_url_from_client(client) -> Optional[str]:
                 hls_url = quality_data.get('hls', '')
                 flv_url = quality_data.get('flv', '')
                 if hls_url:
-                    logger.info(f"[方案A] 获取到 HLS 流地址 (quality={quality}): {hls_url[:80]}")
+                    logger.info(f"[方案 A] 获取到 HLS 流地址 (quality={quality}): {hls_url[:80]}")
                     return hls_url
                 if flv_url:
-                    logger.info(f"[方案A] 获取到 FLV 流地址 (quality={quality}): {flv_url[:80]}")
+                    logger.info(f"[方案 A] 获取到 FLV 流地址 (quality={quality}): {flv_url[:80]}")
                     return flv_url
 
-            logger.warning(f"[方案A] stream_data 中未找到流地址，stream_data keys: {list(stream_data.get('data', {}).keys())}")
+            logger.warning(f"[方案 A] stream_data 中未找到流地址，stream_data keys: {list(stream_data.get('data', {}).keys())}")
     except Exception as e:
-        logger.warning(f"[方案A] fetch_room_info 失败: {type(e).__name__}: {e}")
+        logger.warning(f"[方案 A] fetch_room_info 失败：{type(e).__name__}: {e}")
 
     # ── 方案 B：直接从 client._web.params 获取 room_id 构造流地址 ──
     try:
@@ -333,12 +269,12 @@ async def get_stream_url_from_client(client) -> Optional[str]:
 
         if room_id and room_id.isdigit():
             flv_url = f"https://pull-flv-f26-va01.tiktokcdn.com/stage/stream-{room_id}.flv"
-            logger.info(f"[方案B] 尝试构造 FLV URL: room_id={room_id}")
+            logger.info(f"[方案 B] 尝试构造 FLV URL: room_id={room_id}")
             return flv_url
         else:
-            logger.warning(f"[方案B] 无法获取有效 room_id（当前值: {room_id}），跳过")
+            logger.warning(f"[方案 B] 无法获取有效 room_id（当前值：{room_id}），跳过")
     except Exception as e:
-        logger.warning(f"[方案B] 构造流地址失败: {e}")
+        logger.warning(f"[方案 B] 构造流地址失败：{e}")
 
     logger.error("所有方案均无法获取直播流地址，语音监控将跳过")
     return None

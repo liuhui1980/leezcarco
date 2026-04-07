@@ -1596,6 +1596,7 @@ def on_request_status():
     from flask_socketio import emit
     emit('status_update', {
         'active_accounts': get_active_usernames(),
+        'live_accounts': get_live_usernames(),  # 真正在直播的账号
         'active_sessions': get_active_sessions(),
         'monitors_snapshot': get_monitors_snapshot(),  # 完整实时状态快照
     })

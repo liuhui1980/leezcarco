@@ -2,7 +2,7 @@
 # TikTok 直播监测系统 — 一键启动
 # 固定端口 5001，本机/局域网地址固定不变
 
-PYTHON=/opt/homebrew/bin/python3.11
+PYTHON=python3
 PORT=5001
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

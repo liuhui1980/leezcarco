@@ -269,6 +269,19 @@
   .empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: .25; }
   .empty-state p { font-size: 14px; }
 
+  /* ── Offline Hint ── */
+  .offline-hint-card {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text2);
+    grid-column: 1/-1 !important;  /* 占据整行 */
+  }
+  .offline-hint-card b { color: var(--text); font-weight: 700; }
+
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -484,7 +497,12 @@ socket.on('status_update', (data) => {
   const snapMap = {};
   (data.monitors_snapshot || []).forEach(s => { snapMap[s.username] = s; });
 
-  (data.active_accounts || []).forEach(u => {
+  // ★ 只创建正在直播的账号卡片
+  const liveAccounts = data.live_accounts || [];
+  const activeAccounts = data.active_accounts || [];
+  const offlineCount = activeAccounts.length - liveAccounts.length;  // 未开播账号数
+
+  liveAccounts.forEach(u => {
     const snap = snapMap[u];
     const group = (snap && snap.group_name) ? snap.group_name : 'own';
     if (!monitors[u]) createAccountCard(u, group);
@@ -532,10 +550,13 @@ socket.on('status_update', (data) => {
     }
   });
 
+  // ★ 在列表尾部显示"剩余 xx 个账号暂未开播"提示
+  renderOfflineHint(offlineCount);
+
   updateGlobalStats();
 
   // Level-B 恢复：异步拉取完整卡片数据（评论/礼物/话术列表）
-  if ((data.active_accounts || []).length > 0) {
+  if (liveAccounts.length > 0) {
     _restoreCardContents();
   }
 });
@@ -1554,6 +1575,31 @@ function removeAccountCard(username) {
     document.getElementById('accountsGrid').innerHTML = `<div class="empty-state" id="emptyState"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><p>还没有监控中的直播间</p></div>`;
   }
   updateGlobalStats();
+}
+
+// ★ 渲染"剩余 xx 个账号暂未开播"提示
+function renderOfflineHint(count) {
+  const grid = document.getElementById('accountsGrid');
+  if (!grid) return;
+
+  // 移除旧的提示（如果有）
+  const oldHint = document.getElementById('offline-hint-container');
+  if (oldHint) oldHint.remove();
+
+  // 只有当有未开播账号时才显示提示
+  if (count > 0) {
+    // 如果有未开播账号，移除 empty-state（如果有）
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState && Object.keys(monitors).length === 0) {
+      emptyState.remove();
+    }
+
+    const hintDiv = document.createElement('div');
+    hintDiv.id = 'offline-hint-container';
+    hintDiv.className = 'offline-hint-card';
+    hintDiv.innerHTML = `📺 剩余 <b>${count}</b> 个账号暂未开播`;
+    grid.appendChild(hintDiv);
+  }
 }
 
 function updateCardMetrics(username) {
